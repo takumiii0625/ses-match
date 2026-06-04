@@ -1,60 +1,175 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Users,
+  UserSearch,
+  Building2,
   Briefcase,
   GitCompareArrows,
+  Star,
+  Link2,
   Mail,
+  FileText,
+  BarChart3,
+  UsersRound,
   Settings,
   Droplet,
+  ChevronRight,
+  ChevronLeft,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const nav = [
-  { href: "/in-house-talent", label: "自社保有人材", icon: Users },
-  { href: "/projects", label: "案件", icon: Briefcase },
-  { href: "/matching", label: "マッチング", icon: GitCompareArrows },
-  { href: "/ingest", label: "メール取り込み", icon: Mail },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+}
+
+const groups: { title: string; items: NavItem[] }[] = [
+  {
+    title: "検索",
+    items: [
+      { href: "/in-house-talent", label: "自社保有人材", icon: UserSearch },
+      { href: "/partner-talent", label: "他社人材", icon: Building2 },
+      { href: "/projects", label: "案件", icon: Briefcase },
+    ],
+  },
+  {
+    title: "ツール",
+    items: [
+      { href: "/matching", label: "マッチング", icon: GitCompareArrows },
+      { href: "/favorites", label: "お気に入り", icon: Star },
+      { href: "/shared-links", label: "公開リンク", icon: Link2 },
+      { href: "/ingest", label: "メール取り込み", icon: Mail },
+      { href: "/proposals", label: "提案管理", icon: FileText },
+    ],
+  },
+  {
+    title: "管理",
+    items: [
+      { href: "/reports", label: "レポート", icon: BarChart3 },
+      { href: "/members", label: "メンバー", icon: UsersRound },
+    ],
+  },
 ];
 
-export function Sidebar() {
+export function Sidebar({
+  userName = "ゲスト",
+  orgName = "",
+}: {
+  userName?: string;
+  orgName?: string;
+}) {
   const pathname = usePathname();
+  const [expanded, setExpanded] = useState(false);
+
+  const NavLink = ({ href, label, icon: Icon }: NavItem) => {
+    const active = pathname.startsWith(href);
+    return (
+      <Link
+        href={href}
+        title={label}
+        className={cn(
+          "flex items-center gap-3 rounded-xl px-2.5 transition-colors",
+          expanded ? "h-10 w-full" : "h-11 w-11 justify-center",
+          active
+            ? "bg-blue-50 text-primary"
+            : "text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+        )}
+      >
+        <Icon className="h-5 w-5 shrink-0" />
+        {expanded && (
+          <span className="truncate text-sm font-medium">{label}</span>
+        )}
+      </Link>
+    );
+  };
+
   return (
-    <aside className="flex w-16 flex-col items-center gap-1 border-r border-border bg-white py-4">
+    <aside
+      className={cn(
+        "relative flex shrink-0 flex-col border-r border-border bg-white py-4 transition-[width] duration-200",
+        expanded ? "w-56 px-3" : "w-16 items-center px-0",
+      )}
+    >
+      {/* logo */}
       <Link
         href="/in-house-talent"
-        className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white"
+        className={cn(
+          "mb-4 flex items-center gap-2",
+          expanded ? "px-1" : "justify-center",
+        )}
         title="SES Match"
       >
-        <Droplet className="h-5 w-5" />
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white">
+          <Droplet className="h-5 w-5" />
+        </span>
+        {expanded && (
+          <span className="text-sm font-bold text-slate-800">SES Match</span>
+        )}
       </Link>
-      {nav.map(({ href, label, icon: Icon }) => {
-        const active = pathname.startsWith(href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            title={label}
-            className={cn(
-              "flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[10px] transition-colors",
-              active
-                ? "bg-blue-50 text-primary"
-                : "text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+
+      {/* collapse toggle */}
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        title={expanded ? "折りたたむ" : "展開する"}
+        className="absolute -right-3 top-16 z-10 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-white text-slate-400 shadow-sm hover:text-slate-600"
+      >
+        {expanded ? (
+          <ChevronLeft className="h-3.5 w-3.5" />
+        ) : (
+          <ChevronRight className="h-3.5 w-3.5" />
+        )}
+      </button>
+
+      {/* nav groups */}
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto">
+        {groups.map((group, gi) => (
+          <div key={group.title} className="flex flex-col gap-1">
+            {expanded ? (
+              <div className="mt-3 mb-0.5 px-2.5 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                {group.title}
+              </div>
+            ) : (
+              gi > 0 && <div className="my-1 h-px w-8 self-center bg-border" />
             )}
-          >
-            <Icon className="h-5 w-5" />
-          </Link>
-        );
-      })}
-      <div className="mt-auto">
-        <button
-          title="設定"
-          className="flex h-11 w-11 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100"
+            {group.items.map((item) => (
+              <NavLink key={item.href} {...item} />
+            ))}
+          </div>
+        ))}
+      </nav>
+
+      {/* footer: settings + user */}
+      <div className="mt-2 flex flex-col gap-1 border-t border-border pt-3">
+        <NavLink href="/settings" label="設定" icon={Settings} />
+        <Link
+          href="/members"
+          title={userName}
+          className={cn(
+            "flex items-center gap-2.5 rounded-xl py-1.5 transition-colors hover:bg-slate-100",
+            expanded ? "px-2" : "justify-center px-0",
+          )}
         >
-          <Settings className="h-5 w-5" />
-        </button>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-sm font-medium text-white">
+            {userName.slice(0, 1)}
+          </span>
+          {expanded && (
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium text-slate-800">
+                {userName}
+              </span>
+              {orgName && (
+                <span className="block truncate text-[11px] text-slate-400">
+                  {orgName}
+                </span>
+              )}
+            </span>
+          )}
+        </Link>
       </div>
     </aside>
   );
