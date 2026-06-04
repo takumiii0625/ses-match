@@ -1,0 +1,219 @@
+// SES Match — data model
+// Modeled after the AISES "自社保有人材 / 案件" domain (rebuilt from scratch).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Tenancy ----------
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  users    User[]
+  talents  Talent[]
+  projects Project[]
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id     String @id @default(cuid())
+  orgId  String
+  name   String
+  email  String @unique
+  role   Role   @default(MEMBER)
+
+  org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignedTalents  Talent[]     @relation("TalentAssignee")
+  assignedProjects Project[]    @relation("ProjectAssignee")
+}
+
+// ---------- Shared enums ----------
+
+enum TalentType {
+  INHOUSE // 自社保有人材
+  PARTNER // 協力会社
+}
+
+enum DataSource {
+  REGISTER // 直登録
+  EMAIL    // メール取り込み
+}
+
+enum TalentStatus {
+  NONE
+  PROPOSING // 提案中
+  ACTIVE    // 稼働中
+  CLOSED    // クローズ
+}
+
+enum ProjectStatus {
+  OPEN      // 募集中
+  PROPOSING // 提案中
+  DECIDED   // 決定
+  CLOSED    // クローズ
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum EmploymentType {
+  EMPLOYEE  // 社員
+  FREELANCE // 個人事業主 / フリーランス
+}
+
+enum Nationality {
+  JAPAN
+  OTHER
+}
+
+enum LanguageLevel {
+  NATIVE   // ネイティブ
+  BUSINESS // ビジネス
+  DAILY    // 日常会話
+  NONE
+}
+
+// 8-step remote preference, matching the source UI
+enum RemotePreference {
+  FULL_REMOTE   // フルリモート
+  MOSTLY_REMOTE // 基本リモート
+  HYBRID        // ハイブリッド
+  OFFICE_1      // 週1回出社可
+  OFFICE_2      // 週2回出社可
+  OFFICE_3      // 週3回出社可
+  OFFICE_4      // 週4回出社可
+  ONSITE        // 常駐可
+}
+
+// ---------- Talent (人材) ----------
+
+model Talent {
+  id           String       @id @default(cuid())
+  orgId        String
+  managementId String? // 管理ID
+  talentType   TalentType   @default(INHOUSE)
+  dataFrom     DataSource   @default(REGISTER)
+  status       TalentStatus @default(NONE)
+
+  assigneeId String?
+  name       String
+  age        Int?
+  gender     Gender?
+  affiliation String? // 所属（例: 弊社個人事業主）
+
+  employmentType   EmploymentType?
+  nationality      Nationality?
+  japaneseLevel    LanguageLevel?
+  englishLevel     LanguageLevel?
+
+  // 稼働開始
+  availabilityText String? // 例: "即日or6月〜"
+  availabilityDate DateTime?
+
+  // 月額報酬（万円）
+  desiredRateMin Int?
+  desiredRateMax Int?
+
+  remotePreference RemotePreference?
+  nearestStation   String?
+
+  // multi-value attributes
+  mainSkills     String[] @default([])
+  skills         String[] @default([])
+  qualifications String[] @default([])
+  tags           String[] @default([])
+
+  emailSubject String? // メール件名（メール取り込み時）
+  note         String?
+  receivedDate DateTime @default(now()) // 配信日
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignee    User?        @relation("TalentAssignee", fields: [assigneeId], references: [id])
+  attachments Attachment[]
+  matches     Match[]
+
+  @@index([orgId, talentType, status])
+}
+
+model Attachment {
+  id       String @id @default(cuid())
+  talentId String
+  filename String
+  url      String
+
+  talent Talent @relation(fields: [talentId], references: [id], onDelete: Cascade)
+}
+
+// ---------- Project (案件) ----------
+
+model Project {
+  id           String        @id @default(cuid())
+  orgId        String
+  managementId String?
+  title        String
+  clientName   String? // エンド / 商流元
+  businessFlow String? // 商流
+  status       ProjectStatus @default(OPEN)
+  dataFrom     DataSource    @default(REGISTER)
+
+  assigneeId String?
+  description String?
+
+  requiredSkills String[] @default([])
+  tags           String[] @default([])
+
+  rateMin Int?
+  rateMax Int?
+
+  remotePreference RemotePreference?
+  location         String?
+  nearestStation   String?
+
+  startText String?
+  startDate DateTime?
+
+  receivedDate DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignee User?        @relation("ProjectAssignee", fields: [assigneeId], references: [id])
+  matches  Match[]
+
+  @@index([orgId, status])
+}
+
+// ---------- Matching ----------
+
+model Match {
+  id        String   @id @default(cuid())
+  talentId  String
+  projectId String
+  score     Float    @default(0)
+  reasons   String[] @default([])
+  createdAt DateTime @default(now())
+
+  talent  Talent  @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([talentId, projectId])
+}

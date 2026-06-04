@@ -1,0 +1,117 @@
+import type {
+  AIService,
+  ParsedTalent,
+  ParsedProject,
+  ProposalInput,
+} from "./types";
+
+// Heuristic, dependency-free stand-in for a real LLM. Good enough to demo the
+// full email→data→proposal flow without any API key. Replace with a real
+// provider by implementing AIService and wiring it in ./index.ts.
+
+const SKILL_DICT = [
+  "Java", "Kotlin", "Scala", "Go", "Rust", "Python", "Ruby", "PHP", "Perl",
+  "JavaScript", "TypeScript", "Node.js", "React", "Next.js", "Vue", "Angular",
+  "C#", ".NET", "C++", "C", "Swift", "Objective-C", "Flutter", "Dart",
+  "AWS", "GCP", "Azure", "Docker", "Kubernetes", "Terraform",
+  "MySQL", "PostgreSQL", "Oracle", "Amazon Aurora", "MongoDB", "Redis",
+  "SAP", "SAP S/4HANA", "ERP", "Salesforce", "Spring", "Laravel", "Django",
+];
+
+function extractSkills(text: string): string[] {
+  const found = new Set<string>();
+  for (const s of SKILL_DICT) {
+    const re = new RegExp(`(?<![A-Za-z])${s.replace(/[.+*?^${}()|[\]\\]/g, "\\$&")}`, "i");
+    if (re.test(text)) found.add(s);
+  }
+  return [...found];
+}
+
+function extractRate(text: string): { min?: number; max?: number } {
+  // matches "80万", "60〜80万", "単価80"
+  const range = text.match(/(\d{2,3})\s*[〜~\-]\s*(\d{2,3})\s*万/);
+  if (range) return { min: Number(range[1]), max: Number(range[2]) };
+  const single = text.match(/(\d{2,3})\s*万/);
+  if (single) return { min: Number(single[1]) };
+  return {};
+}
+
+function extractRemote(text: string): string | undefined {
+  if (/フルリモート/.test(text)) return "FULL_REMOTE";
+  if (/基本リモート/.test(text)) return "MOSTLY_REMOTE";
+  if (/ハイブリッド/.test(text)) return "HYBRID";
+  if (/常駐/.test(text)) return "ONSITE";
+  if (/リモート/.test(text)) return "MOSTLY_REMOTE";
+  return undefined;
+}
+
+function extractAge(text: string): number | undefined {
+  const m = text.match(/(\d{2})\s*歳/);
+  return m ? Number(m[1]) : undefined;
+}
+
+function extractStart(text: string): string | undefined {
+  const m = text.match(/(即日|\d{1,2}\s*月\s*[〜~]?|[〜~]?\s*\d{1,2}\s*月)[^\n。、]*/);
+  return m ? m[0].trim() : undefined;
+}
+
+export class MockAIService implements AIService {
+  async parseTalentEmail(rawEmail: string): Promise<ParsedTalent> {
+    const skills = extractSkills(rawEmail);
+    const rate = extractRate(rawEmail);
+    const nameM = rawEmail.match(/(?:氏名|名前|お名前)[:：]?\s*([^\s\n、。]+)/);
+    const stationM = rawEmail.match(/(?:最寄|最寄り駅)[:：]?\s*([^\s\n、。]+)/);
+    return {
+      name: nameM?.[1],
+      age: extractAge(rawEmail),
+      skills,
+      mainSkills: skills.slice(0, 3),
+      desiredRateMin: rate.min,
+      desiredRateMax: rate.max,
+      remotePreference: extractRemote(rawEmail),
+      availabilityText: extractStart(rawEmail),
+      nearestStation: stationM?.[1],
+      note: rawEmail.slice(0, 400),
+    };
+  }
+
+  async parseProjectEmail(rawEmail: string): Promise<ParsedProject> {
+    const skills = extractSkills(rawEmail);
+    const rate = extractRate(rawEmail);
+    const titleM = rawEmail.match(/(?:案件名|件名|タイトル)[:：]?\s*([^\n]+)/);
+    const clientM = rawEmail.match(/(?:エンド|顧客|クライアント|商流)[:：]?\s*([^\n、。]+)/);
+    const locM = rawEmail.match(/(?:勤務地|場所|エリア)[:：]?\s*([^\n、。]+)/);
+    return {
+      title: titleM?.[1]?.trim() ?? rawEmail.split("\n")[0]?.slice(0, 60),
+      clientName: clientM?.[1]?.trim(),
+      requiredSkills: skills,
+      rateMin: rate.min,
+      rateMax: rate.max,
+      remotePreference: extractRemote(rawEmail),
+      location: locM?.[1]?.trim(),
+      startText: extractStart(rawEmail),
+      description: rawEmail.slice(0, 600),
+    };
+  }
+
+  async generateProposal(input: ProposalInput): Promise<string> {
+    const reasons = (input.matchReasons ?? []).map((r) => `・${r}`).join("\n");
+    return [
+      `${input.projectClient ?? "ご担当者"}様`,
+      ``,
+      `お世話になっております。`,
+      `標題の「${input.projectTitle}」につきまして、弊社所属の${input.talentName}をご提案申し上げます。`,
+      ``,
+      `【ご提案要員】`,
+      `氏名（イニシャル）: ${input.talentName}`,
+      `スキル: ${input.talentSkills.join(" / ")}`,
+      input.talentRate ? `希望単価: ${input.talentRate}` : ``,
+      ``,
+      reasons ? `【マッチング根拠】\n${reasons}` : ``,
+      ``,
+      `ご検討のほど、よろしくお願いいたします。`,
+    ]
+      .filter((l) => l !== ``)
+      .join("\n");
+  }
+}

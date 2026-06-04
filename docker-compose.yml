@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ses-match-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ses
+      POSTGRES_PASSWORD: ses
+      POSTGRES_DB: sesmatch
+    ports:
+      - "5433:5432"
+    volumes:
+      - ses-match-db-data:/var/lib/postgresql/data
+
+volumes:
+  ses-match-db-data:
