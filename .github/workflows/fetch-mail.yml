@@ -1,0 +1,24 @@
+name: メール自動取込（毎時 9-17 JST）
+
+# 平日・休日問わず、日本時間 9:00〜17:00 に1時間ごとに実行。
+# JST = UTC+9 なので、9:00〜17:00 JST = 0:00〜8:00 UTC。
+# GitHub のスケジュールは数分前後する場合があります（仕様）。
+on:
+  schedule:
+    - cron: "0 0-8 * * *"
+  workflow_dispatch: {} # 手動実行も可
+
+concurrency:
+  group: fetch-mail
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 取り込みエンドポイントを呼び出す
+        run: |
+          curl -fsS --max-time 300 -X POST \
+            "https://sesmatch.encore-biz.com/api/cron/fetch-mail?limit=200" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n"
