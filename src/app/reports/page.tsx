@@ -143,6 +143,8 @@ function Section({
 // Page (Server Component)
 // ---------------------------------------------------------------------------
 
+export const dynamic = "force-dynamic";
+
 export default async function ReportsPage() {
   const org = await getCurrentOrg();
   const orgId = org.id;

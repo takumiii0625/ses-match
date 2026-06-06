@@ -3,6 +3,8 @@ import { getCurrentOrg, getOrgUsers } from "@/lib/current-org";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
+export const dynamic = "force-dynamic";
+
 export default async function Page() {
   const org = await getCurrentOrg();
   const users = await getOrgUsers(org.id);

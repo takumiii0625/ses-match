@@ -1,6 +1,8 @@
 import { getCurrentOrg, getOrgUsers } from "@/lib/current-org";
 import { TalentForm } from "@/components/talent-form";
 
+export const dynamic = "force-dynamic";
+
 export default async function NewTalentPage() {
   const org = await getCurrentOrg();
   const users = await getOrgUsers(org.id);

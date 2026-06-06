@@ -31,6 +31,8 @@ export const metadata: Metadata = {
   description: "SES業界向け 人材・案件マッチング自動化プラットフォーム",
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function RootLayout({
   children,
 }: Readonly<{

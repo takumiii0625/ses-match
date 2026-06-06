@@ -3,6 +3,8 @@ import { SettingsForm } from "./settings-form";
 
 export const metadata = { title: "設定 — SES Match" };
 
+export const dynamic = "force-dynamic";
+
 export default async function SettingsPage() {
   const org = await getCurrentOrg();
 

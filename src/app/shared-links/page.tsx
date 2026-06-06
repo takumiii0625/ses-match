@@ -4,6 +4,8 @@ import { Card } from "@/components/ui/card";
 import { CreateLinkForm } from "./create-link-form";
 import { LinksTable } from "./links-table";
 
+export const dynamic = "force-dynamic";
+
 export default async function SharedLinksPage() {
   const org = await getCurrentOrg();
 

@@ -7,6 +7,8 @@ import { FavoriteButton } from "@/components/favorite-button";
 import { formatRate } from "@/lib/utils";
 import { TALENT_STATUS_LABELS, PROJECT_STATUS_LABELS } from "@/lib/enums";
 
+export const dynamic = "force-dynamic";
+
 export default async function FavoritesPage() {
   const user = await getCurrentUser();
 

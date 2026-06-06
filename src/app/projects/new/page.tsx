@@ -2,6 +2,8 @@ import { getCurrentOrg, getOrgUsers } from "@/lib/current-org";
 import { ProjectForm } from "@/components/project-form";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 export default async function NewProjectPage() {
   const org = await getCurrentOrg();
   const users = await getOrgUsers(org.id);
