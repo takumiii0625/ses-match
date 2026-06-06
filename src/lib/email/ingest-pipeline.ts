@@ -21,6 +21,13 @@ function toRemote(v?: string): RemotePreference | null {
     : null;
 }
 
+/** Extract the bare email address from a From header ("名前 <a@b.com>" → a@b.com). */
+function parseFromEmail(from?: string | null): string | null {
+  if (!from) return null;
+  const m = from.match(/<([^>]+)>/) ?? from.match(/([^\s<>]+@[^\s<>]+)/);
+  return m ? m[1].toLowerCase() : null;
+}
+
 export interface IngestRunResult {
   fetched: number;
   created: { talent: number; project: number };
@@ -61,6 +68,7 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
     }
 
     const raw = `件名: ${mail.subject ?? ""}\n差出人: ${mail.from ?? ""}\n\n${mail.text}`;
+    const sourceEmail = parseFromEmail(mail.from);
 
     try {
       const cls = await ai.classifyEmail(raw, mail.attachments);
@@ -84,6 +92,7 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
             availabilityText: p.availabilityText ?? null,
             nearestStation: p.nearestStation ?? null,
             emailSubject: mail.subject ?? null,
+            sourceEmail,
             note: p.note ?? mail.text.slice(0, 500),
             receivedDate: mail.date ?? new Date(),
           },
@@ -104,6 +113,7 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
             remotePreference: toRemote(p.remotePreference),
             location: p.location ?? null,
             startText: p.startText ?? null,
+            sourceEmail,
             description: p.description ?? mail.text.slice(0, 600),
             receivedDate: mail.date ?? new Date(),
           },

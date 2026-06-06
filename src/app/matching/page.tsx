@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
-import { scoreMatch, prefilterCandidates } from "@/lib/matching";
+import { scoreMatch, prefilterCandidates, isSameCompany } from "@/lib/matching";
 import { getAI } from "@/lib/ai";
 import type { RankedCandidate } from "@/lib/ai";
 import { formatRate } from "@/lib/utils";
@@ -102,8 +102,12 @@ export default async function MatchingPage({ searchParams }: PageProps) {
     );
   }
 
-  const talents = await prisma.talent.findMany({ where: { orgId: org.id } });
-  const talentById = new Map(talents.map((t) => [t.id, t]));
+  const allTalents = await prisma.talent.findMany({ where: { orgId: org.id } });
+  const talentById = new Map(allTalents.map((t) => [t.id, t]));
+
+  // 同一企業（送信元ドメインが同じ）の人材は提案対象から除外
+  const talents = allTalents.filter((t) => !isSameCompany(t, project));
+  const sameCompanyExcluded = allTalents.length - talents.length;
 
   // --- compute results per mode ---
   let rows: ViewRow[] = [];
@@ -237,6 +241,11 @@ export default async function MatchingPage({ searchParams }: PageProps) {
         {mode === "ai" && prefilteredOut > 0 && (
           <span className="ml-2 text-xs">
             （必須スキル不一致で {prefilteredOut} 件を除外）
+          </span>
+        )}
+        {sameCompanyExcluded > 0 && (
+          <span className="ml-2 text-xs text-amber-600">
+            （同一企業のため {sameCompanyExcluded} 件を除外）
           </span>
         )}
       </div>

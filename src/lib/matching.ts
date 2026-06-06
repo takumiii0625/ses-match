@@ -125,6 +125,51 @@ function normalize(skill: string): string {
   return skill.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// ---------- Same-company exclusion ----------
+// SESの仲介では「同じ会社の人材を、その会社の案件に提案する」のは無意味。
+// 送信元メールのドメインで同一企業を判定して除外する。
+// フリーメール(gmail等)は会社を特定できないため判定対象外（除外しない）。
+
+const FREE_MAIL_DOMAINS = new Set([
+  "gmail.com",
+  "googlemail.com",
+  "yahoo.co.jp",
+  "yahoo.com",
+  "ymail.com",
+  "outlook.com",
+  "outlook.jp",
+  "hotmail.com",
+  "hotmail.co.jp",
+  "live.jp",
+  "icloud.com",
+  "me.com",
+  "docomo.ne.jp",
+  "ezweb.ne.jp",
+  "au.com",
+  "softbank.ne.jp",
+  "nifty.com",
+  "ocn.ne.jp",
+]);
+
+/** Company domain from an email, or null for free-mail / missing. */
+export function companyDomain(email?: string | null): string | null {
+  if (!email) return null;
+  const m = email.match(/@([A-Za-z0-9.-]+)/);
+  if (!m) return null;
+  const d = m[1].toLowerCase();
+  return FREE_MAIL_DOMAINS.has(d) ? null : d;
+}
+
+/** True if talent and project clearly originate from the same company. */
+export function isSameCompany(
+  talent: { sourceEmail?: string | null },
+  project: { sourceEmail?: string | null },
+): boolean {
+  const td = companyDomain(talent.sourceEmail);
+  const pd = companyDomain(project.sourceEmail);
+  return !!td && !!pd && td === pd;
+}
+
 /** Expand a talent's owned skills with implied skills (Spring → Java, etc.). */
 export function expandSkills(skills: string[]): Set<string> {
   const out = new Set<string>();
