@@ -1,23 +1,38 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { runMailIngest } from "@/lib/email/ingest-pipeline";
 
 export const maxDuration = 300;
 
-// Fetch + ingest new mail. Used by both the manual "今すぐ取り込み" button and a
-// scheduled Cron. If CRON_SECRET is set, requests must include it (header
-// x-cron-secret or ?secret=). Same-origin manual calls are allowed when no
-// secret is configured.
-function authorized(req: Request): boolean {
+const authEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
+
+// Fetch + ingest new mail. Authorized when EITHER:
+//  - the request carries a valid CRON_SECRET (external/Vercel cron), OR
+//  - it comes from a signed-in user (the manual "今すぐ取り込み" button).
+// Local dev (no secret, no Clerk) is always allowed.
+async function authorized(req: Request): Promise<boolean> {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return true;
-  const url = new URL(req.url);
-  const header = req.headers.get("x-cron-secret") ?? url.searchParams.get("secret");
-  const auth = req.headers.get("authorization");
-  return header === secret || auth === `Bearer ${secret}`;
+  if (secret) {
+    const url = new URL(req.url);
+    const header =
+      req.headers.get("x-cron-secret") ?? url.searchParams.get("secret");
+    const authH = req.headers.get("authorization");
+    if (header === secret || authH === `Bearer ${secret}`) return true;
+  }
+  if (authEnabled) {
+    try {
+      const { userId } = await auth();
+      if (userId) return true;
+    } catch {
+      // Clerk not available — fall through
+    }
+  }
+  // No secret configured and no auth layer → local/dev open access.
+  return !secret && !authEnabled;
 }
 
 async function handle(req: Request) {
-  if (!authorized(req)) {
+  if (!(await authorized(req))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
