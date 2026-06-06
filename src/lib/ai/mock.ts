@@ -4,7 +4,12 @@ import type {
   ParsedProject,
   ProposalInput,
   EmailClassification,
+  MatchProjectInput,
+  MatchCandidateInput,
+  RankedCandidate,
+  MatchRecommendation,
 } from "./types";
+import { expandSkills } from "@/lib/matching";
 
 // Heuristic, dependency-free stand-in for a real LLM. Good enough to demo the
 // full email→data→proposal flow without any API key. Replace with a real
@@ -126,5 +131,47 @@ export class MockAIService implements AIService {
     ]
       .filter((l) => l !== ``)
       .join("\n");
+  }
+
+  async rankCandidates(
+    project: MatchProjectInput,
+    candidates: MatchCandidateInput[],
+  ): Promise<RankedCandidate[]> {
+    const required = project.requiredSkills.map((s) => s.toLowerCase().trim());
+    const ranked = candidates.map((c) => {
+      const owned = expandSkills(c.skills);
+      const hits = required.filter((r) => owned.has(r));
+      const coverage = required.length ? hits.length / required.length : 0.5;
+      const rateOk =
+        project.rateMax == null ||
+        c.desiredRateMin == null ||
+        c.desiredRateMin <= project.rateMax;
+      let score = Math.round(coverage * 70 + (rateOk ? 20 : 0) + 10);
+      if (required.length && hits.length === 0) score = Math.min(score, 15);
+
+      let recommendation: MatchRecommendation = "UNFIT";
+      if (score >= 75) recommendation = "STRONG";
+      else if (score >= 50) recommendation = "POSSIBLE";
+      else if (score >= 25) recommendation = "WEAK";
+
+      const strengths: string[] = [];
+      const concerns: string[] = [];
+      if (hits.length)
+        strengths.push(`スキル一致: ${hits.join(", ")}（${Math.round(coverage * 100)}%）`);
+      else if (required.length) concerns.push("必須スキルの一致なし");
+      if (!rateOk) concerns.push("希望単価が案件上限を超過");
+
+      return {
+        talentId: c.talentId,
+        score,
+        recommendation,
+        strengths,
+        concerns,
+        reason: hits.length
+          ? `必須スキル ${hits.length}/${required.length} 件一致`
+          : "必須スキルの一致が見られない",
+      };
+    });
+    return ranked.sort((a, b) => b.score - a.score);
   }
 }

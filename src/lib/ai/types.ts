@@ -49,6 +49,47 @@ export interface EmailClassification {
   reason: string;
 }
 
+// ---- LLM matching (stage 2 of the funnel) ----
+
+export type MatchRecommendation = "STRONG" | "POSSIBLE" | "WEAK" | "UNFIT";
+
+/** Minimal project shape passed to the matcher. */
+export interface MatchProjectInput {
+  title: string;
+  clientName?: string | null;
+  requiredSkills: string[];
+  rateMin?: number | null;
+  rateMax?: number | null;
+  remotePreference?: string | null;
+  location?: string | null;
+  startText?: string | null;
+  description?: string | null;
+}
+
+/** Minimal candidate shape passed to the matcher. */
+export interface MatchCandidateInput {
+  talentId: string;
+  name: string;
+  age?: number | null;
+  talentType?: string | null;
+  skills: string[];
+  desiredRateMin?: number | null;
+  desiredRateMax?: number | null;
+  remotePreference?: string | null;
+  availabilityText?: string | null;
+  nearestStation?: string | null;
+  note?: string | null;
+}
+
+export interface RankedCandidate {
+  talentId: string;
+  score: number; // 0..100
+  recommendation: MatchRecommendation;
+  strengths: string[];
+  concerns: string[];
+  reason: string;
+}
+
 export interface AIService {
   /** メールを 人材 / 案件 / 対象外 に分類 */
   classifyEmail(
@@ -67,4 +108,9 @@ export interface AIService {
   ): Promise<ParsedProject>;
   /** マッチング結果 → 提案メール文面 */
   generateProposal(input: ProposalInput): Promise<string>;
+  /** 案件＋候補人材リスト → LLMによるマッチ判定（高い順） */
+  rankCandidates(
+    project: MatchProjectInput,
+    candidates: MatchCandidateInput[],
+  ): Promise<RankedCandidate[]>;
 }
