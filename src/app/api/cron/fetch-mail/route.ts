@@ -37,8 +37,8 @@ async function handle(req: Request) {
   }
   try {
     const url = new URL(req.url);
-    const limit = Number(url.searchParams.get("limit") ?? "20");
-    const result = await runMailIngest(Number.isFinite(limit) ? limit : 20);
+    const limit = Number(url.searchParams.get("limit") ?? "200");
+    const result = await runMailIngest(Number.isFinite(limit) ? limit : 200);
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

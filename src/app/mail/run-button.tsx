@@ -14,7 +14,7 @@ export function RunButton({ disabled }: { disabled?: boolean }) {
     setLoading(true);
     setMsg(null);
     try {
-      const res = await fetch("/api/cron/fetch-mail?limit=20", { method: "POST" });
+      const res = await fetch("/api/cron/fetch-mail?limit=200", { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "取り込みに失敗しました");
       setMsg(
