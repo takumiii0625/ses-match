@@ -16,6 +16,7 @@ export default async function InHouseTalentPage(props: {
   ]);
 
   const filters = parseTalentFilters(sp);
+  filters.talentType = "INHOUSE"; // 自社保有人材のみ（他社人材は別ページ）
 
   const [talents, favRecords] = await Promise.all([
     prisma.talent.findMany({
