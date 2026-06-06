@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { UserButton } from "@clerk/nextjs";
 import {
   UserSearch,
   Building2,
@@ -61,9 +62,11 @@ const groups: { title: string; items: NavItem[] }[] = [
 export function Sidebar({
   userName = "ゲスト",
   orgName = "",
+  authEnabled = false,
 }: {
   userName?: string;
   orgName?: string;
+  authEnabled?: boolean;
 }) {
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
@@ -148,6 +151,17 @@ export function Sidebar({
       {/* footer: settings + user */}
       <div className="mt-2 flex flex-col gap-1 border-t border-border pt-3">
         <NavLink href="/settings" label="設定" icon={Settings} />
+        {authEnabled && (
+          <div
+            className={cn(
+              "flex items-center gap-2 py-1.5",
+              expanded ? "px-2" : "justify-center px-0",
+            )}
+          >
+            <UserButton />
+            {expanded && <span className="text-sm text-slate-600">アカウント</span>}
+          </div>
+        )}
         <Link
           href="/members"
           title={userName}

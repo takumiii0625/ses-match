@@ -1,8 +1,11 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { prisma } from "@/lib/prisma";
+
+const authEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 async function getSidebarUser() {
   try {
@@ -39,14 +42,15 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const { userName, orgName } = await getSidebarUser();
-  return (
+  const tree = (
     <html lang="ja" className={`${geistSans.variable} h-full antialiased`}>
       <body className="min-h-full">
         <div className="flex h-screen overflow-hidden">
-          <Sidebar userName={userName} orgName={orgName} />
+          <Sidebar userName={userName} orgName={orgName} authEnabled={authEnabled} />
           <main className="flex-1 overflow-y-auto">{children}</main>
         </div>
       </body>
     </html>
   );
+  return authEnabled ? <ClerkProvider>{tree}</ClerkProvider> : tree;
 }
