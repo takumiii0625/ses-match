@@ -1,0 +1,17 @@
+name: メール本文バックフィル（手動実行）
+
+# 既存の取り込み済みデータに、Gmailから本文/From/To を補完する一回限りの処理。
+# Actionsタブから手動実行（workflow_dispatch）。
+on:
+  workflow_dispatch: {}
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: バックフィルを実行
+        run: |
+          curl -fsS --max-time 300 -X POST \
+            "https://sesmatch.encore-biz.com/api/cron/backfill-email?limit=200" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n"

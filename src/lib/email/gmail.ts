@@ -148,51 +148,64 @@ export async function fetchEmails(limit = 20): Promise<FetchedEmail[]> {
 
   const out: FetchedEmail[] = [];
   for (const id of ids) {
-    const msg = await gmail.users.messages.get({
-      userId: "me",
-      id,
-      format: "full",
-    });
-    const payload = msg.data.payload;
-    const headers = payload?.headers;
-    const acc = { text: [] as string[], html: [] as string[], atts: [] as gmail_v1.Schema$MessagePart[] };
-    walkParts(payload, acc);
-
-    // attachments (PDF only, capped)
-    const attachments: EmailAttachment[] = [];
-    for (const a of acc.atts.slice(0, 3)) {
-      if (a.mimeType !== "application/pdf") continue;
-      try {
-        const att = await gmail.users.messages.attachments.get({
-          userId: "me",
-          messageId: id,
-          id: a.body!.attachmentId!,
-        });
-        const b64 = Buffer.from(att.data.data ?? "", "base64url").toString("base64");
-        attachments.push({
-          filename: a.filename ?? "attachment.pdf",
-          mediaType: "application/pdf",
-          dataBase64: b64,
-        });
-      } catch {}
-    }
-
-    const text =
-      acc.text.join("\n").trim() ||
-      stripHtml(acc.html.join("\n")) ||
-      msg.data.snippet ||
-      "";
-    const dateStr = header(headers, "Date");
-    out.push({
-      gmailId: id,
-      messageId: header(headers, "Message-ID") ?? id,
-      from: header(headers, "From"),
-      to: header(headers, "To"),
-      subject: header(headers, "Subject"),
-      date: dateStr ? new Date(dateStr) : undefined,
-      text,
-      attachments,
-    });
+    out.push(await parseMessage(gmail, id));
   }
   return out;
+}
+
+/** Fetch + parse a single message by its Gmail id (for backfill). */
+export async function fetchEmailById(gmailId: string): Promise<FetchedEmail | null> {
+  const gmail = await authedGmail();
+  try {
+    return await parseMessage(gmail, gmailId);
+  } catch {
+    return null;
+  }
+}
+
+/** Parse one Gmail message into a FetchedEmail (body text + PDF attachments). */
+async function parseMessage(
+  gmail: gmail_v1.Gmail,
+  id: string,
+): Promise<FetchedEmail> {
+  const msg = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+  const payload = msg.data.payload;
+  const headers = payload?.headers;
+  const acc = { text: [] as string[], html: [] as string[], atts: [] as gmail_v1.Schema$MessagePart[] };
+  walkParts(payload, acc);
+
+  const attachments: EmailAttachment[] = [];
+  for (const a of acc.atts.slice(0, 3)) {
+    if (a.mimeType !== "application/pdf") continue;
+    try {
+      const att = await gmail.users.messages.attachments.get({
+        userId: "me",
+        messageId: id,
+        id: a.body!.attachmentId!,
+      });
+      const b64 = Buffer.from(att.data.data ?? "", "base64url").toString("base64");
+      attachments.push({
+        filename: a.filename ?? "attachment.pdf",
+        mediaType: "application/pdf",
+        dataBase64: b64,
+      });
+    } catch {}
+  }
+
+  const text =
+    acc.text.join("\n").trim() ||
+    stripHtml(acc.html.join("\n")) ||
+    msg.data.snippet ||
+    "";
+  const dateStr = header(headers, "Date");
+  return {
+    gmailId: id,
+    messageId: header(headers, "Message-ID") ?? id,
+    from: header(headers, "From"),
+    to: header(headers, "To"),
+    subject: header(headers, "Subject"),
+    date: dateStr ? new Date(dateStr) : undefined,
+    text,
+    attachments,
+  };
 }
