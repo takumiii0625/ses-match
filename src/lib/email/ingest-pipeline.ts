@@ -2,7 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { getAI } from "@/lib/ai";
 import { fetchEmails } from "./gmail";
+import { companyDomain } from "@/lib/matching";
 import type { RemotePreference } from "@prisma/client";
+
+// 自社ドメイン。送信元がこのドメインなら自社保有人材(INHOUSE)、それ以外は他社(PARTNER)。
+const OWN_DOMAIN = (process.env.COMPANY_DOMAIN ?? "obfall.co.jp").toLowerCase();
 
 const REMOTE_VALUES = new Set<RemotePreference>([
   "FULL_REMOTE",
@@ -77,10 +81,12 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
 
       if (cls.kind === "TALENT") {
         const p = await ai.parseTalentEmail(raw, mail.attachments);
+        // 送信元ドメインで自社/他社を自動判定
+        const isOwn = companyDomain(sourceEmail) === OWN_DOMAIN;
         const t = await prisma.talent.create({
           data: {
             orgId: org.id,
-            talentType: "PARTNER", // 受信メール経由＝他社人材として登録
+            talentType: isOwn ? "INHOUSE" : "PARTNER",
             dataFrom: "EMAIL",
             name: p.name ?? mail.from ?? "（氏名不明）",
             age: p.age ?? null,

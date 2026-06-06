@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -9,6 +10,7 @@ import {
 } from "@/lib/enums";
 import { formatRate } from "@/lib/utils";
 import { FavoriteButton } from "@/components/favorite-button";
+import { ProjectDrawer } from "@/components/project-drawer";
 import type { Project, User } from "@prisma/client";
 
 type ProjectWithAssignee = Project & {
@@ -23,6 +25,8 @@ interface Props {
 }
 
 export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }: Props) {
+  const [openProject, setOpenProject] = useState<ProjectWithAssignee | null>(null);
+  const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
     <Card className="overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -68,7 +72,10 @@ export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }
               return (
                 <tr
                   key={p.id}
-                  className="hover:bg-slate-50 transition-colors cursor-pointer"
+                  onClick={() => setOpenProject(p)}
+                  className={`transition-colors cursor-pointer ${
+                    openProject?.id === p.id ? "bg-blue-50" : "hover:bg-slate-50"
+                  }`}
                 >
                   <td className="px-3 py-2.5 text-slate-500 text-xs whitespace-nowrap">
                     {p.managementId ?? "-"}
@@ -81,13 +88,8 @@ export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }
                   <td className="px-3 py-2.5 text-slate-600 text-xs whitespace-nowrap">
                     {p.assignee?.name ?? "-"}
                   </td>
-                  <td className="px-3 py-2.5">
-                    <Link
-                      href={`/projects/${p.id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {p.title}
-                    </Link>
+                  <td className="px-3 py-2.5 font-medium text-slate-800">
+                    {p.title}
                   </td>
                   <td className="px-3 py-2.5 text-slate-600 text-xs whitespace-nowrap">
                     {p.clientName ?? "-"}
@@ -120,7 +122,7 @@ export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }
                   <td className="px-3 py-2.5 text-slate-600 text-xs whitespace-nowrap">
                     {p.startText ?? "-"}
                   </td>
-                  <td className="px-3 py-2.5 text-center text-xs whitespace-nowrap">
+                  <td className="px-3 py-2.5 text-center text-xs whitespace-nowrap" onClick={stop}>
                     {p._count.matches > 0 ? (
                       <Link
                         href={`/matching?projectId=${p.id}`}
@@ -132,7 +134,7 @@ export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }
                       <span className="text-slate-400">-</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 text-center">
+                  <td className="px-3 py-2.5 text-center" onClick={stop}>
                     <FavoriteButton
                       projectId={p.id}
                       initial={favoriteProjectIds.has(p.id)}
@@ -144,6 +146,10 @@ export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }
           </tbody>
         </table>
       </div>
+
+      {openProject && (
+        <ProjectDrawer project={openProject} onClose={() => setOpenProject(null)} />
+      )}
     </Card>
   );
 }
