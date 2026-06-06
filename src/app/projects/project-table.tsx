@@ -8,6 +8,7 @@ import {
   REMOTE_LABELS,
 } from "@/lib/enums";
 import { formatRate } from "@/lib/utils";
+import { FavoriteButton } from "@/components/favorite-button";
 import type { Project, User } from "@prisma/client";
 
 type ProjectWithAssignee = Project & {
@@ -18,9 +19,10 @@ type ProjectWithAssignee = Project & {
 interface Props {
   projects: ProjectWithAssignee[];
   total: number;
+  favoriteProjectIds?: Set<string>;
 }
 
-export function ProjectTable({ projects, total }: Props) {
+export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }: Props) {
   return (
     <Card className="overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
@@ -49,12 +51,13 @@ export function ProjectTable({ projects, total }: Props) {
               <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">勤務地/最寄り駅</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">開始</th>
               <th className="px-3 py-2.5 text-left text-xs font-medium text-slate-500 whitespace-nowrap">マッチ</th>
+              <th className="w-10 px-3 py-2.5 text-center text-xs font-medium text-slate-500">★</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {projects.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-slate-400 text-sm">
+                <td colSpan={12} className="px-4 py-8 text-center text-slate-400 text-sm">
                   該当する案件がありません
                 </td>
               </tr>
@@ -128,6 +131,12 @@ export function ProjectTable({ projects, total }: Props) {
                     ) : (
                       <span className="text-slate-400">-</span>
                     )}
+                  </td>
+                  <td className="px-3 py-2.5 text-center">
+                    <FavoriteButton
+                      projectId={p.id}
+                      initial={favoriteProjectIds.has(p.id)}
+                    />
                   </td>
                 </tr>
               );

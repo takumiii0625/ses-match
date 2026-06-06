@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 
@@ -13,9 +14,12 @@ export function ProposalButton({ talentId, projectId }: ProposalButtonProps) {
   const [loading, setLoading] = useState(false);
   const [proposal, setProposal] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
 
   async function handleGenerate() {
     setLoading(true);
+    setSavedId(null);
     try {
       const res = await fetch("/api/proposals", {
         method: "POST",
@@ -39,7 +43,26 @@ export function ProposalButton({ talentId, projectId }: ProposalButtonProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // fallback: select text
+      // fallback: no-op
+    }
+  }
+
+  async function handleSave() {
+    if (!proposal) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/proposals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "save", talentId, projectId, proposalBody: proposal }),
+      });
+      if (!res.ok) throw new Error("保存失敗");
+      const data = await res.json();
+      setSavedId(data.id ?? null);
+    } catch {
+      alert("提案の保存に失敗しました");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -52,17 +75,27 @@ export function ProposalButton({ talentId, projectId }: ProposalButtonProps) {
           rows={8}
           className="text-xs font-mono resize-y"
         />
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           <Button variant="outline" size="sm" onClick={handleCopy}>
             {copied ? "コピー済み!" : "コピー"}
           </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setProposal(null)}
-          >
+          {!savedId && (
+            <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
+              {saving ? "保存中..." : "保存"}
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => { setProposal(null); setSavedId(null); }}>
             閉じる
           </Button>
+          {savedId && (
+            <span className="flex items-center gap-2 text-xs text-emerald-700">
+              <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+              保存しました
+              <Link href="/proposals" className="underline text-primary hover:text-blue-700 transition-colors">
+                提案管理で見る →
+              </Link>
+            </span>
+          )}
         </div>
       </div>
     );

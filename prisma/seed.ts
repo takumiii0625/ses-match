@@ -4,6 +4,9 @@ const prisma = new PrismaClient();
 
 async function main() {
   // reset (idempotent dev seed)
+  await prisma.sharedLink.deleteMany();
+  await prisma.proposal.deleteMany();
+  await prisma.favorite.deleteMany();
   await prisma.match.deleteMany();
   await prisma.attachment.deleteMany();
   await prisma.talent.deleteMany();
@@ -229,7 +232,78 @@ async function main() {
     },
   });
 
-  console.log("Seed completed: org=%s, talents=5, projects=3", org.name);
+  // --- sample favorites / matches / proposals / shared links ---
+  const twTalent = await prisma.talent.findFirst({
+    where: { orgId: org.id, managementId: "TW-002" },
+  });
+  const ykTalent = await prisma.talent.findFirst({
+    where: { orgId: org.id, managementId: "YK-003" },
+  });
+  const pj2 = await prisma.project.findFirst({
+    where: { orgId: org.id, managementId: "PJ-002" },
+  });
+  const pj3 = await prisma.project.findFirst({
+    where: { orgId: org.id, managementId: "PJ-003" },
+  });
+
+  if (twTalent) {
+    await prisma.favorite.create({
+      data: { userId: yoshioka.id, talentId: twTalent.id },
+    });
+  }
+  if (pj2) {
+    await prisma.favorite.create({
+      data: { userId: yoshioka.id, projectId: pj2.id },
+    });
+  }
+
+  if (ykTalent && pj3) {
+    await prisma.match.create({
+      data: {
+        talentId: ykTalent.id,
+        projectId: pj3.id,
+        score: 100,
+        reasons: [
+          "必須スキル 3 件中 3 件一致（100%）",
+          "単価適合（希望85万 ≤ 上限120万）",
+          "リモート条件が合致",
+        ],
+      },
+    });
+    await prisma.proposal.create({
+      data: {
+        orgId: org.id,
+        talentId: ykTalent.id,
+        projectId: pj3.id,
+        subject: "SAP S/4HANA導入支援のご提案",
+        body: [
+          "エンドD社様",
+          "",
+          "お世話になっております。",
+          "標題の「製造業向けSAP S/4HANA導入支援」につきまして、弊社所属のY.Kをご提案申し上げます。",
+          "",
+          "【ご提案要員】",
+          "氏名（イニシャル）: Y.K",
+          "スキル: SAP / SAP S/4HANA / ERP",
+          "希望単価: 85万〜",
+          "",
+          "【マッチング根拠】",
+          "・必須スキル 3 件中 3 件一致（100%）",
+          "・単価適合（希望85万 ≤ 上限120万）",
+          "",
+          "ご検討のほど、よろしくお願いいたします。",
+        ].join("\n"),
+        status: "SENT",
+        score: 100,
+        createdById: yoshioka.id,
+      },
+    });
+  }
+
+  console.log(
+    "Seed completed: org=%s, talents=5, projects=3, +favorites/match/proposal",
+    org.name,
+  );
 }
 
 main()

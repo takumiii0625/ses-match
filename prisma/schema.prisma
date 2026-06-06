@@ -13,14 +13,18 @@ datasource db {
 // ---------- Tenancy ----------
 
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  aiProvider        String   @default("mock") // mock | anthropic | openai
+  proposalSignature String? // 提案メールの署名
+  createdAt         DateTime @default(now())
 
-  users    User[]
-  talents  Talent[]
-  projects Project[]
+  users       User[]
+  talents     Talent[]
+  projects    Project[]
+  proposals   Proposal[]
+  sharedLinks SharedLink[]
 }
 
 enum Role {
@@ -38,6 +42,8 @@ model User {
   org              Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   assignedTalents  Talent[]     @relation("TalentAssignee")
   assignedProjects Project[]    @relation("ProjectAssignee")
+  favorites        Favorite[]
+  createdProposals Proposal[]   @relation("ProposalAuthor")
 }
 
 // ---------- Shared enums ----------
@@ -150,6 +156,8 @@ model Talent {
   assignee    User?        @relation("TalentAssignee", fields: [assigneeId], references: [id])
   attachments Attachment[]
   matches     Match[]
+  favorites   Favorite[]
+  proposals   Proposal[]
 
   @@index([orgId, talentType, status])
 }
@@ -195,9 +203,11 @@ model Project {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  org      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  assignee User?        @relation("ProjectAssignee", fields: [assigneeId], references: [id])
-  matches  Match[]
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignee  User?        @relation("ProjectAssignee", fields: [assigneeId], references: [id])
+  matches   Match[]
+  favorites Favorite[]
+  proposals Proposal[]
 
   @@index([orgId, status])
 }
@@ -216,4 +226,74 @@ model Match {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([talentId, projectId])
+}
+
+// ---------- Favorites (お気に入り) ----------
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  talentId  String?
+  projectId String?
+  createdAt DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  talent  Talent?  @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, talentId])
+  @@unique([userId, projectId])
+}
+
+// ---------- Proposals (提案) ----------
+
+enum ProposalStatus {
+  DRAFT     // 下書き
+  SENT      // 送信済み
+  ACCEPTED  // 受諾
+  REJECTED  // 見送り
+}
+
+model Proposal {
+  id          String         @id @default(cuid())
+  orgId       String
+  talentId    String
+  projectId   String
+  subject     String?
+  body        String
+  status      ProposalStatus @default(DRAFT)
+  score       Float?
+  createdById String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  talent    Talent       @relation(fields: [talentId], references: [id], onDelete: Cascade)
+  project   Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?        @relation("ProposalAuthor", fields: [createdById], references: [id])
+
+  @@index([orgId, status])
+}
+
+// ---------- Shared links (公開リンク) ----------
+
+enum SharedLinkType {
+  TALENT
+  PROJECT
+  TALENT_LIST
+}
+
+model SharedLink {
+  id        String         @id @default(cuid())
+  orgId     String
+  token     String         @unique
+  type      SharedLinkType
+  targetId  String? // talentId / projectId （TALENT_LIST の場合は null）
+  label     String?
+  expiresAt DateTime?
+  createdAt DateTime       @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
 }

@@ -11,7 +11,6 @@ import {
   REMOTE_LABELS,
 } from "@/lib/enums";
 import { formatRate, formatAge } from "@/lib/utils";
-import { FavoriteButton } from "@/components/favorite-button";
 
 interface Attachment {
   id: string;
@@ -42,13 +41,12 @@ interface Talent {
   attachments: Attachment[];
 }
 
-interface TalentTableProps {
+interface PartnerTableProps {
   talents: Talent[];
   total: number;
-  favoriteTalentIds?: Set<string>;
 }
 
-export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: TalentTableProps) {
+export function PartnerTable({ talents, total }: PartnerTableProps) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   function toggleAll() {
@@ -71,6 +69,7 @@ export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: T
 
   return (
     <Card className="overflow-hidden">
+      {/* Header bar */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-white">
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold text-slate-700">
@@ -80,8 +79,8 @@ export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: T
             <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs text-slate-600">
               配信日｜最新順
             </span>
-            <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-700">
-              自社保有人材のみ
+            <span className="inline-flex items-center rounded-full bg-indigo-50 px-2.5 py-0.5 text-xs text-indigo-700">
+              他社人材のみ
             </span>
           </div>
         </div>
@@ -91,9 +90,6 @@ export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: T
               新規人材登録
             </Button>
           </Link>
-          <Button variant="outline" size="sm">
-            公開リンク
-          </Button>
           <Button
             variant="danger"
             size="sm"
@@ -107,6 +103,7 @@ export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: T
         </div>
       </div>
 
+      {/* Table */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
@@ -129,18 +126,17 @@ export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: T
               <th className="px-3 py-2.5 text-left font-medium whitespace-nowrap">稼働</th>
               <th className="px-3 py-2.5 text-left font-medium whitespace-nowrap">希望単価</th>
               <th className="px-3 py-2.5 text-left font-medium whitespace-nowrap">スキル</th>
-              <th className="px-3 py-2.5 text-left font-medium whitespace-nowrap">リモート希望</th>
+              <th className="px-3 py-2.5 text-left font-medium whitespace-nowrap">リモート</th>
               <th className="px-3 py-2.5 text-left font-medium whitespace-nowrap">最寄り駅</th>
               <th className="w-8 px-3 py-2.5 text-center font-medium">添付</th>
-              <th className="w-10 px-3 py-2.5 text-center font-medium">★</th>
               <th className="w-8 px-3 py-2.5"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {talents.length === 0 ? (
               <tr>
-                <td colSpan={16} className="px-4 py-12 text-center text-slate-400 text-sm">
-                  該当する人材が見つかりませんでした
+                <td colSpan={15} className="px-4 py-12 text-center text-slate-400 text-sm">
+                  該当する他社人材が見つかりませんでした
                 </td>
               </tr>
             ) : (
@@ -231,12 +227,6 @@ export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: T
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-center">
-                    <FavoriteButton
-                      talentId={talent.id}
-                      initial={favoriteTalentIds.has(talent.id)}
-                    />
-                  </td>
-                  <td className="px-3 py-2.5 text-center">
                     <Link href={`/talent/${talent.id}`}>
                       <span className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer">⋮</span>
                     </Link>
@@ -248,6 +238,7 @@ export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: T
         </table>
       </div>
 
+      {/* Footer */}
       <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-white">
         <span className="text-xs text-slate-500">全 {total} 件</span>
         <div className="flex items-center gap-2">
