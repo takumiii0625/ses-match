@@ -75,7 +75,7 @@ export function ProjectDrawer({
   return (
     <div className="fixed inset-0 z-40" role="dialog">
       <div className="absolute inset-0 bg-slate-900/20" onClick={onClose} />
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-border bg-white shadow-xl">
+      <aside className="absolute right-0 top-0 flex h-full w-full flex-col border-l border-border bg-white shadow-xl md:w-1/2 md:max-w-3xl">
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <span className="text-base font-bold text-slate-800">案件詳細情報</span>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">

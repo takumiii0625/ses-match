@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { X } from "lucide-react";
+import { X, Pencil } from "lucide-react";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,9 +12,8 @@ import {
   NATIONALITY_LABELS,
   LANGUAGE_LABELS,
   EMPLOYMENT_LABELS,
-  TALENT_TYPE_LABELS,
 } from "@/lib/enums";
-import { formatRate, formatAge } from "@/lib/utils";
+import { formatRate } from "@/lib/utils";
 
 export interface TalentDrawerData {
   id: string;
@@ -31,10 +30,12 @@ export interface TalentDrawerData {
   japaneseLevel?: string | null;
   englishLevel?: string | null;
   availabilityText?: string | null;
+  availabilityDate?: Date | string | null;
   desiredRateMin?: number | null;
   desiredRateMax?: number | null;
   mainSkills: string[];
   skills: string[];
+  tags?: string[];
   remotePreference?: string | null;
   nearestStation?: string | null;
   note?: string | null;
@@ -47,15 +48,6 @@ export interface TalentDrawerData {
   attachments: { id: string; filename: string; url: string }[];
 }
 
-function Field({ label, value }: { label: string; value?: React.ReactNode }) {
-  return (
-    <div className="flex gap-3 py-1.5 text-sm">
-      <span className="w-24 shrink-0 text-xs text-slate-400">{label}</span>
-      <span className="text-slate-700">{value ?? "-"}</span>
-    </div>
-  );
-}
-
 function MetaRow({ label, value }: { label: string; value?: React.ReactNode }) {
   return (
     <div className="flex gap-2 text-xs">
@@ -65,7 +57,27 @@ function MetaRow({ label, value }: { label: string; value?: React.ReactNode }) {
   );
 }
 
-function fmtDate(d?: Date | string | null): string {
+/** grid cell (label above value) */
+function GF({ label, children }: { label: string; children?: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-0.5 text-xs text-slate-400">{label}</div>
+      <div className="text-sm text-slate-700">{children ?? "-"}</div>
+    </div>
+  );
+}
+
+/** full-width labeled row */
+function Row({ label, children }: { label: string; children?: React.ReactNode }) {
+  return (
+    <div className="border-t border-slate-100 pt-3">
+      <div className="mb-1 text-xs text-slate-400">{label}</div>
+      <div className="text-sm text-slate-700">{children ?? "-"}</div>
+    </div>
+  );
+}
+
+function fmtDateTime(d?: Date | string | null): string {
   if (!d) return "-";
   const date = typeof d === "string" ? new Date(d) : d;
   return date.toLocaleString("ja-JP", {
@@ -74,6 +86,15 @@ function fmtDate(d?: Date | string | null): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+function fmtDate(d?: Date | string | null): string {
+  if (!d) return "-";
+  const date = typeof d === "string" ? new Date(d) : d;
+  return date.toLocaleDateString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
   });
 }
 
@@ -90,10 +111,18 @@ export function TalentDrawer({
   return (
     <div className="fixed inset-0 z-40" role="dialog">
       <div className="absolute inset-0 bg-slate-900/20" onClick={onClose} />
-      <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-border bg-white shadow-xl">
+      <aside className="absolute right-0 top-0 flex h-full w-full flex-col border-l border-border bg-white shadow-xl md:w-1/2 md:max-w-3xl">
         {/* header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <span className="text-base font-bold text-slate-800">人材詳細情報</span>
+          <div className="flex items-center gap-3">
+            <span className="text-base font-bold text-slate-800">人材詳細情報</span>
+            <Link
+              href={`/talent/${talent.id}`}
+              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-primary"
+            >
+              <Pencil className="h-3.5 w-3.5" /> 編集
+            </Link>
+          </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X className="h-5 w-5" />
           </button>
@@ -104,9 +133,7 @@ export function TalentDrawer({
           <button
             onClick={() => setTab("mail")}
             className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
-              tab === "mail"
-                ? "border-b-2 border-primary text-primary"
-                : "text-slate-500 hover:text-slate-700"
+              tab === "mail" ? "border-b-2 border-primary text-primary" : "text-slate-500 hover:text-slate-700"
             }`}
           >
             メール本文
@@ -114,16 +141,14 @@ export function TalentDrawer({
           <button
             onClick={() => setTab("detail")}
             className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
-              tab === "detail"
-                ? "border-b-2 border-primary text-primary"
-                : "text-slate-500 hover:text-slate-700"
+              tab === "detail" ? "border-b-2 border-primary text-primary" : "text-slate-500 hover:text-slate-700"
             }`}
           >
             詳細情報
           </button>
         </div>
 
-        {/* body (scrollable) */}
+        {/* body */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {tab === "mail" ? (
             hasEmail || talent.note ? (
@@ -132,7 +157,7 @@ export function TalentDrawer({
                 <div className="mb-3 space-y-1 rounded-lg bg-slate-50 p-3">
                   <MetaRow label="From:" value={talent.emailFrom ?? talent.sourceEmail} />
                   <MetaRow label="To:" value={talent.emailTo} />
-                  <MetaRow label="Received:" value={fmtDate(talent.receivedDate)} />
+                  <MetaRow label="Received:" value={fmtDateTime(talent.receivedDate)} />
                 </div>
                 {talent.emailSubject && (
                   <div className="mb-2 break-words text-sm font-medium text-slate-800">
@@ -149,63 +174,62 @@ export function TalentDrawer({
               </p>
             )
           ) : (
-            <div>
-              <div className="mb-3 flex items-center gap-2">
-                <span className="text-base font-bold text-slate-800">{talent.name}</span>
-                <Badge tone={statusTone(talent.status)}>
-                  {TALENT_STATUS_LABELS[talent.status] ?? talent.status}
-                </Badge>
-                {talent.talentType && (
-                  <Badge tone="slate">
-                    {TALENT_TYPE_LABELS[talent.talentType] ?? talent.talentType}
+            <div className="space-y-4">
+              {/* grid fields */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                <GF label="ステータス">
+                  <Badge tone={statusTone(talent.status)}>
+                    {TALENT_STATUS_LABELS[talent.status] ?? talent.status}
                   </Badge>
-                )}
+                </GF>
+                <GF label="配信日">{fmtDate(talent.receivedDate)}</GF>
+                <GF label="名前">{talent.name}</GF>
+                <GF label="性別">{talent.gender ? GENDER_LABELS[talent.gender] : "-"}</GF>
+
+                <GF label="希望単価（万円）">{formatRate(talent.desiredRateMin, talent.desiredRateMax)}</GF>
+                <GF label="雇用形態">{talent.employmentType ? EMPLOYMENT_LABELS[talent.employmentType] : "-"}</GF>
+                <GF label="稼働時間（時間・月）">-</GF>
+                <GF label="リモート">{talent.remotePreference ? REMOTE_LABELS[talent.remotePreference] : "-"}</GF>
+
+                <GF label="稼働開始日">{talent.availabilityText || fmtDate(talent.availabilityDate)}</GF>
+                <GF label="国籍">{talent.nationality ? NATIONALITY_LABELS[talent.nationality] : "-"}</GF>
+                <GF label="日本語レベル">{talent.japaneseLevel ? LANGUAGE_LABELS[talent.japaneseLevel] : "-"}</GF>
+                <GF label="英語レベル">{talent.englishLevel ? LANGUAGE_LABELS[talent.englishLevel] : "-"}</GF>
               </div>
 
-              {(talent.mainSkills.length > 0 || talent.skills.length > 0) && (
-                <div className="mb-3 flex flex-wrap gap-1">
-                  {talent.mainSkills.map((s) => (
-                    <Badge key={s} tone="blue">{s}</Badge>
-                  ))}
-                  {talent.skills
-                    .filter((s) => !talent.mainSkills.includes(s))
-                    .map((s) => (
-                      <Badge key={s} tone="slate">{s}</Badge>
+              <Row label="タグ">
+                {talent.tags && talent.tags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {talent.tags.map((t) => (
+                      <Badge key={t} tone="slate">{t}</Badge>
                     ))}
-                </div>
-              )}
-
-              <div className="divide-y divide-slate-100">
-                <Field label="管理ID" value={talent.managementId} />
-                <Field label="担当者" value={talent.assignee?.name} />
-                <Field label="年齢" value={formatAge(talent.age)} />
-                <Field label="性別" value={talent.gender ? GENDER_LABELS[talent.gender] : undefined} />
-                <Field label="所属" value={talent.affiliation} />
-                <Field
-                  label="雇用形態"
-                  value={talent.employmentType ? EMPLOYMENT_LABELS[talent.employmentType] : undefined}
-                />
-                <Field label="希望単価" value={formatRate(talent.desiredRateMin, talent.desiredRateMax)} />
-                <Field label="稼働開始" value={talent.availabilityText} />
-                <Field
-                  label="リモート"
-                  value={talent.remotePreference ? REMOTE_LABELS[talent.remotePreference] : undefined}
-                />
-                <Field label="最寄り駅" value={talent.nearestStation} />
-                <Field
-                  label="国籍"
-                  value={talent.nationality ? NATIONALITY_LABELS[talent.nationality] : undefined}
-                />
-                <Field
-                  label="日本語"
-                  value={talent.japaneseLevel ? LANGUAGE_LABELS[talent.japaneseLevel] : undefined}
-                />
-                <Field
-                  label="英語"
-                  value={talent.englishLevel ? LANGUAGE_LABELS[talent.englishLevel] : undefined}
-                />
-                {talent.sourceEmail && <Field label="送信元" value={talent.sourceEmail} />}
-              </div>
+                  </div>
+                ) : (
+                  "未設定"
+                )}
+              </Row>
+              <Row label="担当者">{talent.assignee?.name}</Row>
+              <Row label="最寄駅">{talent.nearestStation}</Row>
+              <Row label="所属">{talent.affiliation}</Row>
+              <Row label="スキル">
+                {talent.mainSkills.length > 0 || talent.skills.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {talent.mainSkills.map((s) => (
+                      <Badge key={s} tone="blue">{s}</Badge>
+                    ))}
+                    {talent.skills
+                      .filter((s) => !talent.mainSkills.includes(s))
+                      .map((s) => (
+                        <Badge key={s} tone="slate">{s}</Badge>
+                      ))}
+                  </div>
+                ) : (
+                  "-"
+                )}
+              </Row>
+              <Row label="備考情報">
+                <span className="whitespace-pre-wrap">{talent.note || "-"}</span>
+              </Row>
             </div>
           )}
         </div>
@@ -213,7 +237,7 @@ export function TalentDrawer({
         {/* footer */}
         <div className="border-t border-border px-5 py-3">
           <Link href={`/talent/${talent.id}`}>
-            <Button variant="primary" size="sm" className="w-full">詳細・編集</Button>
+            <Button variant="primary" size="sm" className="w-full">詳細・編集ページを開く</Button>
           </Link>
         </div>
       </aside>
