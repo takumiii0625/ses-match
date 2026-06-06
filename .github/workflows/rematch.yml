@@ -1,0 +1,17 @@
+name: 一括マッチング（手動実行）
+
+# 既存の全人材×全案件で一括マッチを計算・保存（同一企業除外・50点以上）。
+# Actionsタブから手動実行。
+on:
+  workflow_dispatch: {}
+
+jobs:
+  rematch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 一括マッチを実行
+        run: |
+          curl -fsS --max-time 300 -X POST \
+            "https://sesmatch.encore-biz.com/api/cron/rematch" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n"
