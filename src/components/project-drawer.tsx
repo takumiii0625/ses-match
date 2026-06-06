@@ -96,11 +96,11 @@ export function ProjectDrawer({
             <div className="mt-5">
               <div className="mb-2 text-xs font-semibold text-slate-500">メール</div>
               {project.emailSubject && (
-                <div className="mb-2 text-sm font-medium text-slate-800">
+                <div className="mb-2 break-words text-sm font-medium text-slate-800">
                   件名: {project.emailSubject}
                 </div>
               )}
-              <div className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">
+              <div className="whitespace-pre-wrap break-words rounded-lg border border-border bg-slate-50 p-3 text-xs leading-relaxed text-slate-700">
                 {project.emailBody || "（本文なし）"}
               </div>
             </div>
