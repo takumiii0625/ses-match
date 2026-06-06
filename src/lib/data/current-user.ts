@@ -16,6 +16,15 @@ export async function getCurrentUser() {
   const fallback = await prisma.user.findFirst({
     where: { orgId: org.id },
   });
-  if (!fallback) throw new Error("No users found in organization.");
-  return fallback;
+  if (fallback) return fallback;
+
+  // Fresh DB — bootstrap a default admin so the app works without a seed.
+  return prisma.user.create({
+    data: {
+      orgId: org.id,
+      name: process.env.ADMIN_NAME ?? "管理者",
+      email: process.env.ADMIN_EMAIL ?? `admin@${org.slug}.local`,
+      role: "ADMIN",
+    },
+  });
 }

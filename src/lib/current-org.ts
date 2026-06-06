@@ -1,14 +1,22 @@
 import { prisma } from "@/lib/prisma";
 
 // No auth yet (MVP). The app is single-tenant in practice: we resolve the
-// first organization as the "current" org. Swap this for a real session
-// lookup (Auth0/Clerk) when auth is added — every caller goes through here.
+// first organization as the "current" org. On a fresh database we bootstrap a
+// default organization so the app works without a manual seed (e.g. in
+// production). Swap this for a real session lookup (Auth0/Clerk) when auth is
+// added — every caller goes through here.
 export async function getCurrentOrg() {
-  const org = await prisma.organization.findFirst({
+  const existing = await prisma.organization.findFirst({
     orderBy: { createdAt: "asc" },
   });
-  if (!org) throw new Error("No organization found. Run `pnpm db:seed`.");
-  return org;
+  if (existing) return existing;
+
+  return prisma.organization.create({
+    data: {
+      name: process.env.ORG_NAME ?? "OBFall株式会社",
+      slug: "default",
+    },
+  });
 }
 
 export async function getOrgUsers(orgId: string) {
