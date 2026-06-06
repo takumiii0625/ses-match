@@ -82,6 +82,7 @@ export interface FetchedEmail {
   gmailId: string;
   messageId: string; // RFC Message-ID header (fallback: gmailId)
   from?: string;
+  to?: string;
   subject?: string;
   date?: Date;
   text: string;
@@ -186,6 +187,7 @@ export async function fetchEmails(limit = 20): Promise<FetchedEmail[]> {
       gmailId: id,
       messageId: header(headers, "Message-ID") ?? id,
       from: header(headers, "From"),
+      to: header(headers, "To"),
       subject: header(headers, "Subject"),
       date: dateStr ? new Date(dateStr) : undefined,
       text,

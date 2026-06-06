@@ -150,6 +150,8 @@ model Talent {
 
   emailSubject String? // メール件名（メール取り込み時）
   emailBody    String? // メール本文（取り込み元）
+  emailFrom    String? // Fromヘッダ（表示用 例: 名前 <a@b.com>）
+  emailTo      String? // Toヘッダ（表示用）
   sourceEmail  String? // 送信元メールアドレス（同一企業判定用）
   note         String?
   receivedDate DateTime @default(now()) // 配信日
@@ -185,7 +187,10 @@ model Project {
   title        String
   clientName   String? // エンド / 商流元
   businessFlow String? // 商流
+  emailSubject String? // メール件名
   emailBody    String? // メール本文（取り込み元）
+  emailFrom    String? // Fromヘッダ（表示用）
+  emailTo      String? // Toヘッダ（表示用）
   sourceEmail  String? // 送信元メールアドレス（同一企業判定用）
   status       ProjectStatus @default(OPEN)
   dataFrom     DataSource    @default(REGISTER)
