@@ -3,6 +3,7 @@ import type {
   ParsedTalent,
   ParsedProject,
   ProposalInput,
+  EmailClassification,
 } from "./types";
 
 // Heuristic, dependency-free stand-in for a real LLM. Good enough to demo the
@@ -56,6 +57,18 @@ function extractStart(text: string): string | undefined {
 }
 
 export class MockAIService implements AIService {
+  async classifyEmail(rawEmail: string): Promise<EmailClassification> {
+    const text = rawEmail;
+    const projectHints = /(案件|募集|求人|エンド|商流|参画|稼働場所|ポジション)/;
+    const talentHints = /(人材|要員|エンジニア|ご紹介|経歴|スキルシート|稼働可能|提案できる)/;
+    const p = projectHints.test(text);
+    const t = talentHints.test(text);
+    if (t && !p) return { kind: "TALENT", reason: "人材系キーワードを検出" };
+    if (p && !t) return { kind: "PROJECT", reason: "案件系キーワードを検出" };
+    if (t && p) return { kind: "TALENT", reason: "両方検出（人材優先）" };
+    return { kind: "IGNORE", reason: "人材・案件いずれのキーワードも未検出" };
+  }
+
   async parseTalentEmail(rawEmail: string): Promise<ParsedTalent> {
     const skills = extractSkills(rawEmail);
     const rate = extractRate(rawEmail);

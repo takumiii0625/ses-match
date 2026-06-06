@@ -297,3 +297,39 @@ model SharedLink {
 
   @@index([orgId])
 }
+
+// ---------- Email ingestion (メール自動取り込み) ----------
+
+enum IngestKind {
+  TALENT  // 人材として登録
+  PROJECT // 案件として登録
+  IGNORE  // 対象外
+  ERROR   // 処理エラー
+}
+
+model OAuthToken {
+  id           String   @id @default(cuid())
+  provider     String   @unique // "google"
+  account      String? // 連携したメールアドレス
+  refreshToken String
+  scope        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model IngestedEmail {
+  id         String     @id @default(cuid())
+  orgId      String
+  messageId  String     @unique // Gmail/RFC Message-ID（重複防止）
+  gmailId    String? // Gmail内部ID
+  fromAddr   String?
+  subject    String?
+  receivedAt DateTime?
+  kind       IngestKind @default(IGNORE)
+  talentId   String? // 作成した人材
+  projectId  String? // 作成した案件
+  reason     String? // 分類理由 / エラー内容
+  createdAt  DateTime   @default(now())
+
+  @@index([orgId, createdAt])
+}

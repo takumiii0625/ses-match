@@ -1,0 +1,196 @@
+import { google } from "googleapis";
+import type { gmail_v1 } from "googleapis";
+import { prisma } from "@/lib/prisma";
+import type { EmailAttachment } from "@/lib/ai/types";
+
+// Gmail integration (read-only). Reads messages from the connected mailbox,
+// extracts plain-text body + PDF attachments. OAuth refresh token is stored
+// in the DB (OAuthToken). Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in .env.
+
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+
+export function getRedirectUri(): string {
+  return (
+    process.env.GOOGLE_REDIRECT_URI ??
+    `${process.env.APP_URL ?? "http://localhost:3000"}/api/google/callback`
+  );
+}
+
+export function oauthClient() {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が設定されていません",
+    );
+  }
+  return new google.auth.OAuth2(clientId, clientSecret, getRedirectUri());
+}
+
+export function authUrl(): string {
+  return oauthClient().generateAuthUrl({
+    access_type: "offline",
+    prompt: "consent", // force refresh_token issuance
+    scope: [GMAIL_SCOPE],
+  });
+}
+
+/** Exchange the OAuth code for tokens and persist the refresh token. */
+export async function saveTokenFromCode(code: string): Promise<string> {
+  const client = oauthClient();
+  const { tokens } = await client.getToken(code);
+  if (!tokens.refresh_token) {
+    throw new Error(
+      "refresh_token が取得できませんでした（既に連携済みの可能性。Googleアカウントのアクセス権を解除して再連携してください）",
+    );
+  }
+  client.setCredentials(tokens);
+  // best-effort: look up the connected address
+  let account: string | undefined;
+  try {
+    const gmail = google.gmail({ version: "v1", auth: client });
+    const profile = await gmail.users.getProfile({ userId: "me" });
+    account = profile.data.emailAddress ?? undefined;
+  } catch {}
+
+  await prisma.oAuthToken.upsert({
+    where: { provider: "google" },
+    create: {
+      provider: "google",
+      account,
+      refreshToken: tokens.refresh_token,
+      scope: GMAIL_SCOPE,
+    },
+    update: { account, refreshToken: tokens.refresh_token, scope: GMAIL_SCOPE },
+  });
+  return account ?? "(unknown)";
+}
+
+export async function getConnection() {
+  return prisma.oAuthToken.findUnique({ where: { provider: "google" } });
+}
+
+async function authedGmail(): Promise<gmail_v1.Gmail> {
+  const token = await getConnection();
+  if (!token) throw new Error("Gmail未連携です");
+  const client = oauthClient();
+  client.setCredentials({ refresh_token: token.refreshToken });
+  return google.gmail({ version: "v1", auth: client });
+}
+
+export interface FetchedEmail {
+  gmailId: string;
+  messageId: string; // RFC Message-ID header (fallback: gmailId)
+  from?: string;
+  subject?: string;
+  date?: Date;
+  text: string;
+  attachments: EmailAttachment[];
+}
+
+function header(
+  headers: gmail_v1.Schema$MessagePartHeader[] | undefined,
+  name: string,
+): string | undefined {
+  return headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())
+    ?.value as string | undefined;
+}
+
+function decodeBody(data?: string | null): string {
+  if (!data) return "";
+  return Buffer.from(data, "base64url").toString("utf-8");
+}
+
+/** Walk MIME parts, collecting plain text and PDF attachment refs. */
+function walkParts(
+  part: gmail_v1.Schema$MessagePart | undefined,
+  out: { text: string[]; html: string[]; atts: gmail_v1.Schema$MessagePart[] },
+) {
+  if (!part) return;
+  const mime = part.mimeType ?? "";
+  if (part.filename && part.body?.attachmentId) {
+    out.atts.push(part);
+  } else if (mime === "text/plain") {
+    out.text.push(decodeBody(part.body?.data));
+  } else if (mime === "text/html") {
+    out.html.push(decodeBody(part.body?.data));
+  }
+  for (const p of part.parts ?? []) walkParts(p, out);
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
+
+/** List + fetch messages matching the query (default: addressed to MAIL_ADDRESS). */
+export async function fetchEmails(limit = 20): Promise<FetchedEmail[]> {
+  const gmail = await authedGmail();
+  const q =
+    process.env.MAIL_QUERY ??
+    (process.env.MAIL_ADDRESS
+      ? `to:${process.env.MAIL_ADDRESS} newer_than:60d`
+      : "newer_than:30d");
+
+  const list = await gmail.users.messages.list({
+    userId: "me",
+    q,
+    maxResults: limit,
+  });
+  const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
+
+  const out: FetchedEmail[] = [];
+  for (const id of ids) {
+    const msg = await gmail.users.messages.get({
+      userId: "me",
+      id,
+      format: "full",
+    });
+    const payload = msg.data.payload;
+    const headers = payload?.headers;
+    const acc = { text: [] as string[], html: [] as string[], atts: [] as gmail_v1.Schema$MessagePart[] };
+    walkParts(payload, acc);
+
+    // attachments (PDF only, capped)
+    const attachments: EmailAttachment[] = [];
+    for (const a of acc.atts.slice(0, 3)) {
+      if (a.mimeType !== "application/pdf") continue;
+      try {
+        const att = await gmail.users.messages.attachments.get({
+          userId: "me",
+          messageId: id,
+          id: a.body!.attachmentId!,
+        });
+        const b64 = Buffer.from(att.data.data ?? "", "base64url").toString("base64");
+        attachments.push({
+          filename: a.filename ?? "attachment.pdf",
+          mediaType: "application/pdf",
+          dataBase64: b64,
+        });
+      } catch {}
+    }
+
+    const text =
+      acc.text.join("\n").trim() ||
+      stripHtml(acc.html.join("\n")) ||
+      msg.data.snippet ||
+      "";
+    const dateStr = header(headers, "Date");
+    out.push({
+      gmailId: id,
+      messageId: header(headers, "Message-ID") ?? id,
+      from: header(headers, "From"),
+      subject: header(headers, "Subject"),
+      date: dateStr ? new Date(dateStr) : undefined,
+      text,
+      attachments,
+    });
+  }
+  return out;
+}
