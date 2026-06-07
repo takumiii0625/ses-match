@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -212,23 +212,17 @@ interface EmailInfo {
   fallback: string | null;
 }
 
-// ---------- 詳細ビュー（左ペイン用 = 2タブ / 右ペイン用 = 3タブ + 戻る） ----------
-function DetailView({
-  heading,
+// ---------- 詳細本体（サマリ + タブ）。左ペインCardにも右ペインの展開部にも使う ----------
+function DetailTabsBody({
   summary,
   email,
   detail,
-  editHref,
   match,
-  onBack,
 }: {
-  heading: string;
   summary: React.ReactNode;
   email: EmailInfo;
   detail: React.ReactNode;
-  editHref: string;
   match?: { score: number; reasons: string[] }; // 指定時「マッチング項目」タブを表示
-  onBack?: () => void; // 指定時、戻るボタンを表示（右ペイン）
 }) {
   const hasEmail = !!(email.body || email.from || email.subject);
   const [tab, setTab] = useState<"mail" | "detail" | "match">(
@@ -249,25 +243,7 @@ function DetailView({
   );
 
   return (
-    <Card className="flex h-full flex-col overflow-hidden p-0">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
-        <div className="flex min-w-0 items-center gap-2">
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="inline-flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs text-slate-500 ring-1 ring-border hover:bg-slate-50 hover:text-primary"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              一覧
-            </button>
-          )}
-          <span className="truncate text-base font-bold text-slate-800">{heading}</span>
-        </div>
-        <Link href={editHref} className="shrink-0 text-xs text-slate-500 hover:text-primary">
-          詳細・編集 →
-        </Link>
-      </div>
-
+    <>
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-border px-5 py-4 sm:grid-cols-3">
         {summary}
       </div>
@@ -307,6 +283,35 @@ function DetailView({
           match && <MatchTab score={match.score} reasons={match.reasons} />
         )}
       </div>
+    </>
+  );
+}
+
+// 左ペイン: Card + ヘッダ + 詳細本体
+function DetailView({
+  heading,
+  summary,
+  email,
+  detail,
+  editHref,
+  match,
+}: {
+  heading: string;
+  summary: React.ReactNode;
+  email: EmailInfo;
+  detail: React.ReactNode;
+  editHref: string;
+  match?: { score: number; reasons: string[] };
+}) {
+  return (
+    <Card className="flex h-full flex-col overflow-hidden p-0">
+      <div className="flex items-center justify-between border-b border-border px-5 py-3">
+        <span className="truncate text-base font-bold text-slate-800">{heading}</span>
+        <Link href={editHref} className="shrink-0 text-xs text-slate-500 hover:text-primary">
+          詳細・編集 →
+        </Link>
+      </div>
+      <DetailTabsBody summary={summary} email={email} detail={detail} match={match} />
     </Card>
   );
 }
@@ -378,15 +383,65 @@ function noteDetail(text: string | null, label: string) {
   );
 }
 
-// ---------- 右ペインのカード（クリックで詳細へ） ----------
-function ProjectCard({ p, top, onClick }: { p: ProjectCardVM; top: boolean; onClick: () => void }) {
+// ---------- 右ペインのアコーディオン項目（クリックで下に詳細を展開） ----------
+function AccordionItem({
+  top,
+  open,
+  onToggle,
+  header,
+  detail,
+}: {
+  top: boolean;
+  open: boolean;
+  onToggle: () => void;
+  header: React.ReactNode;
+  detail: { summary: React.ReactNode; email: EmailInfo; detailNode: React.ReactNode; match: { score: number; reasons: string[] }; editHref: string };
+}) {
   return (
-    <button
-      onClick={onClick}
-      className={`block w-full rounded-xl border p-4 text-left transition-colors ${
-        top ? "border-amber-300 bg-amber-50/60 hover:bg-amber-50" : "border-border bg-white hover:bg-slate-50"
-      }`}
+    <div
+      className={`overflow-hidden rounded-xl border ${
+        open
+          ? "border-primary/40 ring-1 ring-primary/20"
+          : top
+            ? "border-amber-300"
+            : "border-border"
+      } ${top && !open ? "bg-amber-50/60" : "bg-white"}`}
     >
+      <button
+        onClick={onToggle}
+        className="block w-full p-4 text-left transition-colors hover:bg-slate-50"
+      >
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">{header}</div>
+          <ChevronDown
+            className={`mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform ${
+              open ? "rotate-180" : ""
+            }`}
+          />
+        </div>
+      </button>
+      {open && (
+        <div className="border-t border-border">
+          <DetailTabsBody
+            summary={detail.summary}
+            email={detail.email}
+            detail={detail.detailNode}
+            match={detail.match}
+          />
+          <div className="border-t border-border px-5 py-2 text-right">
+            <Link href={detail.editHref} className="text-xs text-slate-500 hover:text-primary">
+              詳細・編集ページを開く →
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function projectHeader(p: ProjectCardVM, top: boolean) {
+  return (
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -426,19 +481,13 @@ function ProjectCard({ p, top, onClick }: { p: ProjectCardVM; top: boolean; onCl
           ))}
         </div>
       )}
-      <div className="mt-2 text-right text-[11px] text-primary">クリックで詳細 →</div>
-    </button>
+    </>
   );
 }
 
-function TalentCard({ t, top, onClick }: { t: TalentCardVM; top: boolean; onClick: () => void }) {
+function talentHeader(t: TalentCardVM, top: boolean) {
   return (
-    <button
-      onClick={onClick}
-      className={`block w-full rounded-xl border p-4 text-left transition-colors ${
-        top ? "border-amber-300 bg-amber-50/60 hover:bg-amber-50" : "border-border bg-white hover:bg-slate-50"
-      }`}
-    >
+    <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -476,12 +525,11 @@ function TalentCard({ t, top, onClick }: { t: TalentCardVM; top: boolean; onClic
           <SkillTags main={t.mainSkills} all={t.skills} />
         </div>
       )}
-      <div className="mt-2 text-right text-[11px] text-primary">クリックで詳細 →</div>
-    </button>
+    </>
   );
 }
 
-// ---------- 右ペイン（一覧 ⇄ 詳細） ----------
+// ---------- 右ペイン（一覧。各項目はクリックで下に展開） ----------
 function RightPane({
   mode,
   projects,
@@ -491,52 +539,20 @@ function RightPane({
   projects: ProjectCardVM[];
   talents: TalentCardVM[];
 }) {
-  const [selId, setSelId] = useState<string | null>(null);
+  // 先頭（最有力）を初期展開。クリックで開閉。
+  const firstId = mode === "talent" ? projects[0]?.id : talents[0]?.id;
+  const [openId, setOpenId] = useState<string | null>(firstId ?? null);
+  const toggle = (id: string) => setOpenId((cur) => (cur === id ? null : id));
+
   const count = mode === "talent" ? projects.length : talents.length;
   const title = mode === "talent" ? "対象案件リスト" : "対象人材リスト";
 
-  // 詳細表示
-  if (selId) {
-    if (mode === "talent") {
-      const p = projects.find((x) => x.id === selId);
-      if (p) {
-        return (
-          <DetailView
-            heading={p.title}
-            summary={projectSummary(p)}
-            email={projectEmail(p)}
-            detail={noteDetail(p.description, "概要")}
-            editHref={`/projects/${p.id}`}
-            match={{ score: p.score, reasons: p.reasons }}
-            onBack={() => setSelId(null)}
-          />
-        );
-      }
-    } else {
-      const t = talents.find((x) => x.id === selId);
-      if (t) {
-        return (
-          <DetailView
-            heading={t.name}
-            summary={talentSummary(t)}
-            email={talentEmail(t)}
-            detail={noteDetail(t.note, "備考情報")}
-            editHref={`/talent/${t.id}`}
-            match={{ score: t.score, reasons: t.reasons }}
-            onBack={() => setSelId(null)}
-          />
-        );
-      }
-    }
-  }
-
-  // 一覧表示
   return (
     <Card className="flex min-h-0 flex-col overflow-hidden p-0">
       <div className="border-b border-border px-5 py-3">
         <span className="text-base font-bold text-slate-800">{title}</span>
         <span className="ml-2 text-sm text-muted">{count}件</span>
-        <span className="ml-2 text-xs text-slate-400">クリックで本文・詳細を表示</span>
+        <span className="ml-2 text-xs text-slate-400">クリックで本文・詳細を開閉</span>
       </div>
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {count === 0 ? (
@@ -549,11 +565,37 @@ function RightPane({
           </div>
         ) : mode === "talent" ? (
           projects.map((p, i) => (
-            <ProjectCard key={p.matchId} p={p} top={i === 0} onClick={() => setSelId(p.id)} />
+            <AccordionItem
+              key={p.matchId}
+              top={i === 0}
+              open={openId === p.id}
+              onToggle={() => toggle(p.id)}
+              header={projectHeader(p, i === 0)}
+              detail={{
+                summary: projectSummary(p),
+                email: projectEmail(p),
+                detailNode: noteDetail(p.description, "概要"),
+                match: { score: p.score, reasons: p.reasons },
+                editHref: `/projects/${p.id}`,
+              }}
+            />
           ))
         ) : (
           talents.map((t, i) => (
-            <TalentCard key={t.matchId} t={t} top={i === 0} onClick={() => setSelId(t.id)} />
+            <AccordionItem
+              key={t.matchId}
+              top={i === 0}
+              open={openId === t.id}
+              onToggle={() => toggle(t.id)}
+              header={talentHeader(t, i === 0)}
+              detail={{
+                summary: talentSummary(t),
+                email: talentEmail(t),
+                detailNode: noteDetail(t.note, "備考情報"),
+                match: { score: t.score, reasons: t.reasons },
+                editHref: `/talent/${t.id}`,
+              }}
+            />
           ))
         )}
       </div>
