@@ -9,6 +9,7 @@ import { REMOTE_LABELS, TALENT_STATUS_LABELS } from "@/lib/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { MatchRunner } from "./match-runner";
+import { RematchButton } from "./rematch-button";
 import { ProposalButton } from "./proposal-button";
 
 export const dynamic = "force-dynamic";
@@ -77,8 +78,14 @@ export default async function MatchingPage({ searchParams }: PageProps) {
             案件を選択すると、適合する人材を{aiAvailable ? "AIが判定し" : "スコア順に"}表示します。
           </p>
         </div>
-        <Card className="p-5">
+        <Card className="p-5 space-y-4">
           <MatchRunner projects={projects} />
+          <div className="border-t border-border pt-4">
+            <p className="text-xs text-muted mb-2">
+              個別案件を選ばず、全人材 × 全案件をまとめて再マッチします。
+            </p>
+            <RematchButton />
+          </div>
         </Card>
         <div className="flex flex-col items-center justify-center py-20 text-muted">
           <p className="text-sm font-medium text-slate-400">案件を選択してください</p>
@@ -144,6 +151,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
             nearestStation: t.nearestStation,
             note: t.note,
           })),
+          org.matchPrompt ?? undefined,
         );
         rows = ranked
           .filter((r) => talentById.has(r.talentId))
@@ -201,6 +209,9 @@ export default async function MatchingPage({ searchParams }: PageProps) {
           <span className="text-xs text-muted">判定方法:</span>
           {aiAvailable && modePill("ai", "AI判定")}
           {modePill("score", "スコア計算")}
+        </div>
+        <div className="border-t border-border pt-4">
+          <RematchButton />
         </div>
       </Card>
 

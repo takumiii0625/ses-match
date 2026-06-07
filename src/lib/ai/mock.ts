@@ -136,6 +136,8 @@ export class MockAIService implements AIService {
   async rankCandidates(
     project: MatchProjectInput,
     candidates: MatchCandidateInput[],
+    // systemPrompt はモックでは未使用（ヒューリスティック判定のため）。
+    _systemPrompt?: string,
   ): Promise<RankedCandidate[]> {
     const required = project.requiredSkills.map((s) => s.toLowerCase().trim());
     const ranked = candidates.map((c) => {

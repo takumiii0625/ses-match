@@ -112,5 +112,6 @@ export interface AIService {
   rankCandidates(
     project: MatchProjectInput,
     candidates: MatchCandidateInput[],
+    systemPrompt?: string,
   ): Promise<RankedCandidate[]>;
 }

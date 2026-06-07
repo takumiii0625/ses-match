@@ -29,6 +29,7 @@ export async function PATCH(req: NextRequest) {
       name?: unknown;
       aiProvider?: unknown;
       proposalSignature?: unknown;
+      matchPrompt?: unknown;
     };
 
     // Validate aiProvider if provided
@@ -55,6 +56,15 @@ export async function PATCH(req: NextRequest) {
                 typeof body.proposalSignature === "string" &&
                 body.proposalSignature.trim()
                   ? body.proposalSignature.trim()
+                  : null,
+            }
+          : {}),
+        // 空文字で送ると null（＝組み込みデフォルトに戻す）。
+        ...(body.matchPrompt !== undefined
+          ? {
+              matchPrompt:
+                typeof body.matchPrompt === "string" && body.matchPrompt.trim()
+                  ? body.matchPrompt.trim()
                   : null,
             }
           : {}),

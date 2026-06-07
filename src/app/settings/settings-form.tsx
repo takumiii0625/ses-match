@@ -14,6 +14,7 @@ interface Org {
   slug: string;
   aiProvider: string;
   proposalSignature: string | null;
+  matchPrompt: string | null;
   createdAt: string;
 }
 
@@ -37,7 +38,13 @@ function formatDate(iso: string) {
   });
 }
 
-export function SettingsForm({ org }: { org: Org }) {
+export function SettingsForm({
+  org,
+  defaultMatchPrompt,
+}: {
+  org: Org;
+  defaultMatchPrompt: string;
+}) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -46,6 +53,9 @@ export function SettingsForm({ org }: { org: Org }) {
   const [name, setName] = useState(org.name);
   const [aiProvider, setAiProvider] = useState(org.aiProvider);
   const [proposalSignature, setProposalSignature] = useState(org.proposalSignature ?? "");
+  // 未設定（null）のときはデフォルトプロンプトを編集の初期値として見せる。
+  const [matchPrompt, setMatchPrompt] = useState(org.matchPrompt ?? defaultMatchPrompt);
+  const usingDefault = matchPrompt.trim() === defaultMatchPrompt.trim();
 
   const providerBadge = AI_PROVIDER_BADGE[aiProvider] ?? AI_PROVIDER_BADGE["mock"];
 
@@ -58,7 +68,7 @@ export function SettingsForm({ org }: { org: Org }) {
       const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, aiProvider, proposalSignature }),
+        body: JSON.stringify({ name, aiProvider, proposalSignature, matchPrompt }),
       });
 
       if (!res.ok) {
@@ -136,6 +146,43 @@ export function SettingsForm({ org }: { org: Org }) {
               {" — "}<code className="bg-slate-100 px-1 rounded">OPENAI_API_KEY</code> を <code className="bg-slate-100 px-1 rounded">.env</code> に設定してください。
             </li>
           </ul>
+        </div>
+      </Card>
+
+      {/* マッチ判定プロンプト */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <h2 className="text-base font-semibold text-slate-700">マッチ判定プロンプト</h2>
+          <Badge tone={usingDefault ? "slate" : "indigo"}>
+            {usingDefault ? "デフォルト" : "カスタム"}
+          </Badge>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          LLMが人材×案件の適合度（スコア・推奨度・合致点/懸念点）を判定する際のシステムプロンプトです。
+          取込後の自動マッチ・「全件マッチ」・マッチング画面のAI判定で使われます。
+          {aiProvider === "mock" && (
+            <span className="block text-amber-600 mt-1">
+              ※ 現在のAIプロバイダーは「モック」のため、このプロンプトは判定に使われません（Anthropicに切替で有効）。
+            </span>
+          )}
+        </p>
+        <Label htmlFor="match-prompt">システムプロンプト</Label>
+        <Textarea
+          id="match-prompt"
+          rows={16}
+          value={matchPrompt}
+          onChange={(e) => setMatchPrompt(e.target.value)}
+          className="resize-y font-mono text-xs leading-relaxed"
+        />
+        <div className="mt-2">
+          <button
+            type="button"
+            onClick={() => setMatchPrompt(defaultMatchPrompt)}
+            disabled={usingDefault}
+            className="text-xs text-slate-500 hover:text-slate-700 underline disabled:opacity-40 disabled:no-underline disabled:cursor-default"
+          >
+            デフォルトに戻す
+          </button>
         </div>
       </Card>
 

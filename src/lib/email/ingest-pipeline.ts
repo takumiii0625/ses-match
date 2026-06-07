@@ -3,6 +3,7 @@ import { getCurrentOrg } from "@/lib/current-org";
 import { getAI } from "@/lib/ai";
 import { fetchEmails } from "./gmail";
 import { companyDomain } from "@/lib/matching";
+import { runMatchingForNew } from "@/lib/match-run";
 import type { RemotePreference } from "@prisma/client";
 
 // 自社ドメイン。送信元がこのドメインなら自社保有人材(INHOUSE)、それ以外は他社(PARTNER)。
@@ -38,6 +39,8 @@ export interface IngestRunResult {
   ignored: number;
   skipped: number;
   errors: number;
+  // 取込で新規作成された人材・案件を対象に自動マッチした結果。
+  matched: { pairs: number; saved: number };
   items: {
     subject?: string;
     from?: string;
@@ -58,8 +61,13 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
     ignored: 0,
     skipped: 0,
     errors: 0,
+    matched: { pairs: 0, saved: 0 },
     items: [],
   };
+
+  // この取込で新規作成された人材・案件のID。取込後にこれらだけを自動マッチする。
+  const newTalentIds: string[] = [];
+  const newProjectIds: string[] = [];
 
   for (const mail of emails) {
     // dedup
@@ -107,6 +115,7 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
           },
         });
         talentId = t.id;
+        newTalentIds.push(t.id);
         result.created.talent++;
       } else if (cls.kind === "PROJECT") {
         const p = await ai.parseProjectEmail(raw, mail.attachments);
@@ -132,6 +141,7 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
           },
         });
         projectId = proj.id;
+        newProjectIds.push(proj.id);
         result.created.project++;
       } else {
         result.ignored++;
@@ -182,6 +192,17 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
         reason: message,
       });
     }
+  }
+
+  // 取込で増えた人材・案件を、その場で既存データと突き合わせて自動マッチ。
+  // ここが無いと、メールは取り込まれてもマッチが一切付かないままになる。
+  try {
+    const m = await runMatchingForNew(org.id, newTalentIds, newProjectIds);
+    result.matched = { pairs: m.pairs, saved: m.saved };
+  } catch (e) {
+    // マッチングで落ちても取込結果は返す（マッチは rematch で後追いできる）。
+    const message = e instanceof Error ? e.message : String(e);
+    result.items.push({ kind: "MATCH_ERROR", reason: message });
   }
 
   return result;

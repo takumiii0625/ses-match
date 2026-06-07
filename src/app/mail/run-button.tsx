@@ -18,7 +18,7 @@ export function RunButton({ disabled }: { disabled?: boolean }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "取り込みに失敗しました");
       setMsg(
-        `取得${data.fetched}件 → 人材${data.created.talent} / 案件${data.created.project} / 対象外${data.ignored} / 重複${data.skipped} / エラー${data.errors}`,
+        `取得${data.fetched}件 → 人材${data.created.talent} / 案件${data.created.project} / 対象外${data.ignored} / 重複${data.skipped} / エラー${data.errors} / マッチ${data.matched?.saved ?? 0}`,
       );
       router.refresh();
     } catch (e) {

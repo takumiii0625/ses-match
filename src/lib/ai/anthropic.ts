@@ -10,6 +10,7 @@ import type {
   MatchCandidateInput,
   RankedCandidate,
 } from "./types";
+import { DEFAULT_MATCH_PROMPT } from "./prompts";
 
 // Real LLM implementation of AIService backed by the Claude API.
 // - Structured JSON extraction via output_config.format (json_schema)
@@ -171,35 +172,7 @@ const MATCH_SCHEMA = {
   required: ["results"],
 } as const;
 
-const MATCH_SYSTEM = `あなたはSES業界の人材マッチングを判定するエキスパートです。
-1つの案件と複数の候補人材が与えられます。各候補について案件への適合度を多面的に評価し、
-0〜100点のスコア・推奨度・根拠を返してください。
-
-評価観点（重要度の高い順）:
-1. 必須スキルの充足（最重要）。歓迎スキルは加点要素。
-2. 単価の整合（人材の希望が案件の予算内か）。
-3. 稼働開始時期の整合。
-4. リモート/出社条件の整合。
-5. 経験年数・担当役割・語学など、案件要件との整合。
-
-推奨度 (recommendation):
-- STRONG  : 必須スキルを満たし単価・稼働も整合。すぐ提案すべき最有力。
-- POSSIBLE: 一部条件に懸念はあるが提案検討の価値あり。
-- WEAK    : 大きなミスマッチがあり提案は限定的。
-- UNFIT   : 案件と無関係／不適合。
-
-ルール:
-- 提示された情報のみで判断し、推測で事実を作らない。不足情報は懸念(concerns)に「不明」として挙げる。
-- スコアは観点を総合した「実務的な提案優先度」を表す（単なるスキル一致率ではない）。
-- 各候補について strengths（合致点）と concerns（懸念点）を簡潔な日本語で挙げる。
-- 候補は talentId で識別し、入力された全候補を漏れなく評価する。
-
-【重要】大分類だけでの適合を禁止する:
-- 「開発」「エンジニア」「インフラ」等の大きなカテゴリ／タグが一致しているだけでは適合とみなさない。
-  案件が要求する具体的な言語・FW・技術スタックを、人材が実際に保有または代替可能かで判断する。
-- 例: 案件が「PHP/Laravel」なのに人材が「Javaのみ」なら、同じ"開発"でも UNFIT（または大きく減点）とする。
-- 技術の包含関係は考慮してよい。例: Spring/Spring Boot は Java を、Next.js は React/JavaScript を前提とみなす。
-  ただし無関係な言語（Java↔PHP、Go↔Ruby 等）を「同じ開発職だから」で適合扱いにしない。`;
+// マッチ判定のシステムプロンプトは設定で上書き可能。出典は ./prompts.ts。
 
 const PROPOSAL_SYSTEM = `あなたはSES営業の提案メールを作成するアシスタントです。
 提示された案件と人材の情報をもとに、丁寧で簡潔な日本語の提案メール本文を作成してください。
@@ -355,8 +328,10 @@ export class AnthropicAIService implements AIService {
   async rankCandidates(
     project: MatchProjectInput,
     candidates: MatchCandidateInput[],
+    systemPrompt?: string,
   ): Promise<RankedCandidate[]> {
     if (candidates.length === 0) return [];
+    const system = systemPrompt?.trim() || DEFAULT_MATCH_PROMPT;
 
     const projectBlock = [
       `# 案件`,
@@ -393,7 +368,7 @@ export class AnthropicAIService implements AIService {
       model: MODEL,
       max_tokens: 4096,
       system: [
-        { type: "text", text: MATCH_SYSTEM, cache_control: { type: "ephemeral" } },
+        { type: "text", text: system, cache_control: { type: "ephemeral" } },
       ],
       output_config: {
         format: {
