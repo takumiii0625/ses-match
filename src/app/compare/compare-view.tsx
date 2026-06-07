@@ -539,10 +539,15 @@ function RightPane({
   projects: ProjectCardVM[];
   talents: TalentCardVM[];
 }) {
-  // 先頭（最有力）を初期展開。クリックで開閉。
-  const firstId = mode === "talent" ? projects[0]?.id : talents[0]?.id;
-  const [openId, setOpenId] = useState<string | null>(firstId ?? null);
-  const toggle = (id: string) => setOpenId((cur) => (cur === id ? null : id));
+  // 初期は全て閉じる。複数同時に開ける（クリックで個別に開閉）。
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setOpenIds((cur) => {
+      const next = new Set(cur);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const count = mode === "talent" ? projects.length : talents.length;
   const title = mode === "talent" ? "対象案件リスト" : "対象人材リスト";
@@ -568,7 +573,7 @@ function RightPane({
             <AccordionItem
               key={p.matchId}
               top={i === 0}
-              open={openId === p.id}
+              open={openIds.has(p.id)}
               onToggle={() => toggle(p.id)}
               header={projectHeader(p, i === 0)}
               detail={{
@@ -585,7 +590,7 @@ function RightPane({
             <AccordionItem
               key={t.matchId}
               top={i === 0}
-              open={openId === t.id}
+              open={openIds.has(t.id)}
               onToggle={() => toggle(t.id)}
               header={talentHeader(t, i === 0)}
               detail={{
