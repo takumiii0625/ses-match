@@ -10,6 +10,7 @@ import {
   Briefcase,
   GitCompareArrows,
   ListChecks,
+  Columns2,
   Star,
   Link2,
   Mail,
@@ -45,6 +46,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/matching", label: "マッチング", icon: GitCompareArrows },
       { href: "/matches", label: "マッチ一覧", icon: ListChecks },
+      { href: "/compare", label: "見比べ", icon: Columns2 },
       { href: "/favorites", label: "お気に入り", icon: Star },
       { href: "/shared-links", label: "公開リンク", icon: Link2 },
       { href: "/ingest", label: "メール取り込み", icon: Mail },
