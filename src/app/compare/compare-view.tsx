@@ -218,11 +218,15 @@ function DetailTabsBody({
   email,
   detail,
   match,
+  scrollAll = false,
 }: {
   summary: React.ReactNode;
   email: EmailInfo;
   detail: React.ReactNode;
   match?: { score: number; reasons: string[] }; // 指定時「マッチング項目」タブを表示
+  // true: サマリ+タブ+本文を1つのスクロール領域にまとめる（左ペイン用＝本文を広く読める）。
+  // false: 本文だけが flex-1 でスクロール（アコーディオン展開部はそのまま下に伸びる）。
+  scrollAll?: boolean;
 }) {
   const hasEmail = !!(email.body || email.from || email.subject);
   const [tab, setTab] = useState<"mail" | "detail" | "match">(
@@ -242,7 +246,7 @@ function DetailTabsBody({
     </button>
   );
 
-  return (
+  const body = (
     <>
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-border px-5 py-4 sm:grid-cols-3">
         {summary}
@@ -254,7 +258,7 @@ function DetailTabsBody({
         {match && tabBtn("match", "マッチング項目")}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4">
+      <div className={scrollAll ? "px-5 py-4" : "flex-1 overflow-y-auto px-5 py-4"}>
         {tab === "mail" ? (
           hasEmail || email.fallback ? (
             <div>
@@ -285,6 +289,9 @@ function DetailTabsBody({
       </div>
     </>
   );
+
+  // 左ペイン: サマリも本文も含めて1つのスクロール領域にする（本文を広く読める）。
+  return scrollAll ? <div className="flex-1 overflow-y-auto">{body}</div> : body;
 }
 
 // 左ペイン: Card + ヘッダ + 詳細本体
@@ -311,7 +318,7 @@ function DetailView({
           詳細・編集 →
         </Link>
       </div>
-      <DetailTabsBody summary={summary} email={email} detail={detail} match={match} />
+      <DetailTabsBody summary={summary} email={email} detail={detail} match={match} scrollAll />
     </Card>
   );
 }

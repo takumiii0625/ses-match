@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
-import { scoreMatch } from "@/lib/matching";
+import { runMatchingForNew } from "@/lib/match-run";
+
+// LLM判定を含むため長め。
+export const maxDuration = 300;
 
 export async function GET(req: NextRequest) {
   try {
@@ -46,41 +49,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Load all talents in org
-    const talents = await prisma.talent.findMany({
-      where: { orgId: org.id },
-    });
+    // この案件を「新規案件」として全人材とLLM再マッチ→Matchに保存。
+    // （AnthropicキーがなければmockのヒューリスティックにフォールバックするのでDBは常に更新される）
+    const result = await runMatchingForNew(org.id, [], [project.id]);
 
-    // Compute scores and upsert
-    const upsertPromises = talents.map((talent) => {
-      const { score, reasons } = scoreMatch(talent, project);
-      return prisma.match.upsert({
-        where: {
-          talentId_projectId: { talentId: talent.id, projectId: project.id },
-        },
-        create: {
-          talentId: talent.id,
-          projectId: project.id,
-          score,
-          reasons,
-        },
-        update: {
-          score,
-          reasons,
-        },
-      });
-    });
-
-    await Promise.all(upsertPromises);
-
-    // Return the saved matches sorted desc
+    // 保存済みマッチを返す（スコア降順）。
     const matches = await prisma.match.findMany({
       where: { projectId: project.id },
       include: { talent: true, project: true },
       orderBy: { score: "desc" },
     });
 
-    return NextResponse.json({ matches });
+    return NextResponse.json({ matches, saved: result.saved });
   } catch (err) {
     console.error("[POST /api/matches]", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

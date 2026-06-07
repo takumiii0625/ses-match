@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { fetchJson } from "@/lib/http";
 
 interface Project {
   id: string;
@@ -36,17 +37,15 @@ export function MatchRunner({ projects, selectedProjectId }: MatchRunnerProps) {
     setSaving(true);
     setSavedCount(null);
     try {
-      const res = await fetch("/api/matches", {
+      const data = await fetchJson<{ matches?: unknown[] }>("/api/matches", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId: selectedProjectId }),
       });
-      if (!res.ok) throw new Error("保存失敗");
-      const data = await res.json();
       setSavedCount(data.matches?.length ?? 0);
       router.refresh();
-    } catch {
-      alert("マッチング保存に失敗しました");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "AI再判定に失敗しました");
     } finally {
       setSaving(false);
     }
@@ -69,7 +68,7 @@ export function MatchRunner({ projects, selectedProjectId }: MatchRunnerProps) {
           onClick={handleSave}
           disabled={saving}
         >
-          {saving ? "保存中..." : "マッチング実行＆保存"}
+          {saving ? "AI判定中…（数秒かかります）" : "AIで再判定"}
         </Button>
       )}
       {savedCount !== null && (
