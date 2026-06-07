@@ -113,18 +113,24 @@ export async function runMatchingForOrg(orgId: string): Promise<MatchRunResult> 
     resolveMatchPrompt(orgId),
   ]);
 
+  // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
+  const settled = await Promise.allSettled(
+    projects.map((project) => {
+      const candidates = talents.filter((t) => !isSameCompany(t, project));
+      return rankAndSave(project, candidates, systemPrompt);
+    }),
+  );
+
   let saved = 0;
   let pairs = 0;
   let errors = 0;
-  for (const project of projects) {
-    const candidates = talents.filter((t) => !isSameCompany(t, project));
-    try {
-      const r = await rankAndSave(project, candidates, systemPrompt);
-      pairs += r.pairs;
-      saved += r.saved;
-    } catch (e) {
+  for (const s of settled) {
+    if (s.status === "fulfilled") {
+      pairs += s.value.pairs;
+      saved += s.value.saved;
+    } else {
       errors++;
-      console.error(`[match] project ${project.id} のLLM判定に失敗:`, e);
+      console.error("[match] 案件のLLM判定に失敗:", s.reason);
     }
   }
 
@@ -169,24 +175,34 @@ export async function runMatchingForNew(
   const isNewProject = new Set(newProjectIds);
   const isNewTalent = new Set(newTalentIds);
 
+  // 新規が絡む案件だけを対象に並列マッチ（実APIコールは matchLimiter で抑制）。
+  const targets = projects
+    .map((project) => {
+      // 新規案件→全人材、既存案件→新規人材のみ を候補に。
+      const pool = isNewProject.has(project.id)
+        ? talents
+        : talents.filter((t) => isNewTalent.has(t.id));
+      return { project, pool };
+    })
+    .filter(({ pool }) => pool.length > 0);
+
+  const settled = await Promise.allSettled(
+    targets.map(({ project, pool }) => {
+      const candidates = pool.filter((t) => !isSameCompany(t, project));
+      return rankAndSave(project, candidates, systemPrompt);
+    }),
+  );
+
   let saved = 0;
   let pairs = 0;
   let errors = 0;
-  for (const project of projects) {
-    // 新規案件→全人材、既存案件→新規人材のみ を候補に。
-    const pool = isNewProject.has(project.id)
-      ? talents
-      : talents.filter((t) => isNewTalent.has(t.id));
-    if (pool.length === 0) continue;
-
-    const candidates = pool.filter((t) => !isSameCompany(t, project));
-    try {
-      const r = await rankAndSave(project, candidates, systemPrompt);
-      pairs += r.pairs;
-      saved += r.saved;
-    } catch (e) {
+  for (const s of settled) {
+    if (s.status === "fulfilled") {
+      pairs += s.value.pairs;
+      saved += s.value.saved;
+    } else {
       errors++;
-      console.error(`[match] project ${project.id} のLLM判定に失敗:`, e);
+      console.error("[match] 案件のLLM判定に失敗:", s.reason);
     }
   }
 

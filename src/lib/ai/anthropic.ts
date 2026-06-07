@@ -11,6 +11,7 @@ import type {
   RankedCandidate,
 } from "./types";
 import { DEFAULT_MATCH_PROMPT } from "./prompts";
+import { createLimiter } from "@/lib/limit";
 
 // Real LLM implementation of AIService backed by the Claude API.
 // - Structured JSON extraction via output_config.format (json_schema)
@@ -23,6 +24,11 @@ const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 // マッチ判定の1リクエストあたり候補数。小さいほど1回の出力が短く、件数が多くても
 // max_tokens で打ち切られない。バッチは並列・独立なので1つ失敗しても他は残る。
 const MATCH_BATCH_SIZE = 5;
+
+// マッチ判定のAnthropic同時リクエスト上限。案件を並列処理しても、全バッチ呼び出しは
+// このリミッタを通すので同時実行数はここで頭打ちになる（レート制限・タイムアウト対策）。
+const MATCH_CONCURRENCY = Number(process.env.MATCH_CONCURRENCY ?? "6");
+const matchLimiter = createLimiter(MATCH_CONCURRENCY);
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -407,25 +413,28 @@ export class AnthropicAIService implements AIService {
       )
       .join("\n");
 
-    const res = await this.client.messages.create({
-      model: MODEL,
-      max_tokens: 8192, // 少人数バッチなので十分。安全網として余裕を確保。
-      system: [
-        { type: "text", text: system, cache_control: { type: "ephemeral" } },
-      ],
-      output_config: {
-        format: {
-          type: "json_schema",
-          schema: MATCH_SCHEMA as unknown as Record<string, unknown>,
+    // 実APIコールはグローバルなリミッタ経由で同時実行数を抑える。
+    const res = await matchLimiter(() =>
+      this.client.messages.create({
+        model: MODEL,
+        max_tokens: 8192, // 少人数バッチなので十分。安全網として余裕を確保。
+        system: [
+          { type: "text", text: system, cache_control: { type: "ephemeral" } },
+        ],
+        output_config: {
+          format: {
+            type: "json_schema",
+            schema: MATCH_SCHEMA as unknown as Record<string, unknown>,
+          },
         },
-      },
-      messages: [
-        {
-          role: "user",
-          content: `${projectBlock}\n\n# 候補人材（複数）\n${candidateBlock}`,
-        },
-      ],
-    });
+        messages: [
+          {
+            role: "user",
+            content: `${projectBlock}\n\n# 候補人材（複数）\n${candidateBlock}`,
+          },
+        ],
+      }),
+    );
 
     // 打ち切り時は曖昧なパースエラーにせず原因の分かるメッセージにする。
     if (res.stop_reason === "max_tokens") {
