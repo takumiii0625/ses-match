@@ -79,6 +79,12 @@ export default async function ComparePage({ searchParams }: PageProps) {
           remotePreference: m.project.remotePreference,
           location: m.project.location,
           startText: m.project.startText,
+          description: m.project.description,
+          emailSubject: m.project.emailSubject,
+          emailBody: m.project.emailBody,
+          emailFrom: m.project.emailFrom,
+          emailTo: m.project.emailTo,
+          sourceEmail: m.project.sourceEmail,
           receivedDate: m.project.receivedDate ? m.project.receivedDate.toISOString() : null,
         }));
       }
@@ -126,6 +132,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
           name: m.talent.name,
           talentType: m.talent.talentType,
           age: m.talent.age,
+          gender: m.talent.gender,
           status: m.talent.status,
           desiredRateMin: m.talent.desiredRateMin,
           desiredRateMax: m.talent.desiredRateMax,
@@ -134,6 +141,12 @@ export default async function ComparePage({ searchParams }: PageProps) {
           nearestStation: m.talent.nearestStation,
           mainSkills: m.talent.mainSkills,
           skills: m.talent.skills,
+          note: m.talent.note,
+          emailSubject: m.talent.emailSubject,
+          emailBody: m.talent.emailBody,
+          emailFrom: m.talent.emailFrom,
+          emailTo: m.talent.emailTo,
+          sourceEmail: m.talent.sourceEmail,
           receivedDate: m.talent.receivedDate ? m.talent.receivedDate.toISOString() : null,
         }));
       }

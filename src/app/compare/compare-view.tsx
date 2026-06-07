@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -59,42 +60,18 @@ export interface ProjectVM {
   receivedDate: string | null;
 }
 
-/** 右ペインの案件カード（人材起点）。 */
-export interface ProjectCardVM {
+/** 右ペインの案件カード（人材起点）。クリックで詳細を出すため本文等も持つ。 */
+export interface ProjectCardVM extends ProjectVM {
   matchId: string;
   score: number;
   reasons: string[];
-  id: string;
-  title: string;
-  clientName: string | null;
-  status: string;
-  requiredSkills: string[];
-  rateMin: number | null;
-  rateMax: number | null;
-  remotePreference: string | null;
-  location: string | null;
-  startText: string | null;
-  receivedDate: string | null;
 }
 
 /** 右ペインの人材カード（案件起点）。 */
-export interface TalentCardVM {
+export interface TalentCardVM extends TalentVM {
   matchId: string;
   score: number;
   reasons: string[];
-  id: string;
-  name: string;
-  talentType: string | null;
-  age: number | null;
-  status: string;
-  desiredRateMin: number | null;
-  desiredRateMax: number | null;
-  remotePreference: string | null;
-  availabilityText: string | null;
-  nearestStation: string | null;
-  mainSkills: string[];
-  skills: string[];
-  receivedDate: string | null;
 }
 
 function fmtDate(iso: string | null): string {
@@ -122,31 +99,6 @@ function splitReasons(reasons: string[]) {
   return { strengths, concerns };
 }
 
-function ReasonChips({ reasons }: { reasons: string[] }) {
-  const { strengths, concerns } = splitReasons(reasons);
-  if (strengths.length === 0 && concerns.length === 0) return null;
-  return (
-    <div className="mt-3 flex flex-wrap gap-1">
-      {strengths.map((r, i) => (
-        <span
-          key={`s${i}`}
-          className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-700"
-        >
-          ✓ {r}
-        </span>
-      ))}
-      {concerns.map((r, i) => (
-        <span
-          key={`c${i}`}
-          className="inline-flex items-center rounded-full border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-700"
-        >
-          ⚠ {r}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function GF({ label, children }: { label: string; children?: React.ReactNode }) {
   return (
     <div>
@@ -162,78 +114,6 @@ function MetaRow({ label, value }: { label: string; value?: React.ReactNode }) {
       <span className="w-20 shrink-0 text-slate-400">{label}</span>
       <span className="break-all text-slate-700">{value || "-"}</span>
     </div>
-  );
-}
-
-/** メール本文 + 詳細 のタブ付き詳細パネル（人材・案件で共用）。 */
-function DetailTabs({
-  email,
-  detail,
-}: {
-  email: {
-    from: string | null;
-    to: string | null;
-    received: string | null;
-    subject: string | null;
-    body: string | null;
-    fallback: string | null;
-  };
-  detail: React.ReactNode;
-}) {
-  const hasEmail = !!(email.body || email.from || email.subject);
-  const [tab, setTab] = useState<"mail" | "detail">(hasEmail ? "mail" : "detail");
-  return (
-    <>
-      <div className="flex gap-1 border-b border-border px-3 pt-2">
-        <button
-          onClick={() => setTab("mail")}
-          className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
-            tab === "mail"
-              ? "border-b-2 border-primary text-primary"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          メール本文
-        </button>
-        <button
-          onClick={() => setTab("detail")}
-          className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
-            tab === "detail"
-              ? "border-b-2 border-primary text-primary"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          詳細情報
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto px-5 py-4">
-        {tab === "mail" ? (
-          hasEmail || email.fallback ? (
-            <div>
-              <div className="mb-3 space-y-1 rounded-lg bg-slate-50 p-3">
-                <MetaRow label="From:" value={email.from} />
-                <MetaRow label="To:" value={email.to} />
-                <MetaRow label="Received:" value={fmtDate(email.received)} />
-              </div>
-              {email.subject && (
-                <div className="mb-2 break-words text-sm font-medium text-slate-800">
-                  {email.subject}
-                </div>
-              )}
-              <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">
-                {email.body || email.fallback || "（本文なし）"}
-              </div>
-            </div>
-          ) : (
-            <p className="py-8 text-center text-sm text-slate-400">
-              メール本文はありません（手動登録など）
-            </p>
-          )
-        ) : (
-          detail
-        )}
-      </div>
-    </>
   );
 }
 
@@ -258,135 +138,253 @@ function SkillTags({ main, all }: { main: string[]; all: string[] }) {
   );
 }
 
-// ---------- 左ペイン: 人材詳細 ----------
-function TalentPanel({ talent }: { talent: TalentVM }) {
+// ---------- 人材のサマリ・詳細ノード ----------
+function talentSummary(t: TalentVM) {
   return (
-    <Card className="flex h-full flex-col overflow-hidden p-0">
-      <div className="flex items-center justify-between border-b border-border px-5 py-3">
-        <span className="text-base font-bold text-slate-800">人材詳細情報</span>
-        <Link href={`/talent/${talent.id}`} className="text-xs text-slate-500 hover:text-primary">
-          詳細・編集 →
-        </Link>
+    <>
+      <GF label="名前">{t.name}</GF>
+      <GF label="年齢">{t.age ?? "-"}</GF>
+      <GF label="性別">{t.gender ? GENDER_LABELS[t.gender] : "-"}</GF>
+      <GF label="希望単価">{formatRate(t.desiredRateMin, t.desiredRateMax)}</GF>
+      <GF label="リモート">
+        {t.remotePreference ? REMOTE_LABELS[t.remotePreference] : "-"}
+      </GF>
+      <GF label="稼働開始">{t.availabilityText ?? "-"}</GF>
+      <GF label="ステータス">
+        <Badge tone={statusTone(t.status)}>
+          {TALENT_STATUS_LABELS[t.status] ?? t.status}
+        </Badge>
+      </GF>
+      <GF label="最寄駅">{t.nearestStation ?? "-"}</GF>
+      <GF label="区分">
+        {t.talentType === "INHOUSE" ? "自社" : t.talentType === "PARTNER" ? "他社" : "-"}
+      </GF>
+      <div className="col-span-2 sm:col-span-3">
+        <div className="mb-1 text-xs text-slate-400">スキル</div>
+        <SkillTags main={t.mainSkills} all={t.skills} />
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-border px-5 py-4 sm:grid-cols-3">
-        <GF label="名前">{talent.name}</GF>
-        <GF label="年齢">{talent.age ?? "-"}</GF>
-        <GF label="性別">{talent.gender ? GENDER_LABELS[talent.gender] : "-"}</GF>
-        <GF label="希望単価">{formatRate(talent.desiredRateMin, talent.desiredRateMax)}</GF>
-        <GF label="リモート">
-          {talent.remotePreference ? REMOTE_LABELS[talent.remotePreference] : "-"}
-        </GF>
-        <GF label="稼働開始">{talent.availabilityText ?? "-"}</GF>
-        <GF label="ステータス">
-          <Badge tone={statusTone(talent.status)}>
-            {TALENT_STATUS_LABELS[talent.status] ?? talent.status}
-          </Badge>
-        </GF>
-        <GF label="最寄駅">{talent.nearestStation ?? "-"}</GF>
-        <GF label="区分">
-          {talent.talentType === "INHOUSE"
-            ? "自社"
-            : talent.talentType === "PARTNER"
-              ? "他社"
-              : "-"}
-        </GF>
-        <div className="col-span-2 sm:col-span-3">
-          <div className="mb-1 text-xs text-slate-400">スキル</div>
-          <SkillTags main={talent.mainSkills} all={talent.skills} />
-        </div>
-      </div>
-      <DetailTabs
-        email={{
-          from: talent.emailFrom ?? talent.sourceEmail,
-          to: talent.emailTo,
-          received: talent.receivedDate,
-          subject: talent.emailSubject,
-          body: talent.emailBody,
-          fallback: talent.note,
-        }}
-        detail={
-          <div className="space-y-2">
-            <div className="text-xs text-slate-400">備考情報</div>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">{talent.note || "-"}</p>
-          </div>
-        }
-      />
-    </Card>
+    </>
   );
 }
 
-// ---------- 左ペイン: 案件詳細 ----------
-function ProjectPanel({ project }: { project: ProjectVM }) {
+function projectSummary(p: ProjectVM) {
+  return (
+    <>
+      <div className="col-span-2 sm:col-span-3">
+        <GF label="案件名">{p.title}</GF>
+      </div>
+      <GF label="クライアント/商流">{p.clientName ?? "-"}</GF>
+      <GF label="単価">{formatRate(p.rateMin, p.rateMax)}</GF>
+      <GF label="リモート">
+        {p.remotePreference ? REMOTE_LABELS[p.remotePreference] : "-"}
+      </GF>
+      <GF label="募集状況">
+        <Badge tone={statusTone(p.status)}>
+          {PROJECT_STATUS_LABELS[p.status] ?? p.status}
+        </Badge>
+      </GF>
+      <GF label="開始時期">{p.startText ?? "-"}</GF>
+      <GF label="勤務地">{p.location ?? "-"}</GF>
+      <div className="col-span-2 sm:col-span-3">
+        <div className="mb-1 text-xs text-slate-400">必須スキル</div>
+        {p.requiredSkills.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {p.requiredSkills.map((s) => (
+              <Badge key={s} tone="indigo">
+                {s}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-sm text-slate-400">-</span>
+        )}
+      </div>
+    </>
+  );
+}
+
+interface EmailInfo {
+  from: string | null;
+  to: string | null;
+  received: string | null;
+  subject: string | null;
+  body: string | null;
+  fallback: string | null;
+}
+
+// ---------- 詳細ビュー（左ペイン用 = 2タブ / 右ペイン用 = 3タブ + 戻る） ----------
+function DetailView({
+  heading,
+  summary,
+  email,
+  detail,
+  editHref,
+  match,
+  onBack,
+}: {
+  heading: string;
+  summary: React.ReactNode;
+  email: EmailInfo;
+  detail: React.ReactNode;
+  editHref: string;
+  match?: { score: number; reasons: string[] }; // 指定時「マッチング項目」タブを表示
+  onBack?: () => void; // 指定時、戻るボタンを表示（右ペイン）
+}) {
+  const hasEmail = !!(email.body || email.from || email.subject);
+  const [tab, setTab] = useState<"mail" | "detail" | "match">(
+    hasEmail ? "mail" : "detail",
+  );
+
+  const tabBtn = (key: "mail" | "detail" | "match", label: string) => (
+    <button
+      onClick={() => setTab(key)}
+      className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
+        tab === key
+          ? "border-b-2 border-primary text-primary"
+          : "text-slate-500 hover:text-slate-700"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <Card className="flex h-full flex-col overflow-hidden p-0">
       <div className="flex items-center justify-between border-b border-border px-5 py-3">
-        <span className="text-base font-bold text-slate-800">案件詳細情報</span>
-        <Link href={`/projects/${project.id}`} className="text-xs text-slate-500 hover:text-primary">
+        <div className="flex min-w-0 items-center gap-2">
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="inline-flex items-center gap-0.5 rounded-lg px-2 py-1 text-xs text-slate-500 ring-1 ring-border hover:bg-slate-50 hover:text-primary"
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+              一覧
+            </button>
+          )}
+          <span className="truncate text-base font-bold text-slate-800">{heading}</span>
+        </div>
+        <Link href={editHref} className="shrink-0 text-xs text-slate-500 hover:text-primary">
           詳細・編集 →
         </Link>
       </div>
+
       <div className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-border px-5 py-4 sm:grid-cols-3">
-        <div className="col-span-2 sm:col-span-3">
-          <GF label="案件名">{project.title}</GF>
-        </div>
-        <GF label="クライアント/商流">{project.clientName ?? "-"}</GF>
-        <GF label="単価">{formatRate(project.rateMin, project.rateMax)}</GF>
-        <GF label="リモート">
-          {project.remotePreference ? REMOTE_LABELS[project.remotePreference] : "-"}
-        </GF>
-        <GF label="募集状況">
-          <Badge tone={statusTone(project.status)}>
-            {PROJECT_STATUS_LABELS[project.status] ?? project.status}
-          </Badge>
-        </GF>
-        <GF label="開始時期">{project.startText ?? "-"}</GF>
-        <GF label="勤務地">{project.location ?? "-"}</GF>
-        <div className="col-span-2 sm:col-span-3">
-          <div className="mb-1 text-xs text-slate-400">必須スキル</div>
-          {project.requiredSkills.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {project.requiredSkills.map((s) => (
-                <Badge key={s} tone="indigo">
-                  {s}
-                </Badge>
-              ))}
+        {summary}
+      </div>
+
+      <div className="flex gap-1 border-b border-border px-3 pt-2">
+        {tabBtn("mail", "メール本文")}
+        {tabBtn("detail", "詳細情報")}
+        {match && tabBtn("match", "マッチング項目")}
+      </div>
+
+      <div className="flex-1 overflow-y-auto px-5 py-4">
+        {tab === "mail" ? (
+          hasEmail || email.fallback ? (
+            <div>
+              <div className="mb-3 space-y-1 rounded-lg bg-slate-50 p-3">
+                <MetaRow label="From:" value={email.from} />
+                <MetaRow label="To:" value={email.to} />
+                <MetaRow label="Received:" value={fmtDate(email.received)} />
+              </div>
+              {email.subject && (
+                <div className="mb-2 break-words text-sm font-medium text-slate-800">
+                  {email.subject}
+                </div>
+              )}
+              <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">
+                {email.body || email.fallback || "（本文なし）"}
+              </div>
             </div>
           ) : (
-            <span className="text-sm text-slate-400">-</span>
-          )}
-        </div>
-      </div>
-      <DetailTabs
-        email={{
-          from: project.emailFrom ?? project.sourceEmail,
-          to: project.emailTo,
-          received: project.receivedDate,
-          subject: project.emailSubject,
-          body: project.emailBody,
-          fallback: project.description,
-        }}
-        detail={
-          <div className="space-y-2">
-            <div className="text-xs text-slate-400">概要</div>
-            <p className="whitespace-pre-wrap text-sm text-slate-700">
-              {project.description || "-"}
+            <p className="py-8 text-center text-sm text-slate-400">
+              メール本文はありません（手動登録など）
             </p>
-          </div>
-        }
-      />
+          )
+        ) : tab === "detail" ? (
+          detail
+        ) : (
+          match && <MatchTab score={match.score} reasons={match.reasons} />
+        )}
+      </div>
     </Card>
   );
 }
 
-// ---------- 右ペイン: 案件カード（人材起点） ----------
-function ProjectCard({ p, top }: { p: ProjectCardVM; top: boolean }) {
+function MatchTab({ score, reasons }: { score: number; reasons: string[] }) {
+  const { strengths, concerns } = splitReasons(reasons);
   return (
-    <Link
-      href={`/projects/${p.id}`}
-      className={`block rounded-xl border p-4 transition-colors ${
-        top
-          ? "border-amber-300 bg-amber-50/60 hover:bg-amber-50"
-          : "border-border bg-white hover:bg-slate-50"
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="text-xs text-slate-400">マッチ度</span>
+        <Badge tone={scoreTone(score)} className="text-sm tabular-nums">
+          {Math.round(score)}点
+        </Badge>
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-medium text-emerald-700">合致点</div>
+        {strengths.length > 0 ? (
+          <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
+            {strengths.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-slate-400">-</p>
+        )}
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-medium text-amber-700">懸念点</div>
+        {concerns.length > 0 ? (
+          <ul className="list-inside list-disc space-y-1 text-sm text-slate-700">
+            {concerns.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-slate-400">-</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function talentEmail(t: TalentVM): EmailInfo {
+  return {
+    from: t.emailFrom ?? t.sourceEmail,
+    to: t.emailTo,
+    received: t.receivedDate,
+    subject: t.emailSubject,
+    body: t.emailBody,
+    fallback: t.note,
+  };
+}
+function projectEmail(p: ProjectVM): EmailInfo {
+  return {
+    from: p.emailFrom ?? p.sourceEmail,
+    to: p.emailTo,
+    received: p.receivedDate,
+    subject: p.emailSubject,
+    body: p.emailBody,
+    fallback: p.description,
+  };
+}
+function noteDetail(text: string | null, label: string) {
+  return (
+    <div className="space-y-2">
+      <div className="text-xs text-slate-400">{label}</div>
+      <p className="whitespace-pre-wrap text-sm text-slate-700">{text || "-"}</p>
+    </div>
+  );
+}
+
+// ---------- 右ペインのカード（クリックで詳細へ） ----------
+function ProjectCard({ p, top, onClick }: { p: ProjectCardVM; top: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`block w-full rounded-xl border p-4 text-left transition-colors ${
+        top ? "border-amber-300 bg-amber-50/60 hover:bg-amber-50" : "border-border bg-white hover:bg-slate-50"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -404,9 +402,7 @@ function ProjectCard({ p, top }: { p: ProjectCardVM; top: boolean }) {
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">
         <div>
           <span className="text-slate-400">募集状況: </span>
-          <Badge tone={statusTone(p.status)}>
-            {PROJECT_STATUS_LABELS[p.status] ?? p.status}
-          </Badge>
+          <Badge tone={statusTone(p.status)}>{PROJECT_STATUS_LABELS[p.status] ?? p.status}</Badge>
         </div>
         <div>
           <span className="text-slate-400">開始: </span>
@@ -430,21 +426,17 @@ function ProjectCard({ p, top }: { p: ProjectCardVM; top: boolean }) {
           ))}
         </div>
       )}
-      <ReasonChips reasons={p.reasons} />
-      <div className="mt-2 text-right text-[11px] text-slate-400">{fmtDate(p.receivedDate)}</div>
-    </Link>
+      <div className="mt-2 text-right text-[11px] text-primary">クリックで詳細 →</div>
+    </button>
   );
 }
 
-// ---------- 右ペイン: 人材カード（案件起点） ----------
-function TalentCard({ t, top }: { t: TalentCardVM; top: boolean }) {
+function TalentCard({ t, top, onClick }: { t: TalentCardVM; top: boolean; onClick: () => void }) {
   return (
-    <Link
-      href={`/talent/${t.id}`}
-      className={`block rounded-xl border p-4 transition-colors ${
-        top
-          ? "border-amber-300 bg-amber-50/60 hover:bg-amber-50"
-          : "border-border bg-white hover:bg-slate-50"
+    <button
+      onClick={onClick}
+      className={`block w-full rounded-xl border p-4 text-left transition-colors ${
+        top ? "border-amber-300 bg-amber-50/60 hover:bg-amber-50" : "border-border bg-white hover:bg-slate-50"
       }`}
     >
       <div className="flex items-start justify-between gap-3">
@@ -484,9 +476,88 @@ function TalentCard({ t, top }: { t: TalentCardVM; top: boolean }) {
           <SkillTags main={t.mainSkills} all={t.skills} />
         </div>
       )}
-      <ReasonChips reasons={t.reasons} />
-      <div className="mt-2 text-right text-[11px] text-slate-400">{fmtDate(t.receivedDate)}</div>
-    </Link>
+      <div className="mt-2 text-right text-[11px] text-primary">クリックで詳細 →</div>
+    </button>
+  );
+}
+
+// ---------- 右ペイン（一覧 ⇄ 詳細） ----------
+function RightPane({
+  mode,
+  projects,
+  talents,
+}: {
+  mode: CompareMode;
+  projects: ProjectCardVM[];
+  talents: TalentCardVM[];
+}) {
+  const [selId, setSelId] = useState<string | null>(null);
+  const count = mode === "talent" ? projects.length : talents.length;
+  const title = mode === "talent" ? "対象案件リスト" : "対象人材リスト";
+
+  // 詳細表示
+  if (selId) {
+    if (mode === "talent") {
+      const p = projects.find((x) => x.id === selId);
+      if (p) {
+        return (
+          <DetailView
+            heading={p.title}
+            summary={projectSummary(p)}
+            email={projectEmail(p)}
+            detail={noteDetail(p.description, "概要")}
+            editHref={`/projects/${p.id}`}
+            match={{ score: p.score, reasons: p.reasons }}
+            onBack={() => setSelId(null)}
+          />
+        );
+      }
+    } else {
+      const t = talents.find((x) => x.id === selId);
+      if (t) {
+        return (
+          <DetailView
+            heading={t.name}
+            summary={talentSummary(t)}
+            email={talentEmail(t)}
+            detail={noteDetail(t.note, "備考情報")}
+            editHref={`/talent/${t.id}`}
+            match={{ score: t.score, reasons: t.reasons }}
+            onBack={() => setSelId(null)}
+          />
+        );
+      }
+    }
+  }
+
+  // 一覧表示
+  return (
+    <Card className="flex min-h-0 flex-col overflow-hidden p-0">
+      <div className="border-b border-border px-5 py-3">
+        <span className="text-base font-bold text-slate-800">{title}</span>
+        <span className="ml-2 text-sm text-muted">{count}件</span>
+        <span className="ml-2 text-xs text-slate-400">クリックで本文・詳細を表示</span>
+      </div>
+      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        {count === 0 ? (
+          <div className="py-16 text-center text-sm text-muted">
+            マッチした{mode === "talent" ? "案件" : "人材"}がありません。
+            <Link href="/matching" className="ml-1 text-primary underline">
+              マッチングを実行
+            </Link>
+            してください。
+          </div>
+        ) : mode === "talent" ? (
+          projects.map((p, i) => (
+            <ProjectCard key={p.matchId} p={p} top={i === 0} onClick={() => setSelId(p.id)} />
+          ))
+        ) : (
+          talents.map((t, i) => (
+            <TalentCard key={t.matchId} t={t} top={i === 0} onClick={() => setSelId(t.id)} />
+          ))
+        )}
+      </div>
+    </Card>
   );
 }
 
@@ -530,8 +601,6 @@ export function CompareView({
   const router = useRouter();
   const idParam = mode === "talent" ? "talentId" : "projectId";
   const leftSelected = mode === "talent" ? talent : project;
-  const rightCount = mode === "talent" ? rightProjects.length : rightTalents.length;
-  const rightTitle = mode === "talent" ? "対象案件リスト" : "対象人材リスト";
 
   return (
     <div className="flex h-full flex-col gap-4">
@@ -565,34 +634,26 @@ export function CompareView({
           {/* 左 */}
           <div className="min-h-0 lg:overflow-hidden">
             {mode === "talent" && talent ? (
-              <TalentPanel talent={talent} />
+              <DetailView
+                heading={talent.name}
+                summary={talentSummary(talent)}
+                email={talentEmail(talent)}
+                detail={noteDetail(talent.note, "備考情報")}
+                editHref={`/talent/${talent.id}`}
+              />
             ) : project ? (
-              <ProjectPanel project={project} />
+              <DetailView
+                heading={project.title}
+                summary={projectSummary(project)}
+                email={projectEmail(project)}
+                detail={noteDetail(project.description, "概要")}
+                editHref={`/projects/${project.id}`}
+              />
             ) : null}
           </div>
 
           {/* 右 */}
-          <Card className="flex min-h-0 flex-col overflow-hidden p-0">
-            <div className="border-b border-border px-5 py-3">
-              <span className="text-base font-bold text-slate-800">{rightTitle}</span>
-              <span className="ml-2 text-sm text-muted">{rightCount}件</span>
-            </div>
-            <div className="flex-1 space-y-3 overflow-y-auto p-4">
-              {rightCount === 0 ? (
-                <div className="py-16 text-center text-sm text-muted">
-                  マッチした{mode === "talent" ? "案件" : "人材"}がありません。
-                  <Link href="/matching" className="ml-1 text-primary underline">
-                    マッチングを実行
-                  </Link>
-                  してください。
-                </div>
-              ) : mode === "talent" ? (
-                rightProjects.map((p, i) => <ProjectCard key={p.matchId} p={p} top={i === 0} />)
-              ) : (
-                rightTalents.map((t, i) => <TalentCard key={t.matchId} t={t} top={i === 0} />)
-              )}
-            </div>
-          </Card>
+          <RightPane mode={mode} projects={rightProjects} talents={rightTalents} />
         </div>
       )}
     </div>
