@@ -9,6 +9,7 @@ import {
   Building2,
   Briefcase,
   GitCompareArrows,
+  ListChecks,
   Star,
   Link2,
   Mail,
@@ -43,6 +44,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     title: "ツール",
     items: [
       { href: "/matching", label: "マッチング", icon: GitCompareArrows },
+      { href: "/matches", label: "マッチ一覧", icon: ListChecks },
       { href: "/favorites", label: "お気に入り", icon: Star },
       { href: "/shared-links", label: "公開リンク", icon: Link2 },
       { href: "/ingest", label: "メール取り込み", icon: Mail },
