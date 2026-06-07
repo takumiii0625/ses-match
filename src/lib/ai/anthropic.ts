@@ -20,6 +20,16 @@ import { DEFAULT_MATCH_PROMPT } from "./prompts";
 // Default to the most capable model; allow override via env.
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 
+// マッチ判定の1リクエストあたり候補数。小さいほど1回の出力が短く、件数が多くても
+// max_tokens で打ち切られない。バッチは並列・独立なので1つ失敗しても他は残る。
+const MATCH_BATCH_SIZE = 5;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 const REMOTE_ENUM = [
   "FULL_REMOTE",
   "MOSTLY_REMOTE",
@@ -332,8 +342,34 @@ export class AnthropicAIService implements AIService {
   ): Promise<RankedCandidate[]> {
     if (candidates.length === 0) return [];
     const system = systemPrompt?.trim() || DEFAULT_MATCH_PROMPT;
+    const projectBlock = this.buildProjectBlock(project);
 
-    const projectBlock = [
+    // 候補を少人数のバッチに分割して判定する。1リクエストの出力を短く保ち、
+    // 件数が多くても max_tokens で打ち切られない（=「Unterminated string」を防ぐ）。
+    // バッチは独立・並列。1バッチが失敗しても他は残るので「全部落ちる」ことはない。
+    const batches = chunk(candidates, MATCH_BATCH_SIZE);
+    const settled = await Promise.allSettled(
+      batches.map((b) => this.rankBatch(system, projectBlock, b)),
+    );
+
+    const results: RankedCandidate[] = [];
+    let failed = 0;
+    for (const s of settled) {
+      if (s.status === "fulfilled") results.push(...s.value);
+      else {
+        failed++;
+        console.error("[match] バッチ判定に失敗:", s.reason);
+      }
+    }
+    // 全バッチが失敗したときだけエラー。一部成功なら取れた分を返す。
+    if (results.length === 0 && failed > 0) {
+      throw new Error(`AIマッチ判定に失敗しました（${failed}バッチ全てでエラー）`);
+    }
+    return results.sort((a, b) => b.score - a.score);
+  }
+
+  private buildProjectBlock(project: MatchProjectInput): string {
+    return [
       `# 案件`,
       `タイトル: ${project.title}`,
       project.clientName ? `クライアント/商流: ${project.clientName}` : "",
@@ -346,7 +382,14 @@ export class AnthropicAIService implements AIService {
     ]
       .filter(Boolean)
       .join("\n");
+  }
 
+  /** 少人数バッチを1リクエストで判定。出力が短いので打ち切りは実質起きない。 */
+  private async rankBatch(
+    system: string,
+    projectBlock: string,
+    candidates: MatchCandidateInput[],
+  ): Promise<RankedCandidate[]> {
     const candidateBlock = candidates
       .map((c) =>
         [
@@ -366,7 +409,7 @@ export class AnthropicAIService implements AIService {
 
     const res = await this.client.messages.create({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: 8192, // 少人数バッチなので十分。安全網として余裕を確保。
       system: [
         { type: "text", text: system, cache_control: { type: "ephemeral" } },
       ],
@@ -384,11 +427,23 @@ export class AnthropicAIService implements AIService {
       ],
     });
 
+    // 打ち切り時は曖昧なパースエラーにせず原因の分かるメッセージにする。
+    if (res.stop_reason === "max_tokens") {
+      throw new Error(
+        `AI応答が出力上限(${res.usage?.output_tokens ?? "?"}トークン)で打ち切られました`,
+      );
+    }
+
     const text = res.content.find((b) => b.type === "text");
     if (!text || text.type !== "text") {
       throw new Error("AI応答にテキストが含まれていません");
     }
-    const parsed = JSON.parse(text.text) as { results: RankedCandidate[] };
-    return (parsed.results ?? []).sort((a, b) => b.score - a.score);
+    let parsed: { results?: RankedCandidate[] };
+    try {
+      parsed = JSON.parse(text.text) as { results?: RankedCandidate[] };
+    } catch {
+      throw new Error("AI応答のJSON解析に失敗しました（応答が不完全な可能性があります）");
+    }
+    return parsed.results ?? [];
   }
 }

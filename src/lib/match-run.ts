@@ -15,6 +15,7 @@ export interface MatchRunResult {
   talents: number;
   pairs: number; // LLM判定にかけた候補ペア数（事前フィルタ通過分）
   saved: number; // MIN_SCORE 以上で upsert したペア数
+  errors: number; // LLM判定に失敗した案件数（1案件の失敗で全体を止めない）
   minScore: number;
 }
 
@@ -114,11 +115,17 @@ export async function runMatchingForOrg(orgId: string): Promise<MatchRunResult> 
 
   let saved = 0;
   let pairs = 0;
+  let errors = 0;
   for (const project of projects) {
     const candidates = talents.filter((t) => !isSameCompany(t, project));
-    const r = await rankAndSave(project, candidates, systemPrompt);
-    pairs += r.pairs;
-    saved += r.saved;
+    try {
+      const r = await rankAndSave(project, candidates, systemPrompt);
+      pairs += r.pairs;
+      saved += r.saved;
+    } catch (e) {
+      errors++;
+      console.error(`[match] project ${project.id} のLLM判定に失敗:`, e);
+    }
   }
 
   return {
@@ -126,6 +133,7 @@ export async function runMatchingForOrg(orgId: string): Promise<MatchRunResult> 
     talents: talents.length,
     pairs,
     saved,
+    errors,
     minScore: MIN_SCORE,
   };
 }
@@ -142,7 +150,14 @@ export async function runMatchingForNew(
   newProjectIds: string[],
 ): Promise<MatchRunResult> {
   if (newTalentIds.length === 0 && newProjectIds.length === 0) {
-    return { projects: 0, talents: 0, pairs: 0, saved: 0, minScore: MIN_SCORE };
+    return {
+      projects: 0,
+      talents: 0,
+      pairs: 0,
+      saved: 0,
+      errors: 0,
+      minScore: MIN_SCORE,
+    };
   }
 
   const [projects, talents, systemPrompt] = await Promise.all([
@@ -156,6 +171,7 @@ export async function runMatchingForNew(
 
   let saved = 0;
   let pairs = 0;
+  let errors = 0;
   for (const project of projects) {
     // 新規案件→全人材、既存案件→新規人材のみ を候補に。
     const pool = isNewProject.has(project.id)
@@ -164,9 +180,14 @@ export async function runMatchingForNew(
     if (pool.length === 0) continue;
 
     const candidates = pool.filter((t) => !isSameCompany(t, project));
-    const r = await rankAndSave(project, candidates, systemPrompt);
-    pairs += r.pairs;
-    saved += r.saved;
+    try {
+      const r = await rankAndSave(project, candidates, systemPrompt);
+      pairs += r.pairs;
+      saved += r.saved;
+    } catch (e) {
+      errors++;
+      console.error(`[match] project ${project.id} のLLM判定に失敗:`, e);
+    }
   }
 
   return {
@@ -174,6 +195,7 @@ export async function runMatchingForNew(
     talents: talents.length,
     pairs,
     saved,
+    errors,
     minScore: MIN_SCORE,
   };
 }

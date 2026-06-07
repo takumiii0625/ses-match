@@ -9,6 +9,7 @@ interface RematchResult {
   talents: number;
   pairs: number;
   saved: number;
+  errors: number;
   minScore: number;
   error?: string;
 }
@@ -33,7 +34,8 @@ export function RematchButton() {
       const data = (await res.json()) as RematchResult;
       if (!res.ok) throw new Error(data.error ?? `エラー: ${res.status}`);
       setMsg(
-        `${data.saved}件を保存（${data.projects}案件 × ${data.talents}人材／${data.minScore}点以上）`,
+        `${data.saved}件を保存（${data.projects}案件 × ${data.talents}人材／${data.minScore}点以上）` +
+          (data.errors > 0 ? `／${data.errors}案件は判定失敗` : ""),
       );
       router.refresh();
     } catch (e) {
