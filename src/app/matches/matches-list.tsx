@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Columns2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -190,6 +191,12 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
                       単価: {formatRate(project.rateMin, project.rateMax)}
                     </span>
                   )}
+                  <Link
+                    href={`/compare?mode=project&projectId=${project.id}`}
+                    className="ml-auto inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-border hover:bg-slate-50 hover:text-primary"
+                  >
+                    <Columns2 className="h-3.5 w-3.5" /> 見比べる
+                  </Link>
                 </div>
                 {project.requiredSkills.length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-1">
@@ -291,9 +298,15 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
                           </p>
                         )}
 
-                        {/* 提案へ進む */}
-                        <div className="mt-3">
+                        {/* アクション: 提案へ進む / 見比べる */}
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
                           <ProposalButton talentId={t.id} projectId={project.id} />
+                          <Link
+                            href={`/compare?mode=talent&talentId=${t.id}`}
+                            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-border hover:bg-slate-50 hover:text-primary"
+                          >
+                            <Columns2 className="h-3.5 w-3.5" /> この人材を見比べ
+                          </Link>
                         </div>
                       </div>
                     </div>
