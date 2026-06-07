@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
+import { PROMPT_FIELDS } from "@/lib/ai/prompts";
 
 const VALID_AI_PROVIDERS = ["mock", "anthropic", "openai"] as const;
 type AiProvider = (typeof VALID_AI_PROVIDERS)[number];
@@ -25,12 +26,7 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   try {
     const org = await getCurrentOrg();
-    const body = (await req.json()) as {
-      name?: unknown;
-      aiProvider?: unknown;
-      proposalSignature?: unknown;
-      matchPrompt?: unknown;
-    };
+    const body = (await req.json()) as Record<string, unknown>;
 
     // Validate aiProvider if provided
     if (body.aiProvider !== undefined && !isValidAiProvider(body.aiProvider)) {
@@ -38,6 +34,15 @@ export async function PATCH(req: NextRequest) {
         { error: `aiProvider must be one of: ${VALID_AI_PROVIDERS.join(", ")}` },
         { status: 422 },
       );
+    }
+
+    // 各プロンプト: 送られたものだけ更新。空文字は null（＝組み込みデフォルトに戻す）。
+    const promptData: Record<string, string | null> = {};
+    for (const { key } of PROMPT_FIELDS) {
+      if (body[key] !== undefined) {
+        const v = body[key];
+        promptData[key] = typeof v === "string" && v.trim() ? v.trim() : null;
+      }
     }
 
     const updated = await prisma.organization.update({
@@ -59,15 +64,7 @@ export async function PATCH(req: NextRequest) {
                   : null,
             }
           : {}),
-        // 空文字で送ると null（＝組み込みデフォルトに戻す）。
-        ...(body.matchPrompt !== undefined
-          ? {
-              matchPrompt:
-                typeof body.matchPrompt === "string" && body.matchPrompt.trim()
-                  ? body.matchPrompt.trim()
-                  : null,
-            }
-          : {}),
+        ...promptData,
       },
     });
 

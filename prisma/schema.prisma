@@ -21,7 +21,12 @@ model Organization {
   slug              String   @unique
   aiProvider        String   @default("mock") // mock | anthropic | openai
   proposalSignature String? // 提案メールの署名
-  matchPrompt       String? // LLMマッチ判定のシステムプロンプト（null=組み込みデフォルト）
+  // LLMシステムプロンプトの上書き（null=組み込みデフォルト）。編集はプロンプト管理画面から。
+  matchPrompt       String? // マッチ判定
+  classifyPrompt    String? // メール分類
+  talentPrompt      String? // 人材抽出
+  projectPrompt     String? // 案件抽出
+  proposalPrompt    String? // 提案文生成
   createdAt         DateTime @default(now())
 
   users       User[]

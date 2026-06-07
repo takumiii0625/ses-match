@@ -99,14 +99,17 @@ export async function POST(req: NextRequest) {
     const { reasons } = scoreMatch(talent, project);
 
     const ai = getAI();
-    const proposal = await ai.generateProposal({
-      talentName: talent.name,
-      talentSkills: talent.mainSkills.length > 0 ? talent.mainSkills : talent.skills,
-      talentRate: formatRate(talent.desiredRateMin, talent.desiredRateMax),
-      projectTitle: project.title,
-      projectClient: project.clientName ?? undefined,
-      matchReasons: reasons,
-    });
+    const proposal = await ai.generateProposal(
+      {
+        talentName: talent.name,
+        talentSkills: talent.mainSkills.length > 0 ? talent.mainSkills : talent.skills,
+        talentRate: formatRate(talent.desiredRateMin, talent.desiredRateMax),
+        projectTitle: project.title,
+        projectClient: project.clientName ?? undefined,
+        matchReasons: reasons,
+      },
+      org.proposalPrompt ?? undefined,
+    );
 
     return NextResponse.json({ proposal });
   } catch (err) {

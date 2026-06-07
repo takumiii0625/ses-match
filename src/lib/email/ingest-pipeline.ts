@@ -83,12 +83,20 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
     const sourceEmail = parseFromEmail(mail.from);
 
     try {
-      const cls = await ai.classifyEmail(raw, mail.attachments);
+      const cls = await ai.classifyEmail(
+        raw,
+        mail.attachments,
+        org.classifyPrompt ?? undefined,
+      );
       let talentId: string | undefined;
       let projectId: string | undefined;
 
       if (cls.kind === "TALENT") {
-        const p = await ai.parseTalentEmail(raw, mail.attachments);
+        const p = await ai.parseTalentEmail(
+          raw,
+          mail.attachments,
+          org.talentPrompt ?? undefined,
+        );
         // 送信元ドメインで自社/他社を自動判定
         const isOwn = companyDomain(sourceEmail) === OWN_DOMAIN;
         const t = await prisma.talent.create({
@@ -118,7 +126,11 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
         newTalentIds.push(t.id);
         result.created.talent++;
       } else if (cls.kind === "PROJECT") {
-        const p = await ai.parseProjectEmail(raw, mail.attachments);
+        const p = await ai.parseProjectEmail(
+          raw,
+          mail.attachments,
+          org.projectPrompt ?? undefined,
+        );
         const proj = await prisma.project.create({
           data: {
             orgId: org.id,

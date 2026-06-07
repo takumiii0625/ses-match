@@ -91,23 +91,26 @@ export interface RankedCandidate {
 }
 
 export interface AIService {
-  /** メールを 人材 / 案件 / 対象外 に分類 */
+  /** メールを 人材 / 案件 / 対象外 に分類（systemPrompt 指定で判定指示を上書き） */
   classifyEmail(
     rawEmail: string,
     attachments?: EmailAttachment[],
+    systemPrompt?: string,
   ): Promise<EmailClassification>;
-  /** メール本文(＋添付) → 人材の構造化データ */
+  /** メール本文(＋添付) → 人材の構造化データ（systemPrompt で上書き可） */
   parseTalentEmail(
     rawEmail: string,
     attachments?: EmailAttachment[],
+    systemPrompt?: string,
   ): Promise<ParsedTalent>;
-  /** メール本文(＋添付) → 案件の構造化データ */
+  /** メール本文(＋添付) → 案件の構造化データ（systemPrompt で上書き可） */
   parseProjectEmail(
     rawEmail: string,
     attachments?: EmailAttachment[],
+    systemPrompt?: string,
   ): Promise<ParsedProject>;
-  /** マッチング結果 → 提案メール文面 */
-  generateProposal(input: ProposalInput): Promise<string>;
+  /** マッチング結果 → 提案メール文面（systemPrompt で上書き可） */
+  generateProposal(input: ProposalInput, systemPrompt?: string): Promise<string>;
   /** 案件＋候補人材リスト → LLMによるマッチ判定（高い順） */
   rankCandidates(
     project: MatchProjectInput,

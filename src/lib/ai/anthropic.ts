@@ -10,7 +10,13 @@ import type {
   MatchCandidateInput,
   RankedCandidate,
 } from "./types";
-import { DEFAULT_MATCH_PROMPT } from "./prompts";
+import {
+  DEFAULT_MATCH_PROMPT,
+  DEFAULT_CLASSIFY_PROMPT,
+  DEFAULT_TALENT_PROMPT,
+  DEFAULT_PROJECT_PROMPT,
+  DEFAULT_PROPOSAL_PROMPT,
+} from "./prompts";
 import { createLimiter } from "@/lib/limit";
 
 // Real LLM implementation of AIService backed by the Claude API.
@@ -109,34 +115,6 @@ const PROJECT_SCHEMA = {
   ],
 } as const;
 
-const TALENT_SYSTEM = `あなたはSES業界の人材情報を扱うアシスタントです。
-与えられたメール本文から、稼働可能なエンジニア（人材）の情報を抽出し、指定されたJSONスキーマに従って構造化してください。
-
-ルール:
-- 単価（desiredRateMin/Max）は月額・万円単位の整数。「80万」→80、「60〜80万」→min60/max80。記載がなければnull。
-- remotePreference はメール記載に最も近いenum値を1つ選ぶ。判断できなければnull。
-  FULL_REMOTE=フルリモート, MOSTLY_REMOTE=基本リモート, HYBRID=ハイブリッド,
-  OFFICE_1〜4=週1〜4回出社可, ONSITE=常駐可
-- skills は本文中の技術キーワード（言語/FW/クラウド/DB等）。mainSkills はそのうち主要な最大3件。
-- availabilityText は稼働開始時期の原文（例「即日or6月〜」）。
-- nearestStation は最寄り駅名のみ。
-- note は人材の特徴を日本語で1〜2文に要約。
-- 推測で値を捏造しない。不明な項目はnull、配列は空配列にする。`;
-
-const PROJECT_SYSTEM = `あなたはSES業界の案件情報を扱うアシスタントです。
-与えられたメール本文から、SES案件の情報を抽出し、指定されたJSONスキーマに従って構造化してください。
-
-ルール:
-- title は案件名/件名。clientName はエンド企業名や商流元。
-- requiredSkills は必須・歓迎スキル（技術キーワード）。
-- 単価（rateMin/Max）は月額・万円単位の整数。記載がなければnull。
-- remotePreference はメール記載に最も近いenum値を1つ選ぶ。判断できなければnull。
-  FULL_REMOTE=フルリモート, MOSTLY_REMOTE=基本リモート, HYBRID=ハイブリッド,
-  OFFICE_1〜4=週1〜4回出社可, ONSITE=常駐可
-- location は勤務地。startText は開始時期の原文。
-- description は案件概要を日本語で1〜3文に要約。
-- 推測で値を捏造しない。不明な項目はnull、配列は空配列にする。`;
-
 const CLASSIFY_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -146,13 +124,6 @@ const CLASSIFY_SCHEMA = {
   },
   required: ["kind", "reason"],
 } as const;
-
-const CLASSIFY_SYSTEM = `あなたはSES業界のメールを仕分けるアシスタントです。
-メール本文（と添付）が次のどれかを判定してください:
-- TALENT: 稼働可能なエンジニア（人材）の紹介・売り込み。経歴書/スキルシートの提示など。
-- PROJECT: 案件・求人の募集。必要スキル・単価・勤務地などの提示。
-- IGNORE: 上記以外（営業案内、問い合わせ、自動返信、無関係なメールなど）。
-判定理由を日本語で簡潔に述べてください。確信が持てない場合はIGNOREにする。`;
 
 const MATCH_SCHEMA = {
   type: "object",
@@ -188,15 +159,7 @@ const MATCH_SCHEMA = {
   required: ["results"],
 } as const;
 
-// マッチ判定のシステムプロンプトは設定で上書き可能。出典は ./prompts.ts。
-
-const PROPOSAL_SYSTEM = `あなたはSES営業の提案メールを作成するアシスタントです。
-提示された案件と人材の情報をもとに、丁寧で簡潔な日本語の提案メール本文を作成してください。
-
-要件:
-- 宛先の挨拶 → 案件名への言及 → 提案要員（イニシャル/スキル/単価）→ マッチング根拠 → 結びの依頼、の構成。
-- ビジネスメールとして自然な敬語。誇張や事実の捏造はしない。提示された情報のみ使用する。
-- 本文のみを出力し、件名やコードブロックは含めない。`;
+// 各システムプロンプトは設定（プロンプト編集画面）で上書き可能。出典は ./prompts.ts。
 
 // Convert API JSON (null) → TS interface (undefined where optional).
 function denull<T extends Record<string, unknown>>(obj: T): T {
@@ -271,9 +234,10 @@ export class AnthropicAIService implements AIService {
   async classifyEmail(
     rawEmail: string,
     attachments?: EmailAttachment[],
+    systemPrompt?: string,
   ): Promise<EmailClassification> {
     return this.extract<EmailClassification>(
-      CLASSIFY_SYSTEM,
+      systemPrompt?.trim() || DEFAULT_CLASSIFY_PROMPT,
       CLASSIFY_SCHEMA as unknown as Record<string, unknown>,
       rawEmail,
       attachments,
@@ -283,9 +247,10 @@ export class AnthropicAIService implements AIService {
   async parseTalentEmail(
     rawEmail: string,
     attachments?: EmailAttachment[],
+    systemPrompt?: string,
   ): Promise<ParsedTalent> {
     return this.extract<ParsedTalent>(
-      TALENT_SYSTEM,
+      systemPrompt?.trim() || DEFAULT_TALENT_PROMPT,
       TALENT_SCHEMA,
       rawEmail,
       attachments,
@@ -295,16 +260,17 @@ export class AnthropicAIService implements AIService {
   async parseProjectEmail(
     rawEmail: string,
     attachments?: EmailAttachment[],
+    systemPrompt?: string,
   ): Promise<ParsedProject> {
     return this.extract<ParsedProject>(
-      PROJECT_SYSTEM,
+      systemPrompt?.trim() || DEFAULT_PROJECT_PROMPT,
       PROJECT_SCHEMA,
       rawEmail,
       attachments,
     );
   }
 
-  async generateProposal(input: ProposalInput): Promise<string> {
+  async generateProposal(input: ProposalInput, systemPrompt?: string): Promise<string> {
     const lines = [
       `案件名: ${input.projectTitle}`,
       input.projectClient ? `エンド/商流元: ${input.projectClient}` : "",
@@ -322,7 +288,7 @@ export class AnthropicAIService implements AIService {
       system: [
         {
           type: "text",
-          text: PROPOSAL_SYSTEM,
+          text: systemPrompt?.trim() || DEFAULT_PROPOSAL_PROMPT,
           cache_control: { type: "ephemeral" },
         },
       ],

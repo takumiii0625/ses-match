@@ -16,6 +16,7 @@ import {
   Mail,
   MailCheck,
   FileText,
+  ScrollText,
   BarChart3,
   UsersRound,
   Settings,
@@ -57,6 +58,7 @@ const groups: { title: string; items: NavItem[] }[] = [
   {
     title: "管理",
     items: [
+      { href: "/prompts", label: "プロンプト", icon: ScrollText },
       { href: "/reports", label: "レポート", icon: BarChart3 },
       { href: "/members", label: "メンバー", icon: UsersRound },
     ],
