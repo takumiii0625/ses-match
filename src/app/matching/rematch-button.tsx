@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { fetchJson } from "@/lib/http";
 
 interface RematchResult {
   projects: number;
@@ -30,9 +31,9 @@ export function RematchButton() {
     setMsg(null);
     setIsError(false);
     try {
-      const res = await fetch("/api/cron/rematch", { method: "POST" });
-      const data = (await res.json()) as RematchResult;
-      if (!res.ok) throw new Error(data.error ?? `エラー: ${res.status}`);
+      const data = await fetchJson<RematchResult>("/api/cron/rematch", {
+        method: "POST",
+      });
       setMsg(
         `${data.saved}件を保存（${data.projects}案件 × ${data.talents}人材／${data.minScore}点以上）` +
           (data.errors > 0 ? `／${data.errors}案件は判定失敗` : ""),

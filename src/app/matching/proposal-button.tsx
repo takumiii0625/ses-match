@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
+import { fetchJson } from "@/lib/http";
 
 interface ProposalButtonProps {
   talentId: string;
@@ -21,16 +22,14 @@ export function ProposalButton({ talentId, projectId }: ProposalButtonProps) {
     setLoading(true);
     setSavedId(null);
     try {
-      const res = await fetch("/api/proposals", {
+      const data = await fetchJson<{ proposal?: string }>("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ talentId, projectId }),
       });
-      if (!res.ok) throw new Error("生成失敗");
-      const data = await res.json();
       setProposal(data.proposal ?? "");
-    } catch {
-      alert("提案文の生成に失敗しました");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "提案文の生成に失敗しました");
     } finally {
       setLoading(false);
     }
@@ -51,16 +50,14 @@ export function ProposalButton({ talentId, projectId }: ProposalButtonProps) {
     if (!proposal) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/proposals", {
+      const data = await fetchJson<{ id?: string }>("/api/proposals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "save", talentId, projectId, proposalBody: proposal }),
       });
-      if (!res.ok) throw new Error("保存失敗");
-      const data = await res.json();
       setSavedId(data.id ?? null);
-    } catch {
-      alert("提案の保存に失敗しました");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "提案の保存に失敗しました");
     } finally {
       setSaving(false);
     }

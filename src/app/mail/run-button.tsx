@@ -4,6 +4,16 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { fetchJson } from "@/lib/http";
+
+interface IngestResult {
+  fetched: number;
+  created: { talent: number; project: number };
+  ignored: number;
+  skipped: number;
+  errors: number;
+  matched?: { saved: number };
+}
 
 export function RunButton({ disabled }: { disabled?: boolean }) {
   const router = useRouter();
@@ -14,9 +24,10 @@ export function RunButton({ disabled }: { disabled?: boolean }) {
     setLoading(true);
     setMsg(null);
     try {
-      const res = await fetch("/api/cron/fetch-mail?limit=200", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "取り込みに失敗しました");
+      const data = await fetchJson<IngestResult>(
+        "/api/cron/fetch-mail?limit=200",
+        { method: "POST" },
+      );
       setMsg(
         `取得${data.fetched}件 → 人材${data.created.talent} / 案件${data.created.project} / 対象外${data.ignored} / 重複${data.skipped} / エラー${data.errors} / マッチ${data.matched?.saved ?? 0}`,
       );
