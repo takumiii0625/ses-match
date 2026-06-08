@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
+import { dedupeLatest, talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -450,7 +451,7 @@ function AccordionItem({
   );
 }
 
-function projectHeader(p: ProjectCardVM, top: boolean) {
+function projectHeader(p: ProjectCardVM, top: boolean, dupes = 1) {
   return (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -458,6 +459,7 @@ function projectHeader(p: ProjectCardVM, top: boolean) {
           <div className="flex items-center gap-2">
             {top && <Badge tone="amber">最有力</Badge>}
             <span className="truncate font-semibold text-slate-800">{p.title}</span>
+            {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
           </div>
           {p.clientName && <div className="mt-0.5 text-xs text-slate-500">{p.clientName}</div>}
           <div className="mt-0.5 text-[11px] text-slate-400">配信: {daysAgo(p.receivedDate)}</div>
@@ -500,7 +502,7 @@ function projectHeader(p: ProjectCardVM, top: boolean) {
   );
 }
 
-function talentHeader(t: TalentCardVM, top: boolean) {
+function talentHeader(t: TalentCardVM, top: boolean, dupes = 1) {
   return (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -511,6 +513,7 @@ function talentHeader(t: TalentCardVM, top: boolean) {
             <Badge tone="slate">
               {t.talentType === "INHOUSE" ? "自社" : t.talentType === "PARTNER" ? "他社" : "-"}
             </Badge>
+            {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
           </div>
           <div className="mt-0.5 text-[11px] text-slate-400">配信: {daysAgo(t.receivedDate)}</div>
         </div>
@@ -568,7 +571,27 @@ function RightPane({
       return next;
     });
 
-  const count = mode === "talent" ? projects.length : talents.length;
+  // 同一案件/人材（名前・タイトル）をまとめ、最新配信を代表に。スコア順で表示。
+  const dedupProjects = useMemo(
+    () =>
+      dedupeLatest(
+        projects,
+        (p) => projectDedupeKey(p.title, p.clientName),
+        (p) => p.receivedDate,
+      ).sort((a, b) => b.item.score - a.item.score),
+    [projects],
+  );
+  const dedupTalents = useMemo(
+    () =>
+      dedupeLatest(
+        talents,
+        (t) => talentDedupeKey(t.name, t.mainSkills),
+        (t) => t.receivedDate,
+      ).sort((a, b) => b.item.score - a.item.score),
+    [talents],
+  );
+
+  const count = mode === "talent" ? dedupProjects.length : dedupTalents.length;
   const title = mode === "talent" ? "対象案件リスト" : "対象人材リスト";
 
   return (
@@ -588,13 +611,13 @@ function RightPane({
             してください。
           </div>
         ) : mode === "talent" ? (
-          projects.map((p, i) => (
+          dedupProjects.map(({ item: p, dupes }, i) => (
             <AccordionItem
               key={p.matchId}
               top={i === 0}
               open={openIds.has(p.id)}
               onToggle={() => toggle(p.id)}
-              header={projectHeader(p, i === 0)}
+              header={projectHeader(p, i === 0, dupes)}
               detail={{
                 summary: projectSummary(p),
                 email: projectEmail(p),
@@ -605,13 +628,13 @@ function RightPane({
             />
           ))
         ) : (
-          talents.map((t, i) => (
+          dedupTalents.map(({ item: t, dupes }, i) => (
             <AccordionItem
               key={t.matchId}
               top={i === 0}
               open={openIds.has(t.id)}
               onToggle={() => toggle(t.id)}
-              header={talentHeader(t, i === 0)}
+              header={talentHeader(t, i === 0, dupes)}
               detail={{
                 summary: talentSummary(t),
                 email: talentEmail(t),

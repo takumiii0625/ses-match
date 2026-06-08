@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { formatRate, daysAgo } from "@/lib/utils";
+import { dedupeLatest, talentDedupeKey } from "@/lib/dedupe";
 import { REMOTE_LABELS, TALENT_STATUS_LABELS } from "@/lib/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -94,11 +95,18 @@ export default async function MatchingPage({ searchParams }: PageProps) {
   }
 
   // 保存済みマッチ（DB）をそのまま表示。LLMはここでは動かさない。
-  const matches = await prisma.match.findMany({
+  const rawMatches = await prisma.match.findMany({
     where: { projectId: project.id, talent: { orgId: org.id } },
     include: { talent: true },
     orderBy: { score: "desc" },
   });
+
+  // 同一人材（氏名+主要スキル）をまとめ、最新配信を代表に。スコア順で表示。
+  const matches = dedupeLatest(
+    rawMatches,
+    (m) => talentDedupeKey(m.talent.name, m.talent.mainSkills),
+    (m) => (m.talent.receivedDate ? m.talent.receivedDate.toISOString() : null),
+  ).sort((a, b) => b.item.score - a.item.score);
 
   return (
     <div className="space-y-6 p-8">
@@ -149,7 +157,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
         </Card>
       ) : (
         <div className="space-y-3">
-          {matches.map((m, idx) => {
+          {matches.map(({ item: m, dupes }, idx) => {
             const talent = m.talent;
             const { strengths, concerns } = splitReasons(m.reasons);
             return (
@@ -170,6 +178,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
                         {Math.round(m.score)}点
                       </Badge>
                       {!m.proposable && <Badge tone="red">提案不可（商流）</Badge>}
+                      {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
                       {talent.status !== "NONE" && (
                         <Badge tone="slate">
                           {TALENT_STATUS_LABELS[talent.status] ?? talent.status}

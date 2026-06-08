@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { formatRate, daysAgo } from "@/lib/utils";
+import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { ProposalButton } from "../matching/proposal-button";
 
@@ -101,18 +102,54 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
     });
   }, [matches, query, minScore]);
 
-  // 案件ごとにグループ化（案件は最高スコア順）。
+  // 案件ごとにグループ化。重複（同名案件/同一人材）はまとめ、最新配信を代表にする。
   const groups = useMemo(() => {
-    const byProject = new Map<string, { project: MatchVM["project"]; rows: MatchVM[] }>();
+    // 案件キーごとの代表（最新配信）。
+    const rep = new Map<string, { project: MatchVM["project"]; ms: number }>();
     for (const m of filtered) {
-      const g = byProject.get(m.project.id);
-      if (g) g.rows.push(m);
-      else byProject.set(m.project.id, { project: m.project, rows: [m] });
+      const k = projectDedupeKey(m.project.title, m.project.clientName);
+      const ms = m.project.receivedDate ? Date.parse(m.project.receivedDate) : 0;
+      const cur = rep.get(k);
+      if (!cur || ms > cur.ms) rep.set(k, { project: m.project, ms });
     }
-    return [...byProject.values()].sort(
-      (a, b) => (b.rows[0]?.score ?? 0) - (a.rows[0]?.score ?? 0),
-    );
+    // 案件キーでまとめ、各グループ内で人材キーごとに最新を代表に。
+    const byKey = new Map<
+      string,
+      { project: MatchVM["project"]; talents: Map<string, { m: MatchVM; ms: number; dupes: number }> }
+    >();
+    for (const m of filtered) {
+      const pk = projectDedupeKey(m.project.title, m.project.clientName);
+      let g = byKey.get(pk);
+      if (!g) {
+        g = { project: rep.get(pk)!.project, talents: new Map() };
+        byKey.set(pk, g);
+      }
+      const tk = talentDedupeKey(m.talent.name, m.talent.mainSkills);
+      const ms = m.talent.receivedDate ? Date.parse(m.talent.receivedDate) : 0;
+      const cur = g.talents.get(tk);
+      if (!cur) g.talents.set(tk, { m, ms, dupes: 1 });
+      else {
+        cur.dupes++;
+        if (ms > cur.ms) {
+          cur.m = m;
+          cur.ms = ms;
+        }
+      }
+    }
+    return [...byKey.values()]
+      .map((g) => ({
+        project: g.project,
+        rows: [...g.talents.values()]
+          .map((x) => ({ m: x.m, dupes: x.dupes }))
+          .sort((a, b) => b.m.score - a.m.score),
+      }))
+      .sort((a, b) => (b.rows[0]?.m.score ?? 0) - (a.rows[0]?.m.score ?? 0));
   }, [filtered]);
+
+  const shownCount = useMemo(
+    () => groups.reduce((n, g) => n + g.rows.length, 0),
+    [groups],
+  );
 
   return (
     <div className="space-y-4">
@@ -151,7 +188,7 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
       </Card>
 
       <div className="px-1 text-sm font-medium text-muted">
-        {filtered.length} 件のマッチ（{groups.length} 案件）
+        {shownCount} 件のマッチ（{groups.length} 案件・重複まとめ後）
         {filtered.length !== matches.length && (
           <span className="ml-1 text-xs">/ 全 {matches.length} 件中</span>
         )}
@@ -217,7 +254,7 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
 
               {/* マッチ人材 */}
               <div className="divide-y divide-border">
-                {rows.map((m) => {
+                {rows.map(({ m, dupes }) => {
                   const { strengths, concerns } = splitReasons(m.reasons);
                   const t = m.talent;
                   return (
@@ -242,6 +279,7 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
                             {Math.round(m.score)}点
                           </Badge>
                           {!m.proposable && <Badge tone="red">提案不可（商流）</Badge>}
+                          {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
                           {(t.desiredRateMin != null || t.desiredRateMax != null) && (
                             <span className="text-xs text-muted">
                               希望単価: {formatRate(t.desiredRateMin, t.desiredRateMax)}
