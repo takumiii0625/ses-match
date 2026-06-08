@@ -27,6 +27,8 @@ model Organization {
   talentPrompt      String? // 人材抽出
   projectPrompt     String? // 案件抽出
   proposalPrompt    String? // 提案文生成
+  skillSheetPrompt        String? // スキルシート→サマリ生成
+  skillSheetImprovePrompt String? // サマリ文の改善
   createdAt         DateTime @default(now())
 
   users       User[]

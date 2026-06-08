@@ -155,6 +155,18 @@ export const PROMPT_FIELDS = [
     description: "マッチ結果から提案メール本文を生成する。",
     default: DEFAULT_PROPOSAL_PROMPT,
   },
+  {
+    key: "skillSheetPrompt",
+    label: "スキルシート生成",
+    description: "履歴書/スキルシートから提案用サマリ文＋構造化情報を生成する。",
+    default: DEFAULT_SKILLSHEET_PROMPT,
+  },
+  {
+    key: "skillSheetImprovePrompt",
+    label: "サマリ文改善",
+    description: "既存サマリ文を体裁よく推敲する（情報は足さない）。",
+    default: DEFAULT_SKILLSHEET_IMPROVE_PROMPT,
+  },
 ] as const;
 
 export type PromptKey = (typeof PROMPT_FIELDS)[number]["key"];

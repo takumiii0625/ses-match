@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAI } from "@/lib/ai";
 import type { EmailAttachment } from "@/lib/ai";
+import { getCurrentOrg } from "@/lib/current-org";
 
 // AIでの解析を含むため長め。
 export const maxDuration = 120;
@@ -13,13 +14,17 @@ export async function POST(req: NextRequest) {
       attachments?: EmailAttachment[];
     };
     const ai = getAI();
+    const org = await getCurrentOrg();
 
     if (body.action === "improve") {
       const text = (body.text ?? "").trim();
       if (!text) {
         return NextResponse.json({ error: "text is required" }, { status: 400 });
       }
-      const summary = await ai.improveSkillSheet(text);
+      const summary = await ai.improveSkillSheet(
+        text,
+        org.skillSheetImprovePrompt ?? undefined,
+      );
       return NextResponse.json({ summary });
     }
 
@@ -32,7 +37,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    const result = await ai.parseSkillSheet(text || "（添付ファイルを参照）", attachments);
+    const result = await ai.parseSkillSheet(
+      text || "（添付ファイルを参照）",
+      attachments,
+      org.skillSheetPrompt ?? undefined,
+    );
     const { summary, ...talent } = result;
     return NextResponse.json({ summary, talent });
   } catch (e) {

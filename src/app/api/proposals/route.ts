@@ -112,7 +112,12 @@ export async function POST(req: NextRequest) {
       org.proposalPrompt ?? undefined,
     );
 
-    return NextResponse.json({ proposal });
+    // 設定の署名を本文末尾へ自動追記。
+    const withSignature = org.proposalSignature
+      ? `${proposal.trim()}\n\n${org.proposalSignature}`
+      : proposal;
+
+    return NextResponse.json({ proposal: withSignature });
   } catch (err) {
     console.error("[POST /api/proposals]", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

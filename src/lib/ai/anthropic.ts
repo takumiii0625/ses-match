@@ -333,6 +333,7 @@ export class AnthropicAIService implements AIService {
   async parseSkillSheet(
     rawText: string,
     attachments?: EmailAttachment[],
+    systemPrompt?: string,
   ): Promise<ParsedSkillSheet> {
     const res = await this.client.messages.create({
       model: MODEL,
@@ -340,7 +341,7 @@ export class AnthropicAIService implements AIService {
       system: [
         {
           type: "text",
-          text: DEFAULT_SKILLSHEET_PROMPT,
+          text: systemPrompt?.trim() || DEFAULT_SKILLSHEET_PROMPT,
           cache_control: { type: "ephemeral" },
         },
       ],
@@ -359,14 +360,14 @@ export class AnthropicAIService implements AIService {
     return denull(JSON.parse(text.text)) as ParsedSkillSheet;
   }
 
-  async improveSkillSheet(currentText: string): Promise<string> {
+  async improveSkillSheet(currentText: string, systemPrompt?: string): Promise<string> {
     const res = await this.client.messages.create({
       model: MODEL,
       max_tokens: 2000,
       system: [
         {
           type: "text",
-          text: DEFAULT_SKILLSHEET_IMPROVE_PROMPT,
+          text: systemPrompt?.trim() || DEFAULT_SKILLSHEET_IMPROVE_PROMPT,
           cache_control: { type: "ephemeral" },
         },
       ],

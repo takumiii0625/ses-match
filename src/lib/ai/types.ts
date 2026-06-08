@@ -127,9 +127,10 @@ export interface AIService {
   parseSkillSheet(
     rawText: string,
     attachments?: EmailAttachment[],
+    systemPrompt?: string,
   ): Promise<ParsedSkillSheet>;
   /** 既存サマリ文を推敲（情報は足さず体裁のみ改善） */
-  improveSkillSheet(currentText: string): Promise<string>;
+  improveSkillSheet(currentText: string, systemPrompt?: string): Promise<string>;
   /** 案件＋候補人材リスト → LLMによるマッチ判定（高い順） */
   rankCandidates(
     project: MatchProjectInput,
