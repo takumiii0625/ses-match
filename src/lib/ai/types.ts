@@ -37,6 +37,7 @@ export interface ProposalInput {
   talentName: string;
   talentSkills: string[];
   talentRate?: string;
+  talentSummary?: string; // スキルシートのサマリ文（あれば提案文の根拠に使う）
   projectTitle: string;
   projectClient?: string;
   matchReasons?: string[];

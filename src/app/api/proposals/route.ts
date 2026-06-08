@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
         talentName: talent.name,
         talentSkills: talent.mainSkills.length > 0 ? talent.mainSkills : talent.skills,
         talentRate: formatRate(talent.desiredRateMin, talent.desiredRateMax),
+        talentSummary: talent.summaryText ?? undefined,
         projectTitle: project.title,
         projectClient: project.clientName ?? undefined,
         matchReasons: reasons,

@@ -44,6 +44,7 @@ interface Talent {
   emailSubject?: string | null;
   emailBody?: string | null;
   sourceEmail?: string | null;
+  summaryText?: string | null;
   attachments: Attachment[];
 }
 

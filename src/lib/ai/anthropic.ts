@@ -302,6 +302,7 @@ export class AnthropicAIService implements AIService {
       input.matchReasons?.length
         ? `マッチング根拠:\n${input.matchReasons.map((r) => `- ${r}`).join("\n")}`
         : "",
+      input.talentSummary ? `人材サマリ:\n${input.talentSummary}` : "",
     ].filter(Boolean);
 
     const res = await this.client.messages.create({

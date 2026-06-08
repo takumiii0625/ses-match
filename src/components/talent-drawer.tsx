@@ -45,6 +45,7 @@ export interface TalentDrawerData {
   emailTo?: string | null;
   sourceEmail?: string | null;
   receivedDate?: Date | string | null;
+  summaryText?: string | null;
   attachments: { id: string; filename: string; url: string }[];
 }
 
@@ -230,6 +231,13 @@ export function TalentDrawer({
               <Row label="備考情報">
                 <span className="whitespace-pre-wrap">{talent.note || "-"}</span>
               </Row>
+              {talent.summaryText && (
+                <Row label="スキルシート（サマリ文）">
+                  <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 font-mono text-xs leading-relaxed text-slate-700">
+                    {talent.summaryText}
+                  </pre>
+                </Row>
+              )}
             </div>
           )}
         </div>
