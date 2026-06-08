@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 
 // No auth yet (MVP). The app is single-tenant in practice: we resolve the
@@ -5,7 +6,10 @@ import { prisma } from "@/lib/prisma";
 // default organization so the app works without a manual seed (e.g. in
 // production). Swap this for a real session lookup (Auth0/Clerk) when auth is
 // added — every caller goes through here.
-export async function getCurrentOrg() {
+//
+// cache() でリクエスト内デデュープ: レイアウトと各ページから複数回呼ばれても、
+// 1リクエストにつきDB問い合わせは1回で済む（リクエストをまたぐキャッシュではない）。
+export const getCurrentOrg = cache(async () => {
   const existing = await prisma.organization.findFirst({
     orderBy: { createdAt: "asc" },
   });
@@ -17,7 +21,7 @@ export async function getCurrentOrg() {
       slug: "default",
     },
   });
-}
+});
 
 export async function getOrgUsers(orgId: string) {
   return prisma.user.findMany({
