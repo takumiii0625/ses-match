@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
-import { formatRate } from "@/lib/utils";
+import { formatRate, daysAgo } from "@/lib/utils";
 import { REMOTE_LABELS, TALENT_STATUS_LABELS } from "@/lib/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -123,6 +123,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
           {(project.rateMin != null || project.rateMax != null) && (
             <span className="text-muted">単価: {formatRate(project.rateMin, project.rateMax)}</span>
           )}
+          <span className="text-muted">配信: {daysAgo(project.receivedDate)}</span>
           {project.remotePreference && (
             <Badge tone="blue">
               {REMOTE_LABELS[project.remotePreference] ?? project.remotePreference}
@@ -186,6 +187,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
                         <span>{REMOTE_LABELS[talent.remotePreference] ?? talent.remotePreference}</span>
                       )}
                       {talent.nearestStation && <span>最寄: {talent.nearestStation}</span>}
+                      <span>配信: {daysAgo(talent.receivedDate)}</span>
                     </div>
 
                     {(talent.mainSkills.length > 0 || talent.skills.length > 0) && (

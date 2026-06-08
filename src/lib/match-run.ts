@@ -10,6 +10,14 @@ export const MIN_SCORE = 50;
 // 1案件あたりLLMに渡す候補の上限（事前フィルタ後の上位N件）。
 const SHORTLIST_LIMIT = 30;
 
+// マッチ対象にする配信日の範囲（日数）。これより古い案件・人材はマッチしない。
+export const MATCH_WINDOW_DAYS = 7;
+
+/** マッチ対象とする配信日の下限（今からこの日数前まで）。 */
+function windowStart(): Date {
+  return new Date(Date.now() - MATCH_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+}
+
 export interface MatchRunResult {
   projects: number;
   talents: number;
@@ -107,11 +115,16 @@ async function rankAndSave(
  * 各案件につきLLM呼び出しは最大1回（候補はまとめて1リクエストで判定）。
  */
 export async function runMatchingForOrg(orgId: string): Promise<MatchRunResult> {
+  const since = windowStart();
   const [projects, talents, systemPrompt] = await Promise.all([
-    prisma.project.findMany({ where: { orgId } }),
-    prisma.talent.findMany({ where: { orgId } }),
+    prisma.project.findMany({ where: { orgId, receivedDate: { gte: since } } }),
+    prisma.talent.findMany({ where: { orgId, receivedDate: { gte: since } } }),
     resolveMatchPrompt(orgId),
   ]);
+
+  // クリーン再生成: 既存マッチを全削除してから入れ直す。
+  // → 点数が下がった/無効になった古いマッチや、1週間より古い案件・人材のマッチが残らない。
+  await prisma.match.deleteMany({ where: { project: { orgId } } });
 
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
@@ -166,9 +179,10 @@ export async function runMatchingForNew(
     };
   }
 
+  const since = windowStart();
   const [projects, talents, systemPrompt] = await Promise.all([
-    prisma.project.findMany({ where: { orgId } }),
-    prisma.talent.findMany({ where: { orgId } }),
+    prisma.project.findMany({ where: { orgId, receivedDate: { gte: since } } }),
+    prisma.talent.findMany({ where: { orgId, receivedDate: { gte: since } } }),
     resolveMatchPrompt(orgId),
   ]);
 

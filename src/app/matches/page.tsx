@@ -31,6 +31,7 @@ export default async function MatchesPage() {
       desiredRateMin: m.talent.desiredRateMin,
       desiredRateMax: m.talent.desiredRateMax,
       remotePreference: m.talent.remotePreference,
+      receivedDate: m.talent.receivedDate ? m.talent.receivedDate.toISOString() : null,
     },
     project: {
       id: m.project.id,
@@ -39,6 +40,7 @@ export default async function MatchesPage() {
       rateMin: m.project.rateMin,
       rateMax: m.project.rateMax,
       requiredSkills: m.project.requiredSkills,
+      receivedDate: m.project.receivedDate ? m.project.receivedDate.toISOString() : null,
     },
   }));
 

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { formatRate } from "@/lib/utils";
+import { formatRate, daysAgo } from "@/lib/utils";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { ProposalButton } from "../matching/proposal-button";
 
@@ -24,6 +24,7 @@ export interface MatchVM {
     desiredRateMin: number | null;
     desiredRateMax: number | null;
     remotePreference: string | null;
+    receivedDate: string | null;
   };
   project: {
     id: string;
@@ -32,6 +33,7 @@ export interface MatchVM {
     rateMin: number | null;
     rateMax: number | null;
     requiredSkills: string[];
+    receivedDate: string | null;
   };
 }
 
@@ -191,6 +193,7 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
                       単価: {formatRate(project.rateMin, project.rateMax)}
                     </span>
                   )}
+                  <span className="text-xs text-muted">配信: {daysAgo(project.receivedDate)}</span>
                   <Link
                     href={`/compare?mode=project&projectId=${project.id}`}
                     className="ml-auto inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-border hover:bg-slate-50 hover:text-primary"
@@ -246,6 +249,7 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
                               {REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}
                             </span>
                           )}
+                          <span className="text-xs text-muted">配信: {daysAgo(t.receivedDate)}</span>
                         </div>
 
                         {/* スキル */}

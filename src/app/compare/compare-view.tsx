@@ -7,7 +7,7 @@ import { ChevronDown } from "lucide-react";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
-import { formatRate } from "@/lib/utils";
+import { formatRate, daysAgo } from "@/lib/utils";
 import {
   TALENT_STATUS_LABELS,
   PROJECT_STATUS_LABELS,
@@ -456,6 +456,7 @@ function projectHeader(p: ProjectCardVM, top: boolean) {
             <span className="truncate font-semibold text-slate-800">{p.title}</span>
           </div>
           {p.clientName && <div className="mt-0.5 text-xs text-slate-500">{p.clientName}</div>}
+          <div className="mt-0.5 text-[11px] text-slate-400">配信: {daysAgo(p.receivedDate)}</div>
         </div>
         <Badge tone={scoreTone(p.score)} className="shrink-0 tabular-nums">
           {Math.round(p.score)}点
@@ -504,6 +505,7 @@ function talentHeader(t: TalentCardVM, top: boolean) {
               {t.talentType === "INHOUSE" ? "自社" : t.talentType === "PARTNER" ? "他社" : "-"}
             </Badge>
           </div>
+          <div className="mt-0.5 text-[11px] text-slate-400">配信: {daysAgo(t.receivedDate)}</div>
         </div>
         <Badge tone={scoreTone(t.score)} className="shrink-0 tabular-nums">
           {Math.round(t.score)}点
