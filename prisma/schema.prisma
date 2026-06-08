@@ -160,6 +160,7 @@ model Talent {
   emailTo      String? // Toヘッダ（表示用）
   sourceEmail  String? // 送信元メールアドレス（同一企業判定用）
   note         String?
+  summaryText  String? // スキルシートのサマリ文（提案用テンプレ形式）
   receivedDate DateTime @default(now()) // 配信日
 
   createdAt DateTime @default(now())

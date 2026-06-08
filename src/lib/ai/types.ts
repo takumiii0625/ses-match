@@ -28,6 +28,11 @@ export interface ParsedProject {
   supportFee?: boolean; // 支援費で商流を飛ばせる旨の記載があるか
 }
 
+/** スキルシート解析の結果: 構造化情報 ＋ 提案用サマリ文。 */
+export interface ParsedSkillSheet extends ParsedTalent {
+  summary: string;
+}
+
 export interface ProposalInput {
   talentName: string;
   talentSkills: string[];
@@ -117,6 +122,13 @@ export interface AIService {
   ): Promise<ParsedProject>;
   /** マッチング結果 → 提案メール文面（systemPrompt で上書き可） */
   generateProposal(input: ProposalInput, systemPrompt?: string): Promise<string>;
+  /** 履歴書/スキルシート（テキスト＋添付）→ 提案用サマリ文＋構造化情報 */
+  parseSkillSheet(
+    rawText: string,
+    attachments?: EmailAttachment[],
+  ): Promise<ParsedSkillSheet>;
+  /** 既存サマリ文を推敲（情報は足さず体裁のみ改善） */
+  improveSkillSheet(currentText: string): Promise<string>;
   /** 案件＋候補人材リスト → LLMによるマッチ判定（高い順） */
   rankCandidates(
     project: MatchProjectInput,

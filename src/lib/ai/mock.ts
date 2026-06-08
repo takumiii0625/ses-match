@@ -8,6 +8,7 @@ import type {
   MatchCandidateInput,
   RankedCandidate,
   MatchRecommendation,
+  ParsedSkillSheet,
 } from "./types";
 import { expandSkills } from "@/lib/matching";
 
@@ -113,6 +114,36 @@ export class MockAIService implements AIService {
         rawEmail.match(/(?:商流|エンド直|プロパー)[^\n。、]{0,20}/)?.[0]?.trim() ?? undefined,
       supportFee: /支援費|営業支援費|中抜き/.test(rawEmail),
     };
+  }
+
+  async parseSkillSheet(rawText: string): Promise<ParsedSkillSheet> {
+    const t = await this.parseTalentEmail(rawText);
+    const initial = (t.name ?? "").trim().slice(0, 1) || "〇";
+    const summary = [
+      `【ID】 ${initial}.`,
+      `【年齢】 ${t.age ?? "-"}歳`,
+      `【性別】 -`,
+      `【所属】 -`,
+      `【住まい】 ${t.nearestStation ?? "-"}`,
+      `【稼働形態】 ${t.remotePreference ?? "-"}`,
+      `【稼働開始日】 ${t.availabilityText ?? "-"}`,
+      `【経験年数】 -`,
+      `【希望単価(税抜)】 ${t.desiredRateMin ?? "-"}万（税抜）`,
+      `【経験スキル】`,
+      `・言語/FW: ${(t.skills ?? []).join("、") || "-"}`,
+      `【経歴要約】 ${(t.note ?? "").slice(0, 120) || "-"}`,
+    ].join("\n");
+    return { ...t, summary };
+  }
+
+  async improveSkillSheet(currentText: string): Promise<string> {
+    // モックは整形のみ（前後空白の除去・連続空行の圧縮）。
+    return currentText
+      .split("\n")
+      .map((l) => l.replace(/\s+$/u, ""))
+      .join("\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   }
 
   async generateProposal(input: ProposalInput): Promise<string> {

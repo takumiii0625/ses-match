@@ -9,6 +9,7 @@ import type {
   MatchProjectInput,
   MatchCandidateInput,
   RankedCandidate,
+  ParsedSkillSheet,
 } from "./types";
 import {
   DEFAULT_MATCH_PROMPT,
@@ -16,6 +17,8 @@ import {
   DEFAULT_TALENT_PROMPT,
   DEFAULT_PROJECT_PROMPT,
   DEFAULT_PROPOSAL_PROMPT,
+  DEFAULT_SKILLSHEET_PROMPT,
+  DEFAULT_SKILLSHEET_IMPROVE_PROMPT,
 } from "./prompts";
 import { createLimiter } from "@/lib/limit";
 
@@ -117,6 +120,17 @@ const PROJECT_SCHEMA = {
     "channelText",
     "supportFee",
   ],
+} as const;
+
+// スキルシート解析: 人材の構造化情報 ＋ サマリ文。
+const SKILLSHEET_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    ...TALENT_SCHEMA.properties,
+    summary: { type: "string" },
+  },
+  required: [...TALENT_SCHEMA.required, "summary"],
 } as const;
 
 const CLASSIFY_SCHEMA = {
@@ -308,6 +322,55 @@ export class AnthropicAIService implements AIService {
       ],
     });
 
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") {
+      throw new Error("AI応答にテキストが含まれていません");
+    }
+    return text.text.trim();
+  }
+
+  async parseSkillSheet(
+    rawText: string,
+    attachments?: EmailAttachment[],
+  ): Promise<ParsedSkillSheet> {
+    const res = await this.client.messages.create({
+      model: MODEL,
+      max_tokens: 3000,
+      system: [
+        {
+          type: "text",
+          text: DEFAULT_SKILLSHEET_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      output_config: {
+        format: {
+          type: "json_schema",
+          schema: SKILLSHEET_SCHEMA as unknown as Record<string, unknown>,
+        },
+      },
+      messages: [{ role: "user", content: this.buildContent(rawText, attachments) }],
+    });
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") {
+      throw new Error("AI応答にテキストが含まれていません");
+    }
+    return denull(JSON.parse(text.text)) as ParsedSkillSheet;
+  }
+
+  async improveSkillSheet(currentText: string): Promise<string> {
+    const res = await this.client.messages.create({
+      model: MODEL,
+      max_tokens: 2000,
+      system: [
+        {
+          type: "text",
+          text: DEFAULT_SKILLSHEET_IMPROVE_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      messages: [{ role: "user", content: currentText }],
+    });
     const text = res.content.find((b) => b.type === "text");
     if (!text || text.type !== "text") {
       throw new Error("AI応答にテキストが含まれていません");

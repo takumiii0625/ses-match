@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { fetchJson } from "@/lib/http";
 import {
   TALENT_STATUS_OPTIONS,
   GENDER_OPTIONS,
@@ -45,6 +46,7 @@ interface TalentInitial {
   tags: string[];
   emailSubject?: string | null;
   note?: string | null;
+  summaryText?: string | null;
 }
 
 interface TalentFormProps {
@@ -97,8 +99,95 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
   const [tags, setTags] = useState(arrToStr(initial?.tags ?? []));
   const [emailSubject, setEmailSubject] = useState(initial?.emailSubject ?? "");
   const [note, setNote] = useState(initial?.note ?? "");
+  const [summaryText, setSummaryText] = useState(initial?.summaryText ?? "");
+
+  // スキルシート（サマリ文）AI処理の状態。
+  const [aiLoading, setAiLoading] = useState<"generate" | "improve" | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploadedName, setUploadedName] = useState<string | null>(null);
 
   const userOptions = users.map((u) => ({ value: u.id, label: u.name }));
+
+  // 構造化結果でフォームを補完（空欄のみ埋め、入力済みは尊重）。
+  function prefill(t: Record<string, unknown>) {
+    const setIfEmpty = (cur: string, v: unknown, set: (s: string) => void) => {
+      if (!cur && v != null && v !== "") set(String(v));
+    };
+    setIfEmpty(name, t.name, setName);
+    setIfEmpty(age, t.age, setAge);
+    setIfEmpty(availabilityText, t.availabilityText, setAvailabilityText);
+    setIfEmpty(desiredRateMin, t.desiredRateMin, setDesiredRateMin);
+    setIfEmpty(desiredRateMax, t.desiredRateMax, setDesiredRateMax);
+    setIfEmpty(remotePreference, t.remotePreference, setRemotePreference);
+    setIfEmpty(nearestStation, t.nearestStation, setNearestStation);
+    setIfEmpty(note, t.note, setNote);
+    if (!mainSkills && Array.isArray(t.mainSkills) && t.mainSkills.length)
+      setMainSkills((t.mainSkills as string[]).join(", "));
+    if (!skills && Array.isArray(t.skills) && t.skills.length)
+      setSkills((t.skills as string[]).join(", "));
+  }
+
+  // ファイル → AI（PDFは添付として、その他はテキストとして送る）。
+  async function readFileForAI(
+    file: File,
+  ): Promise<{ text?: string; attachments?: { filename: string; mediaType: string; dataBase64: string }[] }> {
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    if (isPdf) {
+      const dataBase64 = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
+        r.onerror = () => reject(new Error("ファイル読込に失敗しました"));
+        r.readAsDataURL(file);
+      });
+      return {
+        attachments: [{ filename: file.name, mediaType: "application/pdf", dataBase64 }],
+      };
+    }
+    const text = await file.text();
+    return { text };
+  }
+
+  async function handleFile(file: File) {
+    setAiError(null);
+    setUploadedName(file.name);
+    setAiLoading("generate");
+    try {
+      const payload = await readFileForAI(file);
+      const data = await fetchJson<{ summary?: string; talent?: Record<string, unknown> }>(
+        "/api/talents/skillsheet",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "generate", ...payload }),
+        },
+      );
+      if (data.summary) setSummaryText(data.summary);
+      if (data.talent) prefill(data.talent);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "AI生成に失敗しました");
+    } finally {
+      setAiLoading(null);
+    }
+  }
+
+  async function handleImprove() {
+    if (!summaryText.trim()) return;
+    setAiError(null);
+    setAiLoading("improve");
+    try {
+      const data = await fetchJson<{ summary?: string }>("/api/talents/skillsheet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "improve", text: summaryText }),
+      });
+      if (data.summary) setSummaryText(data.summary);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "AI改善に失敗しました");
+    } finally {
+      setAiLoading(null);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,6 +219,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
       tags: strToArr(tags),
       emailSubject: emailSubject || null,
       note: note || null,
+      summaryText: summaryText || null,
     };
 
     try {
@@ -160,6 +250,81 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
           {error}
         </div>
       )}
+
+      {/* スキルシート / サマリ文記述 */}
+      <div className="rounded-xl border border-border bg-white p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-slate-700 border-b border-border pb-2">
+          スキルシート / サマリ文記述
+        </h2>
+
+        {/* ファイルアップロード */}
+        <div>
+          <Label>ファイルアップロード（任意）</Label>
+          <label
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = e.dataTransfer.files?.[0];
+              if (f) handleFile(f);
+            }}
+            className={`mt-1 flex cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
+              dragOver ? "border-primary bg-blue-50" : "border-border hover:bg-slate-50"
+            }`}
+          >
+            <input
+              type="file"
+              accept=".txt,.pdf,.doc,.docx,.xls,.xlsx"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFile(f);
+              }}
+            />
+            <span className="text-sm font-medium text-slate-600">
+              {aiLoading === "generate"
+                ? "AIで解析中…"
+                : "ファイルを選択またはドラッグ＆ドロップ"}
+            </span>
+            <span className="text-xs text-primary">TXT, PDF, DOC, DOCX, XLS, XLSX</span>
+            {uploadedName && aiLoading !== "generate" && (
+              <span className="text-xs text-slate-400">読込: {uploadedName}</span>
+            )}
+          </label>
+          <p className="mt-1 text-xs text-slate-400">
+            履歴書やスキルシートをアップロードして、AIでサマリテキストを自動生成できます（PDF/テキスト推奨）。
+          </p>
+        </div>
+
+        {/* サマリテキスト */}
+        <div>
+          <div className="mb-1 flex items-center justify-between">
+            <Label htmlFor="summaryText">サマリテキスト</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleImprove}
+              disabled={aiLoading !== null || !summaryText.trim()}
+            >
+              {aiLoading === "improve" ? "AIで作成中…" : "テキストを改善しAIで作成"}
+            </Button>
+          </div>
+          <Textarea
+            id="summaryText"
+            rows={14}
+            placeholder={`【ID】 〇〇〇〇\n【年齢】 〇〇歳\n【性別】 〇性\n【所属】 〇〇〇\n【住まい】 〇〇〇〇駅\n【稼働形態】 〇〇〇〇\n【稼働開始日】 〇〇〇〇\n【経験年数】 〇〇年　週〇日\n【希望単価(税抜)】 〇〇〇万（税抜）\n【経験スキル】\n・言語: 〇〇、〇〇、〇〇\n・FW: 〇〇`}
+            value={summaryText}
+            onChange={(e) => setSummaryText(e.target.value)}
+            className="resize-y font-mono text-xs leading-relaxed"
+          />
+          {aiError && <p className="mt-1 text-xs text-red-600">{aiError}</p>}
+        </div>
+      </div>
 
       {/* Basic info */}
       <div className="rounded-xl border border-border bg-white p-5 space-y-4">

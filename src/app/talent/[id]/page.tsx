@@ -65,6 +65,7 @@ export default async function TalentDetailPage(props: {
           tags: talent.tags,
           emailSubject: talent.emailSubject,
           note: talent.note,
+          summaryText: talent.summaryText,
         }}
       />
     </div>

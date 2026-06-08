@@ -85,6 +85,7 @@ export async function PUT(
         tags: coerceArr(body.tags),
         emailSubject: body.emailSubject ?? null,
         note: body.note ?? null,
+        summaryText: body.summaryText ?? null,
       },
     });
 
