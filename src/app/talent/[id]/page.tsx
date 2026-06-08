@@ -11,12 +11,14 @@ export default async function TalentDetailPage(props: {
 }) {
   const { id } = await props.params;
   const org = await getCurrentOrg();
-  const users = await getOrgUsers(org.id);
-
-  const talent = await prisma.talent.findFirst({
-    where: { id, orgId: org.id },
-    include: { assignee: true, attachments: true },
-  });
+  // users と talent は org.id があれば独立に取れるので並列化。
+  const [users, talent] = await Promise.all([
+    getOrgUsers(org.id),
+    prisma.talent.findFirst({
+      where: { id, orgId: org.id },
+      include: { assignee: true, attachments: true },
+    }),
+  ]);
 
   if (!talent) notFound();
 
