@@ -23,6 +23,8 @@ export default async function MatchesPage() {
     id: m.id,
     score: m.score,
     reasons: m.reasons,
+    proposable: m.proposable,
+    channelNote: m.channelNote,
     talent: {
       id: m.talent.id,
       name: m.talent.name,

@@ -143,6 +143,8 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
             remotePreference: toRemote(p.remotePreference),
             location: p.location ?? null,
             startText: p.startText ?? null,
+            channelText: p.channelText ?? null,
+            supportFee: p.supportFee ?? false,
             emailSubject: mail.subject ?? null,
             emailBody: mail.text || null,
             emailFrom: mail.from ?? null,

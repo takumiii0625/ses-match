@@ -109,6 +109,9 @@ export class MockAIService implements AIService {
       location: locM?.[1]?.trim(),
       startText: extractStart(rawEmail),
       description: rawEmail.slice(0, 600),
+      channelText:
+        rawEmail.match(/(?:商流|エンド直|プロパー)[^\n。、]{0,20}/)?.[0]?.trim() ?? undefined,
+      supportFee: /支援費|営業支援費|中抜き/.test(rawEmail),
     };
   }
 
@@ -163,6 +166,18 @@ export class MockAIService implements AIService {
       else if (required.length) concerns.push("必須スキルの一致なし");
       if (!rateOk) concerns.push("希望単価が案件上限を超過");
 
+      // モックは商流を厳密判定しない。支援費があれば可、エンド直/プロパーのみは不可とする簡易判定。
+      const channel = (project.channelText ?? "").toLowerCase();
+      const strict = /エンド直|プロパー|直のみ/.test(project.channelText ?? "");
+      const channelOk = project.supportFee ? true : !strict;
+      const channelNote = project.supportFee
+        ? "支援費の記載あり（商流可とみなす）"
+        : strict
+          ? `商流制限「${project.channelText}」のため弊社が入ると提案不可`
+          : channel
+            ? `商流「${project.channelText}」要確認`
+            : "商流条件は要確認";
+
       return {
         talentId: c.talentId,
         score,
@@ -172,6 +187,8 @@ export class MockAIService implements AIService {
         reason: hits.length
           ? `必須スキル ${hits.length}/${required.length} 件一致`
           : "必須スキルの一致が見られない",
+        channelOk,
+        channelNote,
       };
     });
     return ranked.sort((a, b) => b.score - a.score);

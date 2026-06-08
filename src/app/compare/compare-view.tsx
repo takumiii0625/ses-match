@@ -65,6 +65,8 @@ export interface ProjectCardVM extends ProjectVM {
   matchId: string;
   score: number;
   reasons: string[];
+  proposable: boolean;
+  channelNote: string | null;
 }
 
 /** 右ペインの人材カード（案件起点）。 */
@@ -72,6 +74,8 @@ export interface TalentCardVM extends TalentVM {
   matchId: string;
   score: number;
   reasons: string[];
+  proposable: boolean;
+  channelNote: string | null;
 }
 
 function fmtDate(iso: string | null): string {
@@ -458,9 +462,12 @@ function projectHeader(p: ProjectCardVM, top: boolean) {
           {p.clientName && <div className="mt-0.5 text-xs text-slate-500">{p.clientName}</div>}
           <div className="mt-0.5 text-[11px] text-slate-400">配信: {daysAgo(p.receivedDate)}</div>
         </div>
-        <Badge tone={scoreTone(p.score)} className="shrink-0 tabular-nums">
-          {Math.round(p.score)}点
-        </Badge>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Badge tone={scoreTone(p.score)} className="tabular-nums">
+            {Math.round(p.score)}点
+          </Badge>
+          {!p.proposable && <Badge tone="red">提案不可</Badge>}
+        </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">
         <div>
@@ -507,9 +514,12 @@ function talentHeader(t: TalentCardVM, top: boolean) {
           </div>
           <div className="mt-0.5 text-[11px] text-slate-400">配信: {daysAgo(t.receivedDate)}</div>
         </div>
-        <Badge tone={scoreTone(t.score)} className="shrink-0 tabular-nums">
-          {Math.round(t.score)}点
-        </Badge>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <Badge tone={scoreTone(t.score)} className="tabular-nums">
+            {Math.round(t.score)}点
+          </Badge>
+          {!t.proposable && <Badge tone="red">提案不可</Badge>}
+        </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">
         <div>

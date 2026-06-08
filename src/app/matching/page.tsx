@@ -169,6 +169,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
                       <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">
                         {Math.round(m.score)}点
                       </Badge>
+                      {!m.proposable && <Badge tone="red">提案不可（商流）</Badge>}
                       {talent.status !== "NONE" && (
                         <Badge tone="slate">
                           {TALENT_STATUS_LABELS[talent.status] ?? talent.status}
@@ -227,6 +228,9 @@ export default async function MatchingPage({ searchParams }: PageProps) {
                           </span>
                         ))}
                       </div>
+                    )}
+                    {!m.proposable && m.channelNote && (
+                      <p className="mt-2 text-xs text-red-600">商流: {m.channelNote}</p>
                     )}
 
                     <div className="mt-3">

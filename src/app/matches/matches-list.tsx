@@ -16,6 +16,8 @@ export interface MatchVM {
   id: string;
   score: number;
   reasons: string[];
+  proposable: boolean;
+  channelNote: string | null;
   talent: {
     id: string;
     name: string;
@@ -239,6 +241,7 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
                           <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">
                             {Math.round(m.score)}点
                           </Badge>
+                          {!m.proposable && <Badge tone="red">提案不可（商流）</Badge>}
                           {(t.desiredRateMin != null || t.desiredRateMax != null) && (
                             <span className="text-xs text-muted">
                               希望単価: {formatRate(t.desiredRateMin, t.desiredRateMax)}
@@ -300,6 +303,9 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
                           <p className="mt-2 text-xs text-slate-400">
                             判定根拠は記録されていません。
                           </p>
+                        )}
+                        {!m.proposable && m.channelNote && (
+                          <p className="mt-2 text-xs text-red-600">商流: {m.channelNote}</p>
                         )}
 
                         {/* アクション: 提案へ進む / 見比べる */}

@@ -101,6 +101,8 @@ const PROJECT_SCHEMA = {
     location: nullableString,
     startText: nullableString,
     description: nullableString,
+    channelText: nullableString,
+    supportFee: { type: "boolean" },
   },
   required: [
     "title",
@@ -112,6 +114,8 @@ const PROJECT_SCHEMA = {
     "location",
     "startText",
     "description",
+    "channelText",
+    "supportFee",
   ],
 } as const;
 
@@ -144,6 +148,8 @@ const MATCH_SCHEMA = {
           strengths: { type: "array", items: { type: "string" } },
           concerns: { type: "array", items: { type: "string" } },
           reason: { type: "string" },
+          channelOk: { type: "boolean" },
+          channelNote: { type: "string" },
         },
         required: [
           "talentId",
@@ -152,6 +158,8 @@ const MATCH_SCHEMA = {
           "strengths",
           "concerns",
           "reason",
+          "channelOk",
+          "channelNote",
         ],
       },
     },
@@ -351,6 +359,8 @@ export class AnthropicAIService implements AIService {
       project.location ? `勤務地/最寄り: ${project.location}` : "",
       project.startText ? `開始時期: ${project.startText}` : "",
       project.description ? `概要: ${project.description}` : "",
+      `商流制限: ${project.channelText ?? "(記載なし)"}`,
+      `支援費(商流を飛ばせる記載): ${project.supportFee ? "あり" : "なし/不明"}`,
     ]
       .filter(Boolean)
       .join("\n");

@@ -38,6 +38,8 @@ function toProjectInput(p: Project): MatchProjectInput {
     location: p.location,
     startText: p.startText,
     description: p.description,
+    channelText: p.channelText,
+    supportFee: p.supportFee,
   };
 }
 
@@ -93,6 +95,8 @@ async function rankAndSave(
       ...r.concerns.map((c) => `懸念: ${c}`),
     ];
     if (reasons.length === 0 && r.reason) reasons.push(r.reason);
+    const proposable = r.channelOk !== false; // 既定は提案可
+    const channelNote = r.channelNote || null;
     await prisma.match.upsert({
       where: {
         talentId_projectId: { talentId: r.talentId, projectId: project.id },
@@ -102,8 +106,10 @@ async function rankAndSave(
         projectId: project.id,
         score: r.score,
         reasons,
+        proposable,
+        channelNote,
       },
-      update: { score: r.score, reasons },
+      update: { score: r.score, reasons, proposable, channelNote },
     });
     saved++;
   }

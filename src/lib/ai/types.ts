@@ -24,6 +24,8 @@ export interface ParsedProject {
   location?: string;
   startText?: string;
   description?: string;
+  channelText?: string; // 商流制限の原文/要約
+  supportFee?: boolean; // 支援費で商流を飛ばせる旨の記載があるか
 }
 
 export interface ProposalInput {
@@ -64,6 +66,8 @@ export interface MatchProjectInput {
   location?: string | null;
   startText?: string | null;
   description?: string | null;
+  channelText?: string | null; // 商流制限
+  supportFee?: boolean | null; // 支援費で商流を飛ばせる旨の記載
 }
 
 /** Minimal candidate shape passed to the matcher. */
@@ -88,6 +92,8 @@ export interface RankedCandidate {
   strengths: string[];
   concerns: string[];
   reason: string;
+  channelOk: boolean; // 商流的に提案可能か（弊社が入ると+1。支援費があれば飛ばせる）
+  channelNote: string; // 商流判定の理由（提案不可ならその根拠）
 }
 
 export interface AIService {

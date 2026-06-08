@@ -204,6 +204,10 @@ model Project {
   assigneeId String?
   description String?
 
+  // 商流（提案可否の判定材料）
+  channelText String? // 商流制限の原文/要約（例: "プロパー〜1社先まで" "エンド直のみ"）
+  supportFee  Boolean @default(false) // 支援費で商流を飛ばせる旨の記載があるか
+
   requiredSkills String[] @default([])
   tags           String[] @default([])
 
@@ -233,12 +237,14 @@ model Project {
 // ---------- Matching ----------
 
 model Match {
-  id        String   @id @default(cuid())
-  talentId  String
-  projectId String
-  score     Float    @default(0)
-  reasons   String[] @default([])
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  talentId    String
+  projectId   String
+  score       Float    @default(0)
+  reasons     String[] @default([])
+  proposable  Boolean  @default(true) // 商流的に提案可能か（false=商流オーバー等で提案不可）
+  channelNote String? // 商流判定の理由（提案不可の根拠など）
+  createdAt   DateTime @default(now())
 
   talent  Talent  @relation(fields: [talentId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
