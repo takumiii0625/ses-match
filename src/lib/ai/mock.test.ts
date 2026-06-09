@@ -54,6 +54,23 @@ describe("MockAIService.rankCandidates — スコアリング", () => {
   });
 });
 
+describe("MockAIService.parseTalentEmail — 所属/性別の抽出", () => {
+  it("【所属】（全角空白あり）から所属を抽出", async () => {
+    const t = await ai.parseTalentEmail("【 所属 】 一社先フリーランス\n年齢 32歳");
+    expect(t.affiliation).toBe("一社先フリーランス");
+  });
+
+  it("【商流】ラベルからも所属として抽出", async () => {
+    const t = await ai.parseTalentEmail("【商流】自社所属フリーランス");
+    expect(t.affiliation).toBe("自社所属フリーランス");
+  });
+
+  it("性別を MALE/FEMALE に変換", async () => {
+    expect((await ai.parseTalentEmail("【性別】男性")).gender).toBe("MALE");
+    expect((await ai.parseTalentEmail("性別: 女")).gender).toBe("FEMALE");
+  });
+});
+
 describe("MockAIService.parseSkillSheet / improveSkillSheet", () => {
   it("サマリ文をテンプレ形式で生成し、構造化スキルも返す", async () => {
     const res = await ai.parseSkillSheet(

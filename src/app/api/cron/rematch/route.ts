@@ -39,6 +39,9 @@ async function handle(req: Request) {
     const limit = limitRaw ? Number(limitRaw) : undefined;
     const scope = url.searchParams.get("scope") === "inhouse" ? "inhouse" : "all";
     const result = await runMatchingForOrg(org.id, { offset, limit, scope });
+    console.log(
+      `[rematch] scope=${scope} offset=${offset} processed=${result.processed}/${result.totalProjects} saved=${result.saved} errors=${result.errors} done=${result.done}`,
+    );
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

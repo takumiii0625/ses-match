@@ -7,7 +7,7 @@ import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
 export const MIN_SCORE = 70;
 
-// 案件・他社人材は「直近1週間の配信」に限定するが、自社保有人材(INHOUSE)は
+// 案件・他社人材は「直近3日の配信」に限定するが、自社保有人材(INHOUSE)は
 // 常に対象（保有ロスターなので配信日に関係なく提案候補にする）。
 const talentWindowWhere = (orgId: string, since: Date) => ({
   orgId,
@@ -18,7 +18,7 @@ const talentWindowWhere = (orgId: string, since: Date) => ({
 const SHORTLIST_LIMIT = 30;
 
 // マッチ対象にする配信日の範囲（日数）。これより古い案件・人材はマッチしない。
-export const MATCH_WINDOW_DAYS = 7;
+export const MATCH_WINDOW_DAYS = 3;
 
 /** マッチ対象とする配信日の下限（今からこの日数前まで）。 */
 function windowStart(): Date {
@@ -135,7 +135,7 @@ async function rankAndSave(
 }
 
 export interface RematchPageResult {
-  totalProjects: number; // 対象案件の総数（1週間以内）
+  totalProjects: number; // 対象案件の総数（直近3日以内）
   processed: number; // ここまでに処理した案件数（= 次回 offset）
   done: boolean; // 全件処理が完了したか
   talents: number;

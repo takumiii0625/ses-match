@@ -27,9 +27,9 @@ import { createLimiter } from "@/lib/limit";
 // - Prompt caching on the (stable) system prompt
 // Selected when AI_PROVIDER=anthropic and ANTHROPIC_API_KEY is set (see ./index.ts).
 
-// コスト最優先で最も安い Haiku をデフォルトに。必要なら ANTHROPIC_MODEL で上書き
-// （claude-sonnet-4-6 / claude-opus-4-8 など）。
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5";
+// 精度最優先で最上位の Opus 4.8 をデフォルトに。コスト優先なら ANTHROPIC_MODEL で
+// claude-haiku-4-5 / claude-sonnet-4-6 などに上書き可。
+const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 
 // マッチ判定の1リクエストあたり候補数。小さいほど1回の出力が短く、件数が多くても
 // max_tokens で打ち切られない。バッチは並列・独立なので1つ失敗しても他は残る。
