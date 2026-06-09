@@ -1,7 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { getAI } from "@/lib/ai";
-import { fetchEmails, fetchEmailsPage, type FetchedEmail } from "./gmail";
+import {
+  fetchEmails,
+  fetchEmailById,
+  listMessageIds,
+  type FetchedEmail,
+} from "./gmail";
 import { companyDomain } from "@/lib/matching";
 import { runMatchingForNew } from "@/lib/match-run";
 import type { RemotePreference } from "@prisma/client";
@@ -255,8 +260,10 @@ export interface IngestPageResult extends IngestRunResult {
 
 /**
  * ページ単位の取り込み（タイムアウト回避）。pageToken で続きを辿る。
- * 1ページ分だけ処理し、最新→古い順に進む。ページ全件が既取込（skipped）なら、
- * それ以前は処理済みとみなして done=true（追いついた）にする。
+ * まず Gmail のメッセージID一覧だけ取得し、既取込(gmailId)を事前除外。新規だけ本文を
+ * 取得して分類・登録する。重複はDB照会のみで安いので、全ページを辿っても速い
+ * （= 過去にタイムアウトで未取込のまま残った古いメールも取りこぼさない）。
+ * done は「次ページ無し」のみ。
  */
 export async function runMailIngestPage(
   pageSize = 12,
@@ -264,10 +271,32 @@ export async function runMailIngestPage(
 ): Promise<IngestPageResult> {
   const org = await getCurrentOrg();
   const ai = getAI();
-  const { emails, nextPageToken } = await fetchEmailsPage(pageSize, pageToken);
+  const { ids, nextPageToken } = await listMessageIds(pageSize, pageToken);
+
+  // gmailId で既取込を事前除外（本文取得・LLM不要で重複ページを安く飛ばす）。
+  const known = ids.length
+    ? await prisma.ingestedEmail.findMany({
+        where: { orgId: org.id, gmailId: { in: ids } },
+        select: { gmailId: true },
+      })
+    : [];
+  const knownSet = new Set(known.map((k) => k.gmailId));
+  const newIds = ids.filter((id) => !knownSet.has(id));
+
+  // 新規だけ本文を取得。
+  const emails: FetchedEmail[] = [];
+  for (const id of newIds) {
+    const m = await fetchEmailById(id);
+    if (m) emails.push(m);
+  }
+
   const { result, newTalentIds, newProjectIds } = await ingestEmails(emails, org, ai);
   await attachMatches(result, org, newTalentIds, newProjectIds);
-  // 取得ゼロ or 次ページ無し or このページが全件既取込 → 完了。
-  const caughtUp = emails.length > 0 && result.skipped === emails.length;
-  return { ...result, nextPageToken, done: emails.length === 0 || !nextPageToken || caughtUp };
+
+  // 表示用集計を1ページ全体に補正（gmailId事前除外分も重複に含める）。
+  const gmailDup = ids.length - newIds.length;
+  result.fetched = ids.length;
+  result.skipped += gmailDup;
+
+  return { ...result, nextPageToken, done: !nextPageToken };
 }

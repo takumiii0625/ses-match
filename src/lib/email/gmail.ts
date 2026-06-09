@@ -156,19 +156,20 @@ export async function fetchEmails(limit = 20): Promise<FetchedEmail[]> {
   return out;
 }
 
-export interface FetchedEmailPage {
-  emails: FetchedEmail[];
+export interface MessageIdPage {
+  ids: string[]; // Gmail message id（本文未取得・軽い）
   nextPageToken: string | null;
 }
 
 /**
- * ページ単位でメールを取得（pageToken で続きを辿れる）。
- * 1リクエストの処理時間を短く保ち、取り込みのタイムアウトを防ぐために使う。
+ * ページ単位で Gmail メッセージID一覧だけを取得（本文は取らないので軽い）。
+ * 既取込は ID で事前に除外し、新規だけ fetchEmailById で本文取得することで、
+ * 重複ページを安く飛ばしつつ全ページを辿れる（タイムアウト回避）。
  */
-export async function fetchEmailsPage(
+export async function listMessageIds(
   pageSize = 12,
   pageToken?: string,
-): Promise<FetchedEmailPage> {
+): Promise<MessageIdPage> {
   const gmail = await authedGmail();
   const list = await gmail.users.messages.list({
     userId: "me",
@@ -177,12 +178,7 @@ export async function fetchEmailsPage(
     pageToken: pageToken || undefined,
   });
   const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
-
-  const emails: FetchedEmail[] = [];
-  for (const id of ids) {
-    emails.push(await parseMessage(gmail, id));
-  }
-  return { emails, nextPageToken: list.data.nextPageToken ?? null };
+  return { ids, nextPageToken: list.data.nextPageToken ?? null };
 }
 
 /** Fetch + parse a single message by its Gmail id (for backfill). */

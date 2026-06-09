@@ -2,12 +2,13 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // 依存をモック（Gmail・DB・LLM・マッチ不要でページング制御を検証）。
 const db = vi.hoisted(() => ({
-  ingestedEmail: { findUnique: vi.fn(), create: vi.fn() },
+  ingestedEmail: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
   talent: { create: vi.fn() },
   project: { create: vi.fn() },
 }));
-const { fetchPage, classify, matchNew } = vi.hoisted(() => ({
-  fetchPage: vi.fn(),
+const { listIds, fetchById, classify, matchNew } = vi.hoisted(() => ({
+  listIds: vi.fn(),
+  fetchById: vi.fn(),
   classify: vi.fn(),
   matchNew: vi.fn(),
 }));
@@ -18,7 +19,11 @@ vi.mock("@/lib/current-org", () => ({
 }));
 vi.mock("@/lib/ai", () => ({ getAI: () => ({ classifyEmail: classify }) }));
 vi.mock("@/lib/match-run", () => ({ runMatchingForNew: matchNew }));
-vi.mock("./gmail", () => ({ fetchEmailsPage: fetchPage, fetchEmails: vi.fn() }));
+vi.mock("./gmail", () => ({
+  listMessageIds: listIds,
+  fetchEmailById: fetchById,
+  fetchEmails: vi.fn(),
+}));
 
 import { runMailIngestPage } from "./ingest-pipeline";
 
@@ -29,43 +34,50 @@ function mail(id: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   db.ingestedEmail.create.mockResolvedValue({});
+  db.ingestedEmail.findUnique.mockResolvedValue(null); // messageId 重複は無し（既取込は gmailId で事前除外）
+  db.ingestedEmail.findMany.mockResolvedValue([]);
   matchNew.mockResolvedValue({ pairs: 0, saved: 0 });
   classify.mockResolvedValue({ kind: "IGNORE", reason: "対象外" });
+  fetchById.mockImplementation(async (id: string) => mail(id));
 });
 
-describe("runMailIngestPage — ページング制御", () => {
-  it("ページ全件が既取込(skip)なら done=true（追いついた）", async () => {
-    fetchPage.mockResolvedValue({ emails: [mail("a"), mail("b")], nextPageToken: "tok" });
-    db.ingestedEmail.findUnique.mockResolvedValue({ id: "x" }); // 全て既取込
+describe("runMailIngestPage — ページング制御（ID事前除外）", () => {
+  it("既取込(gmailId)は本文取得せず重複として集計、新規だけ fetch", async () => {
+    listIds.mockResolvedValue({ ids: ["a", "b", "c"], nextPageToken: "tok" });
+    db.ingestedEmail.findMany.mockResolvedValue([{ gmailId: "a" }, { gmailId: "b" }]);
 
     const res = await runMailIngestPage(10);
+
+    expect(fetchById).toHaveBeenCalledTimes(1); // 新規 c のみ本文取得
+    expect(fetchById).toHaveBeenCalledWith("c");
+    expect(res.fetched).toBe(3);
     expect(res.skipped).toBe(2);
-    expect(res.done).toBe(true); // nextPageToken があっても追いつき扱い
   });
 
-  it("新規があり次ページもあれば done=false・nextPageToken を返す", async () => {
-    fetchPage.mockResolvedValue({ emails: [mail("a"), mail("b")], nextPageToken: "tok2" });
-    db.ingestedEmail.findUnique.mockResolvedValue(null); // 全て新規（IGNOREで登録）
+  it("全件重複でも次ページがあれば done=false（古い未取込に到達するため辿り続ける）", async () => {
+    listIds.mockResolvedValue({ ids: ["a", "b"], nextPageToken: "tok" });
+    db.ingestedEmail.findMany.mockResolvedValue([{ gmailId: "a" }, { gmailId: "b" }]);
 
     const res = await runMailIngestPage(10);
-    expect(res.skipped).toBe(0);
-    expect(res.ignored).toBe(2);
-    expect(res.done).toBe(false);
-    expect(res.nextPageToken).toBe("tok2");
+
+    expect(fetchById).not.toHaveBeenCalled();
+    expect(res.skipped).toBe(2);
+    expect(res.done).toBe(false); // ← 旧実装はここで止まっていた
+    expect(res.nextPageToken).toBe("tok");
   });
 
   it("次ページが無ければ done=true", async () => {
-    fetchPage.mockResolvedValue({ emails: [mail("a")], nextPageToken: null });
-    db.ingestedEmail.findUnique.mockResolvedValue(null);
-
+    listIds.mockResolvedValue({ ids: ["a"], nextPageToken: null });
     const res = await runMailIngestPage(10);
     expect(res.done).toBe(true);
+    expect(res.ignored).toBe(1);
   });
 
-  it("取得ゼロなら done=true", async () => {
-    fetchPage.mockResolvedValue({ emails: [], nextPageToken: null });
+  it("取得ゼロなら done=true・DB照会もしない", async () => {
+    listIds.mockResolvedValue({ ids: [], nextPageToken: null });
     const res = await runMailIngestPage(10);
     expect(res.fetched).toBe(0);
     expect(res.done).toBe(true);
+    expect(db.ingestedEmail.findMany).not.toHaveBeenCalled();
   });
 });
