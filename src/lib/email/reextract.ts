@@ -3,7 +3,9 @@ import { getCurrentOrg } from "@/lib/current-org";
 import { getAI } from "@/lib/ai";
 
 export interface ReextractResult {
-  scanned: number;
+  total: number; // 本文ありの人材総数
+  processed: number; // ここまで処理した件数（= 次回 offset）
+  done: boolean;
   updated: number;
   skipped: number;
   errors: number;
@@ -12,28 +14,39 @@ export interface ReextractResult {
 const GENDERS = new Set(["MALE", "FEMALE", "OTHER"]);
 
 /**
- * 既存の人材（メール本文あり・所属/性別が未設定）について、保存済み本文を
- * AIで再解析し、所属(affiliation)・性別(gender)を埋める。
- * 抽出機能を追加する前に取り込んだデータの後追い補完用。
- * 既に入っている項目は上書きしない（未設定のみ補完）。limit 件ずつ処理。
+ * 既存の人材（メール本文あり）を offset/limit で分割しながらAI再解析し、
+ * 未設定の所属(affiliation)・性別(gender)を補完する。
+ * 安定した順序（作成日昇順）で全件を一度ずつ処理するので、繰り返し呼べば全件完了する。
+ * 既に入っている項目は上書きしない。
  */
-export async function reextractTalentFields(limit = 50): Promise<ReextractResult> {
+export async function reextractTalentFields(
+  offset = 0,
+  limit = 8,
+): Promise<ReextractResult> {
   const org = await getCurrentOrg();
   const ai = getAI();
-  const result: ReextractResult = { scanned: 0, updated: 0, skipped: 0, errors: 0 };
 
-  const talents = await prisma.talent.findMany({
-    where: {
-      orgId: org.id,
-      emailBody: { not: null },
-      OR: [{ affiliation: null }, { gender: null }],
-    },
-    orderBy: { createdAt: "desc" },
-    take: limit,
+  const total = await prisma.talent.count({
+    where: { orgId: org.id, emailBody: { not: null } },
   });
 
+  const talents = await prisma.talent.findMany({
+    where: { orgId: org.id, emailBody: { not: null } },
+    orderBy: { createdAt: "asc" },
+    skip: Math.max(0, offset),
+    take: limit > 0 ? limit : 8,
+  });
+
+  let updated = 0;
+  let skipped = 0;
+  let errors = 0;
+
   for (const t of talents) {
-    result.scanned++;
+    // 両方とも入っていれば再解析不要。
+    if (t.affiliation != null && t.gender != null) {
+      skipped++;
+      continue;
+    }
     try {
       const raw = `件名: ${t.emailSubject ?? ""}\n差出人: ${t.emailFrom ?? ""}\n\n${t.emailBody ?? ""}`;
       const p = await ai.parseTalentEmail(raw, undefined, org.talentPrompt ?? undefined);
@@ -45,16 +58,24 @@ export async function reextractTalentFields(limit = 50): Promise<ReextractResult
       }
 
       if (Object.keys(data).length === 0) {
-        result.skipped++;
+        skipped++;
         continue;
       }
       await prisma.talent.update({ where: { id: t.id }, data });
-      result.updated++;
+      updated++;
     } catch (e) {
-      result.errors++;
+      errors++;
       console.error(`[reextract] talent ${t.id} 再抽出失敗:`, e);
     }
   }
 
-  return result;
+  const processed = Math.min(offset + talents.length, total);
+  return {
+    total,
+    processed,
+    done: processed >= total,
+    updated,
+    skipped,
+    errors,
+  };
 }

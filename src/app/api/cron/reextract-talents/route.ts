@@ -30,8 +30,10 @@ async function handle(req: Request) {
   }
   try {
     const url = new URL(req.url);
-    const limit = Number(url.searchParams.get("limit") ?? "50");
-    const result = await reextractTalentFields(Number.isFinite(limit) ? limit : 50);
+    const offset = Number(url.searchParams.get("offset") ?? "0") || 0;
+    const limitRaw = url.searchParams.get("limit");
+    const limit = limitRaw ? Number(limitRaw) : 8;
+    const result = await reextractTalentFields(offset, Number.isFinite(limit) ? limit : 8);
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

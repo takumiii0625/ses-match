@@ -9,9 +9,14 @@ jobs:
   reextract:
     runs-on: ubuntu-latest
     steps:
-      - name: 再抽出を実行
+      - name: 再抽出を実行（完了まで分割ループ）
         run: |
-          curl -fsS --max-time 300 -X POST \
-            "https://sesmatch.encore-biz.com/api/cron/reextract-talents?limit=200" \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            -w "\nHTTP %{http_code}\n"
+          offset=0
+          for i in $(seq 1 200); do
+            resp=$(curl -fsS --max-time 300 -X POST \
+              "https://sesmatch.encore-biz.com/api/cron/reextract-talents?offset=$offset&limit=10" \
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+            echo "$resp"
+            echo "$resp" | grep -q '"done":true' && { echo "完了"; break; }
+            offset=$(echo "$resp" | grep -o '"processed":[0-9]*' | grep -o '[0-9]*')
+          done

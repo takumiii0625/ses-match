@@ -8,7 +8,15 @@ export async function fetchJson<T = unknown>(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(input, init);
+  let res: Response;
+  try {
+    res = await fetch(input, init);
+  } catch {
+    // fetch自体が失敗（接続断・タイムアウトで応答前に切断など）。
+    throw new Error(
+      "通信に失敗しました（接続が切れたか、処理が長すぎる可能性があります）。",
+    );
+  }
   const raw = await res.text();
 
   let data: unknown = null;
