@@ -9,8 +9,8 @@ import { Select } from "@/components/ui/select";
 import { formatRate, daysAgo } from "@/lib/utils";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { channelStatus } from "@/lib/channel";
-import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { ProposalButton } from "../../matching/proposal-button";
+import { groupByTalent } from "./group";
 import type { MatchVM } from "../matches-list";
 
 const SCORE_OPTIONS = [
@@ -69,43 +69,8 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
     });
   }, [matches, query, minScore, channel]);
 
-  // 自社人材ごとにグループ化（人材は氏名+主要スキルで名寄せ、案件は名寄せして最高スコアを代表）。
-  const groups = useMemo(() => {
-    const rep = new Map<string, { talent: MatchVM["talent"]; ms: number }>();
-    for (const m of filtered) {
-      const k = talentDedupeKey(m.talent.name, m.talent.mainSkills);
-      const ms = m.talent.receivedDate ? Date.parse(m.talent.receivedDate) : 0;
-      const cur = rep.get(k);
-      if (!cur || ms > cur.ms) rep.set(k, { talent: m.talent, ms });
-    }
-    const byKey = new Map<
-      string,
-      { talent: MatchVM["talent"]; projects: Map<string, { m: MatchVM; dupes: number }> }
-    >();
-    for (const m of filtered) {
-      const tk = talentDedupeKey(m.talent.name, m.talent.mainSkills);
-      let g = byKey.get(tk);
-      if (!g) {
-        g = { talent: rep.get(tk)!.talent, projects: new Map() };
-        byKey.set(tk, g);
-      }
-      const pk = projectDedupeKey(m.project.title, m.project.clientName);
-      const cur = g.projects.get(pk);
-      if (!cur) g.projects.set(pk, { m, dupes: 1 });
-      else {
-        cur.dupes++;
-        if (m.score > cur.m.score) cur.m = m; // 同一案件は最高スコアを代表に
-      }
-    }
-    return [...byKey.values()]
-      .map((g) => ({
-        talent: g.talent,
-        rows: [...g.projects.values()]
-          .map((x) => ({ m: x.m, dupes: x.dupes }))
-          .sort((a, b) => b.m.score - a.m.score),
-      }))
-      .sort((a, b) => (b.rows[0]?.m.score ?? 0) - (a.rows[0]?.m.score ?? 0));
-  }, [filtered]);
+  // 自社人材ごとにグループ化（ロジックは ./group の純関数に切り出し・テスト済み）。
+  const groups = useMemo(() => groupByTalent(filtered), [filtered]);
 
   const shownTalents = groups.length;
 
