@@ -113,6 +113,7 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
             remotePreference: toRemote(p.remotePreference),
             availabilityText: p.availabilityText ?? null,
             nearestStation: p.nearestStation ?? null,
+            affiliation: p.affiliation ?? null,
             emailSubject: mail.subject ?? null,
             emailBody: mail.text || null,
             emailFrom: mail.from ?? null,

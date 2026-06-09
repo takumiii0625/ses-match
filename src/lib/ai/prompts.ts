@@ -20,6 +20,7 @@ export const DEFAULT_TALENT_PROMPT = `あなたはSES業界の人材情報を扱
 - skills は本文中の技術キーワード（言語/FW/クラウド/DB等）。mainSkills はそのうち主要な最大3件。
 - availabilityText は稼働開始時期の原文（例「即日or6月〜」）。
 - nearestStation は最寄り駅名のみ。
+- affiliation は所属（商流上の立場）の原文。例「1社先社員」「2社先」「プロパー」「弊社社員」「個人事業主/フリーランス」。記載がなければnull。
 - note は人材の特徴を日本語で1〜2文に要約。
 - 推測で値を捏造しない。不明な項目はnull、配列は空配列にする。`;
 

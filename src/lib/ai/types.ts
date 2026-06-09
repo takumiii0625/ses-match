@@ -11,6 +11,7 @@ export interface ParsedTalent {
   remotePreference?: string;
   availabilityText?: string;
   nearestStation?: string;
+  affiliation?: string; // 所属（商流上の立場。例: "1社先社員" "プロパー" "個人事業主"）
   note?: string;
 }
 

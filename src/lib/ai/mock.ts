@@ -80,6 +80,9 @@ export class MockAIService implements AIService {
     const rate = extractRate(rawEmail);
     const nameM = rawEmail.match(/(?:氏名|名前|お名前)[:：]?\s*([^\s\n、。]+)/);
     const stationM = rawEmail.match(/(?:最寄|最寄り駅)[:：]?\s*([^\s\n、。]+)/);
+    const affM =
+      rawEmail.match(/(?:所属|商流)[:：]?\s*([^\s\n、。]+)/) ??
+      rawEmail.match(/(\d+社先(?:社員)?|プロパー|個人事業主|フリーランス)/);
     return {
       name: nameM?.[1],
       age: extractAge(rawEmail),
@@ -90,6 +93,7 @@ export class MockAIService implements AIService {
       remotePreference: extractRemote(rawEmail),
       availabilityText: extractStart(rawEmail),
       nearestStation: stationM?.[1],
+      affiliation: affM?.[1] ?? affM?.[0],
       note: rawEmail.slice(0, 400),
     };
   }

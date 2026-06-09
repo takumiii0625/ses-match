@@ -75,6 +75,7 @@ const TALENT_SCHEMA = {
     remotePreference: nullableRemote,
     availabilityText: nullableString,
     nearestStation: nullableString,
+    affiliation: nullableString,
     note: nullableString,
   },
   required: [
@@ -87,6 +88,7 @@ const TALENT_SCHEMA = {
     "remotePreference",
     "availabilityText",
     "nearestStation",
+    "affiliation",
     "note",
   ],
 } as const;

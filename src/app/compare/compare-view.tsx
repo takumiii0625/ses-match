@@ -26,6 +26,7 @@ export interface TalentVM {
   talentType: string | null;
   age: number | null;
   gender: string | null;
+  affiliation: string | null;
   desiredRateMin: number | null;
   desiredRateMax: number | null;
   mainSkills: string[];
@@ -147,16 +148,13 @@ function SkillTags({ main, all }: { main: string[]; all: string[] }) {
 }
 
 // ---------- 人材のサマリ・詳細ノード ----------
-function talentSummary(
-  t: TalentVM,
-  channel?: { proposable: boolean; channelNote: string | null },
-) {
-  const cs = channel ? channelStatus(channel.proposable, channel.channelNote) : null;
+function talentSummary(t: TalentVM) {
   return (
     <>
       <GF label="名前">{t.name}</GF>
       <GF label="年齢">{t.age ?? "-"}</GF>
       <GF label="性別">{t.gender ? GENDER_LABELS[t.gender] : "-"}</GF>
+      <GF label="所属">{t.affiliation ?? "-"}</GF>
       <GF label="希望単価">{formatRate(t.desiredRateMin, t.desiredRateMax)}</GF>
       <GF label="リモート">
         {t.remotePreference ? REMOTE_LABELS[t.remotePreference] : "-"}
@@ -171,14 +169,6 @@ function talentSummary(
       <GF label="区分">
         {t.talentType === "INHOUSE" ? "自社" : t.talentType === "PARTNER" ? "他社" : "-"}
       </GF>
-      {channel && (
-        <GF label="商流">
-          {cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : "-"}
-          {channel.channelNote && (
-            <span className="ml-1 text-xs text-slate-500">{channel.channelNote}</span>
-          )}
-        </GF>
-      )}
       <div className="col-span-2 sm:col-span-3">
         <div className="mb-1 text-xs text-slate-400">スキル</div>
         <SkillTags main={t.mainSkills} all={t.skills} />
@@ -675,10 +665,7 @@ function RightPane({
               onToggle={() => toggle(t.id)}
               header={talentHeader(t, i === 0, dupes)}
               detail={{
-                summary: talentSummary(t, {
-                  proposable: t.proposable,
-                  channelNote: t.channelNote,
-                }),
+                summary: talentSummary(t),
                 email: talentEmail(t),
                 detailNode: noteDetail(t.note, "備考情報"),
                 match: { score: t.score, reasons: t.reasons },
