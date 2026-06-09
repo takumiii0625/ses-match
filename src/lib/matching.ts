@@ -195,6 +195,18 @@ export interface PrefilterHit {
  * the LLM to re-rank. This is what makes "Java engineer for a PHP-only project"
  * get dropped instead of matching on a shared "開発" tag.
  */
+// 金額足切りの許容マージン（万円）。交渉余地を考慮し、これ以内の超過は通す。
+const RATE_MARGIN_MAN = 10;
+// スキル/言語の最低カバー率。必須スキルのこの割合以上を満たす候補だけ通す
+// （1スキルのみの案件はそのスキル一致が必須、複数スキルは過半数）。
+const MIN_COVERAGE = 0.5;
+
+/** エンド直/プロパー/直のみ等、弊社が挟まると提案できない厳格商流か。 */
+export function isStrictDirectChannel(channelText: string | null): boolean {
+  if (!channelText) return false;
+  return /エンド直|プロパー|直のみ|直案件/.test(channelText.replace(/\s/g, ""));
+}
+
 export function prefilterCandidates(
   project: Project,
   talents: Talent[],
@@ -204,16 +216,27 @@ export function prefilterCandidates(
 
   const hits: PrefilterHit[] = [];
   for (const talent of talents) {
+    // 金額足切り: 人材の希望下限が案件上限＋マージンを超えるなら予算不一致で除外。
+    if (
+      project.rateMax != null &&
+      talent.desiredRateMin != null &&
+      talent.desiredRateMin > project.rateMax + RATE_MARGIN_MAN
+    ) {
+      continue;
+    }
+
     const owned = expandSkills([...talent.skills, ...talent.mainSkills]);
 
     if (required.length === 0) {
-      // No required skills specified → can't precisely filter; let LLM judge.
+      // 必須スキル未指定 → スキルで絞れないのでLLM判定に委ねる（金額足切りは適用済み）。
       hits.push({ talent, coreHits: 0, coverage: 0 });
       continue;
     }
     const coreHits = required.filter((r) => owned.has(r)).length;
-    if (coreHits >= 1) {
-      hits.push({ talent, coreHits, coverage: coreHits / required.length });
+    const coverage = coreHits / required.length;
+    // 言語/スキルを厳しく: カバー率が閾値未満なら除外。
+    if (coverage >= MIN_COVERAGE) {
+      hits.push({ talent, coreHits, coverage });
     }
   }
 

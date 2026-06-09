@@ -1,11 +1,11 @@
 import type { Project, Talent } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { prefilterCandidates, isSameCompany } from "@/lib/matching";
+import { prefilterCandidates, isSameCompany, isStrictDirectChannel } from "@/lib/matching";
 import { getAI } from "@/lib/ai";
 import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
 
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
-export const MIN_SCORE = 70;
+export const MIN_SCORE = 80;
 
 // 案件・他社人材は「直近3日の配信」に限定するが、自社保有人材(INHOUSE)は
 // 常に対象（保有ロスターなので配信日に関係なく提案候補にする）。
@@ -33,6 +33,21 @@ function isOwnOnlyChannel(channelText: string | null): boolean {
   if (!channelText) return false;
   const t = channelText.replace(/\s/g, "");
   return /貴社社員|貴社まで|貴社迄|貴社のみ/.test(t);
+}
+
+/**
+ * 商流による候補の事前足切り。
+ * - 「貴社社員/貴社まで」案件 → 自社保有人材のみ（他社は不可）。
+ * - 「エンド直/プロパー/直のみ」案件で支援費の記載なし → 弊社が挟まると提案不可なので
+ *   他社人材を除外し自社保有人材のみ（支援費ありなら商流を飛ばせるので全員残す）。
+ */
+function restrictCandidatesByChannel(candidates: Talent[], project: Project): Talent[] {
+  const ownOnly = isOwnOnlyChannel(project.channelText);
+  const strictDirect = isStrictDirectChannel(project.channelText) && !project.supportFee;
+  if (ownOnly || strictDirect) {
+    return candidates.filter((t) => t.talentType === "INHOUSE");
+  }
+  return candidates;
 }
 
 export interface MatchRunResult {
@@ -193,11 +208,10 @@ export async function runMatchingForOrg(
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
     slice.map((project) => {
-      let candidates = talents.filter((t) => !isSameCompany(t, project));
-      // 貴社社員まで/貴社まで案件は自社保有人材のみ候補にする。
-      if (isOwnOnlyChannel(project.channelText)) {
-        candidates = candidates.filter((t) => t.talentType === "INHOUSE");
-      }
+      const candidates = restrictCandidatesByChannel(
+        talents.filter((t) => !isSameCompany(t, project)),
+        project,
+      );
       return rankAndSave(project, candidates, systemPrompt);
     }),
   );
@@ -276,11 +290,10 @@ export async function runMatchingForNew(
 
   const settled = await Promise.allSettled(
     targets.map(({ project, pool }) => {
-      let candidates = pool.filter((t) => !isSameCompany(t, project));
-      // 貴社社員まで/貴社まで案件は自社保有人材のみ候補にする。
-      if (isOwnOnlyChannel(project.channelText)) {
-        candidates = candidates.filter((t) => t.talentType === "INHOUSE");
-      }
+      const candidates = restrictCandidatesByChannel(
+        pool.filter((t) => !isSameCompany(t, project)),
+        project,
+      );
       return rankAndSave(project, candidates, systemPrompt);
     }),
   );

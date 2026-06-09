@@ -14,7 +14,7 @@ export default async function MatchesPage() {
   const org = await getCurrentOrg();
 
   const matches = await prisma.match.findMany({
-    where: { project: { orgId: org.id }, score: { gte: 70 } },
+    where: { project: { orgId: org.id }, score: { gte: 80 } },
     include: { talent: true, project: true },
     orderBy: { score: "desc" },
   });

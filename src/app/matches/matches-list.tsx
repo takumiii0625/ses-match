@@ -46,7 +46,6 @@ export interface MatchVM {
 }
 
 const SCORE_OPTIONS = [
-  { value: "70", label: "70点以上" },
   { value: "80", label: "80点以上" },
   { value: "90", label: "90点以上" },
 ];
@@ -102,14 +101,14 @@ export function MatchesList({
 }) {
   const inhouseOnly = scope === "inhouse";
   const [query, setQuery] = useState("");
-  const [minScore, setMinScore] = useState("70");
+  const [minScore, setMinScore] = useState("80");
   // 自社専用ページでは区分フィルタは固定（データが既に自社のみ）。
   const [talentType, setTalentType] = useState("ALL");
   const [channel, setChannel] = useState("ALL");
 
   const isFiltered =
     !!query ||
-    minScore !== "70" ||
+    minScore !== "80" ||
     (!inhouseOnly && talentType !== "ALL") ||
     channel !== "ALL";
 
@@ -254,7 +253,7 @@ export function MatchesList({
             type="button"
             onClick={() => {
               setQuery("");
-              setMinScore("70");
+              setMinScore("80");
               setTalentType("ALL");
               setChannel("ALL");
             }}

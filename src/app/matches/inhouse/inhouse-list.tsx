@@ -14,7 +14,6 @@ import { groupByTalent } from "./group";
 import type { MatchVM } from "../matches-list";
 
 const SCORE_OPTIONS = [
-  { value: "70", label: "70点以上" },
   { value: "80", label: "80点以上" },
   { value: "90", label: "90点以上" },
 ];
@@ -42,10 +41,10 @@ function splitReasons(reasons: string[]) {
 /** 自社マッチ：自社人材を起点に、その人にマッチした案件を一覧表示。 */
 export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
   const [query, setQuery] = useState("");
-  const [minScore, setMinScore] = useState("70");
+  const [minScore, setMinScore] = useState("80");
   const [channel, setChannel] = useState("ALL");
 
-  const isFiltered = !!query || minScore !== "70" || channel !== "ALL";
+  const isFiltered = !!query || minScore !== "80" || channel !== "ALL";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -117,7 +116,7 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
             type="button"
             onClick={() => {
               setQuery("");
-              setMinScore("70");
+              setMinScore("80");
               setChannel("ALL");
             }}
             className="h-10 text-sm text-slate-500 underline hover:text-slate-700"

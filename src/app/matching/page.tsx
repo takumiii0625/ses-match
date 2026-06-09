@@ -95,9 +95,9 @@ export default async function MatchingPage({ searchParams }: PageProps) {
     );
   }
 
-  // 保存済みマッチ（DB）をそのまま表示。LLMはここでは動かさない。70点以上のみ。
+  // 保存済みマッチ（DB）をそのまま表示。LLMはここでは動かさない。80点以上のみ。
   const rawMatches = await prisma.match.findMany({
-    where: { projectId: project.id, talent: { orgId: org.id }, score: { gte: 70 } },
+    where: { projectId: project.id, talent: { orgId: org.id }, score: { gte: 80 } },
     include: { talent: true },
     orderBy: { score: "desc" },
   });

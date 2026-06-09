@@ -12,12 +12,12 @@ export const dynamic = "force-dynamic";
 export default async function InhouseMatchesPage() {
   const org = await getCurrentOrg();
 
-  // 自社保有人材(INHOUSE)が絡むマッチだけ・70点以上。
+  // 自社保有人材(INHOUSE)が絡むマッチだけ・80点以上。
   const matches = await prisma.match.findMany({
     where: {
       project: { orgId: org.id },
       talent: { orgId: org.id, talentType: "INHOUSE" },
-      score: { gte: 70 },
+      score: { gte: 80 },
     },
     include: { talent: true, project: true },
     orderBy: { score: "desc" },
@@ -31,7 +31,7 @@ export default async function InhouseMatchesPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">自社保有人材のマッチ</h1>
           <p className="mt-1 text-sm text-muted">
-            自社保有人材ごとに、マッチした案件を点数順で表示します（70点以上）。
+            自社保有人材ごとに、マッチした案件を点数順で表示します（80点以上）。
           </p>
         </div>
         <Link

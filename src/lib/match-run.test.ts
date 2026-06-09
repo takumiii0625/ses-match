@@ -143,6 +143,26 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(1); // 自社人材 t1 のみ
   });
 
+  it("エンド直＋支援費なしは他社人材を除外（候補0でLLMなし）", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "エンド直のみ", supportFee: false },
+    ]);
+    // TALENTS は全員 PARTNER。
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(rankMock).not.toHaveBeenCalled();
+    expect(res.saved).toBe(0);
+    expect(res.totalProjects).toBe(1); // 案件自体は対象
+  });
+
+  it("エンド直でも支援費ありなら他社人材も候補に残す", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "エンド直のみ", supportFee: true },
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(rankMock).toHaveBeenCalledTimes(1); // 他社 t1,t2 が候補
+    expect(res.saved).toBe(2);
+  });
+
   it("提案不可(channelOk=false)も保存するが proposable=false で記録", async () => {
     rankMock.mockImplementation(async (_p: unknown, candidates: { talentId: string }[]) =>
       candidates.map((c) => ({

@@ -6,6 +6,7 @@ import {
   companyDomain,
   isSameCompany,
   prefilterCandidates,
+  isStrictDirectChannel,
 } from "./matching";
 
 function talent(p: Partial<Talent>): Talent {
@@ -122,5 +123,35 @@ describe("prefilterCandidates", () => {
       talent({ id: String(i), skills: ["JS"] } as Partial<Talent>),
     );
     expect(prefilterCandidates(p, many, 3)).toHaveLength(3);
+  });
+
+  it("金額足切り: 希望下限が案件上限＋マージン(10万)を超える候補は除外", () => {
+    const p = project({ requiredSkills: ["Java"], rateMax: 100 });
+    const over = talent({ id: "over", skills: ["Java"], desiredRateMin: 120 } as Partial<Talent>);
+    const within = talent({ id: "within", skills: ["Java"], desiredRateMin: 108 } as Partial<Talent>);
+    const ids = prefilterCandidates(p, [over, within]).map((h) => h.talent.id);
+    expect(ids).toContain("within"); // 108 <= 100+10
+    expect(ids).not.toContain("over"); // 120 > 110
+  });
+
+  it("カバー率0.5未満は除外（3スキル中1つは落ちる・2つは通る）", () => {
+    const p = project({ requiredSkills: ["Java", "Spring", "AWS"] });
+    const one = talent({ id: "one", skills: ["Java"] } as Partial<Talent>); // 1/3 ≈ 0.33
+    const two = talent({ id: "two", skills: ["Java", "AWS"] } as Partial<Talent>); // 2/3 ≈ 0.67
+    const ids = prefilterCandidates(p, [one, two]).map((h) => h.talent.id);
+    expect(ids).toContain("two");
+    expect(ids).not.toContain("one");
+  });
+});
+
+describe("isStrictDirectChannel", () => {
+  it("エンド直/プロパー/直のみ を厳格商流と判定", () => {
+    expect(isStrictDirectChannel("エンド直のみ")).toBe(true);
+    expect(isStrictDirectChannel("プロパー〜1社先")).toBe(true);
+    expect(isStrictDirectChannel("直のみ")).toBe(true);
+  });
+  it("1社先まで等は厳格ではない・null安全", () => {
+    expect(isStrictDirectChannel("1社先まで")).toBe(false);
+    expect(isStrictDirectChannel(null)).toBe(false);
   });
 });
