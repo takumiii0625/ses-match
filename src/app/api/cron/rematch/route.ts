@@ -37,7 +37,8 @@ async function handle(req: Request) {
     const offset = Number(url.searchParams.get("offset") ?? "0") || 0;
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw ? Number(limitRaw) : undefined;
-    const result = await runMatchingForOrg(org.id, { offset, limit });
+    const scope = url.searchParams.get("scope") === "inhouse" ? "inhouse" : "all";
+    const result = await runMatchingForOrg(org.id, { offset, limit, scope });
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

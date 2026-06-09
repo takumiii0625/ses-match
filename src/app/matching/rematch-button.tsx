@@ -22,9 +22,18 @@ const CHUNK = 3;
  * 全人材 × 全案件を一括マッチ（/api/cron/rematch）。
  * 案件を少しずつ分割して呼び出し、完了まで繰り返す。
  * 各リクエストが短いのでタイムアウトせず、進捗をパーセンテージで表示できる。
+ * scope="inhouse" で候補を自社保有人材だけに限定（他社のマッチは保持）。
  */
-export function RematchButton() {
+export function RematchButton({
+  scope = "all",
+  label,
+}: {
+  scope?: "all" | "inhouse";
+  label?: string;
+} = {}) {
   const router = useRouter();
+  const runLabel =
+    label ?? (scope === "inhouse" ? "自社人材でマッチを実行" : "全件マッチを今すぐ実行");
   const [running, setRunning] = useState(false);
   const [percent, setPercent] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -44,7 +53,7 @@ export function RematchButton() {
       let talents = 0;
       for (;;) {
         const data = await fetchJson<RematchPageResult>(
-          `/api/cron/rematch?offset=${offset}&limit=${CHUNK}`,
+          `/api/cron/rematch?offset=${offset}&limit=${CHUNK}&scope=${scope}`,
           { method: "POST" },
         );
         total = data.totalProjects;
@@ -78,7 +87,7 @@ export function RematchButton() {
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="secondary" size="md" onClick={handleRun} disabled={running}>
-          {running ? `実行中… ${percent ?? 0}%` : "全件マッチを今すぐ実行"}
+          {running ? `実行中… ${percent ?? 0}%` : runLabel}
         </Button>
         {msg && (
           <span

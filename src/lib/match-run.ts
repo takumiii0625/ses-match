@@ -141,11 +141,17 @@ export interface RematchPageResult {
  */
 export async function runMatchingForOrg(
   orgId: string,
-  opts: { offset?: number; limit?: number } = {},
+  opts: { offset?: number; limit?: number; scope?: "all" | "inhouse" } = {},
 ): Promise<RematchPageResult> {
   const offset = Math.max(0, opts.offset ?? 0);
   const limit = opts.limit && opts.limit > 0 ? opts.limit : Number.MAX_SAFE_INTEGER;
+  const inhouseOnly = opts.scope === "inhouse";
   const since = windowStart();
+
+  // inhouse スコープでは候補を自社保有人材だけに限定する。
+  const talentWhere = inhouseOnly
+    ? { orgId, talentType: "INHOUSE" as const }
+    : talentWindowWhere(orgId, since);
 
   const [projectsAll, talents, systemPrompt] = await Promise.all([
     // ページングを安定させるため作成日昇順で固定。
@@ -153,13 +159,18 @@ export async function runMatchingForOrg(
       where: { orgId, receivedDate: { gte: since } },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.talent.findMany({ where: talentWindowWhere(orgId, since) }),
+    prisma.talent.findMany({ where: talentWhere }),
     resolveMatchPrompt(orgId),
   ]);
 
-  // クリーン再生成は先頭チャンクのみ（既存マッチを全削除→入れ直し）。
+  // クリーン再生成は先頭チャンクのみ。
+  // inhouse スコープでは自社人材のマッチだけ削除し、他社のマッチは残す。
   if (offset === 0) {
-    await prisma.match.deleteMany({ where: { project: { orgId } } });
+    await prisma.match.deleteMany({
+      where: inhouseOnly
+        ? { project: { orgId }, talent: { talentType: "INHOUSE" } }
+        : { project: { orgId } },
+    });
   }
 
   const slice = projectsAll.slice(offset, offset + limit);

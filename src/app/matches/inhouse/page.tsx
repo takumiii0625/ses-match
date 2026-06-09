@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
+import { Card } from "@/components/ui/card";
 import { MatchesList } from "../matches-list";
 import { toMatchVM } from "../serialize";
+import { RematchButton } from "../../matching/rematch-button";
 
 export const metadata = { title: "自社保有人材のマッチ — SES Match" };
 export const dynamic = "force-dynamic";
@@ -39,6 +41,13 @@ export default async function InhouseMatchesPage() {
           マッチングを実行 →
         </Link>
       </div>
+
+      <Card className="p-5">
+        <p className="mb-2 text-xs text-muted">
+          自社保有人材だけを候補に、全案件とマッチを計算して保存します（他社人材のマッチは保持されます）。
+        </p>
+        <RematchButton scope="inhouse" />
+      </Card>
 
       <MatchesList matches={vm} scope="inhouse" />
     </div>
