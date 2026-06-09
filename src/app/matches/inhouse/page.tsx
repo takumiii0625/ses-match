@@ -1,0 +1,46 @@
+import Link from "next/link";
+import { prisma } from "@/lib/prisma";
+import { getCurrentOrg } from "@/lib/current-org";
+import { MatchesList } from "../matches-list";
+import { toMatchVM } from "../serialize";
+
+export const metadata = { title: "自社保有人材のマッチ — SES Match" };
+export const dynamic = "force-dynamic";
+
+export default async function InhouseMatchesPage() {
+  const org = await getCurrentOrg();
+
+  // 自社保有人材(INHOUSE)が絡むマッチだけ・70点以上。
+  const matches = await prisma.match.findMany({
+    where: {
+      project: { orgId: org.id },
+      talent: { orgId: org.id, talentType: "INHOUSE" },
+      score: { gte: 70 },
+    },
+    include: { talent: true, project: true },
+    orderBy: { score: "desc" },
+  });
+
+  const vm = matches.map(toMatchVM);
+
+  return (
+    <div className="space-y-6 p-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">自社保有人材のマッチ</h1>
+          <p className="mt-1 text-sm text-muted">
+            自社保有人材に対する案件マッチだけを表示します（70点以上）。
+          </p>
+        </div>
+        <Link
+          href="/matching"
+          className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200"
+        >
+          マッチングを実行 →
+        </Link>
+      </div>
+
+      <MatchesList matches={vm} scope="inhouse" />
+    </div>
+  );
+}

@@ -4,7 +4,8 @@ import { getCurrentOrg } from "@/lib/current-org";
 import { DEFAULT_MATCH_PROMPT } from "@/lib/ai/prompts";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { MatchesList, type MatchVM } from "./matches-list";
+import { MatchesList } from "./matches-list";
+import { toMatchVM } from "./serialize";
 
 export const metadata = { title: "マッチ一覧 — SES Match" };
 export const dynamic = "force-dynamic";
@@ -18,34 +19,7 @@ export default async function MatchesPage() {
     orderBy: { score: "desc" },
   });
 
-  // クライアント用に必要分だけ直列化。
-  const vm: MatchVM[] = matches.map((m) => ({
-    id: m.id,
-    score: m.score,
-    reasons: m.reasons,
-    proposable: m.proposable,
-    channelNote: m.channelNote,
-    talent: {
-      id: m.talent.id,
-      name: m.talent.name,
-      talentType: m.talent.talentType,
-      mainSkills: m.talent.mainSkills,
-      skills: m.talent.skills,
-      desiredRateMin: m.talent.desiredRateMin,
-      desiredRateMax: m.talent.desiredRateMax,
-      remotePreference: m.talent.remotePreference,
-      receivedDate: m.talent.receivedDate ? m.talent.receivedDate.toISOString() : null,
-    },
-    project: {
-      id: m.project.id,
-      title: m.project.title,
-      clientName: m.project.clientName,
-      rateMin: m.project.rateMin,
-      rateMax: m.project.rateMax,
-      requiredSkills: m.project.requiredSkills,
-      receivedDate: m.project.receivedDate ? m.project.receivedDate.toISOString() : null,
-    },
-  }));
+  const vm = matches.map(toMatchVM);
 
   const activePrompt = org.matchPrompt ?? DEFAULT_MATCH_PROMPT;
   const usingDefault = !org.matchPrompt;

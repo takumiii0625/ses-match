@@ -90,14 +90,25 @@ function splitReasons(reasons: string[]): { strengths: string[]; concerns: strin
   return { strengths, concerns };
 }
 
-export function MatchesList({ matches }: { matches: MatchVM[] }) {
+export function MatchesList({
+  matches,
+  scope = "all",
+}: {
+  matches: MatchVM[];
+  scope?: "all" | "inhouse";
+}) {
+  const inhouseOnly = scope === "inhouse";
   const [query, setQuery] = useState("");
   const [minScore, setMinScore] = useState("70");
+  // 自社専用ページでは区分フィルタは固定（データが既に自社のみ）。
   const [talentType, setTalentType] = useState("ALL");
   const [channel, setChannel] = useState("ALL");
 
   const isFiltered =
-    !!query || minScore !== "70" || talentType !== "ALL" || channel !== "ALL";
+    !!query ||
+    minScore !== "70" ||
+    (!inhouseOnly && talentType !== "ALL") ||
+    channel !== "ALL";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -173,6 +184,30 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
 
   return (
     <div className="space-y-4">
+      {/* スコープ切替タブ */}
+      <div className="flex gap-1 border-b border-border">
+        <Link
+          href="/matches"
+          className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
+            scope === "all"
+              ? "border-b-2 border-primary text-primary"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          すべてのマッチ
+        </Link>
+        <Link
+          href="/matches/inhouse"
+          className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
+            inhouseOnly
+              ? "border-b-2 border-primary text-primary"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          自社保有人材のマッチ
+        </Link>
+      </div>
+
       {/* フィルタ */}
       <Card className="flex flex-wrap items-end gap-3 p-4">
         <div className="min-w-[240px] flex-1">
@@ -185,14 +220,16 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
             placeholder="例: Java / 田中 / ◯◯案件"
           />
         </div>
-        <div className="w-40">
-          <label className="mb-1 block text-xs font-medium text-slate-500">区分</label>
-          <Select
-            options={TYPE_OPTIONS}
-            value={talentType}
-            onChange={(e) => setTalentType(e.target.value)}
-          />
-        </div>
+        {!inhouseOnly && (
+          <div className="w-40">
+            <label className="mb-1 block text-xs font-medium text-slate-500">区分</label>
+            <Select
+              options={TYPE_OPTIONS}
+              value={talentType}
+              onChange={(e) => setTalentType(e.target.value)}
+            />
+          </div>
+        )}
         <div className="w-36">
           <label className="mb-1 block text-xs font-medium text-slate-500">商流</label>
           <Select

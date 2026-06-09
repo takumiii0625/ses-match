@@ -10,6 +10,7 @@ import {
   Briefcase,
   GitCompareArrows,
   ListChecks,
+  UserCheck,
   Columns2,
   Star,
   Link2,
@@ -47,6 +48,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/matching", label: "マッチング", icon: GitCompareArrows },
       { href: "/matches", label: "マッチ一覧", icon: ListChecks },
+      { href: "/matches/inhouse", label: "自社マッチ", icon: UserCheck },
       { href: "/compare", label: "見比べ", icon: Columns2 },
       { href: "/favorites", label: "お気に入り", icon: Star },
       { href: "/shared-links", label: "公開リンク", icon: Link2 },
@@ -77,8 +79,14 @@ export function Sidebar({
   const pathname = usePathname();
   const [expanded, setExpanded] = useState(false);
 
+  // 最長一致で active を1つだけに（例: /matches と /matches/inhouse の二重ハイライト防止）。
+  const allHrefs = [...groups.flatMap((g) => g.items.map((i) => i.href)), "/settings"];
+  const activeHref = allHrefs
+    .filter((h) => pathname === h || pathname.startsWith(h + "/"))
+    .sort((a, b) => b.length - a.length)[0];
+
   const NavLink = ({ href, label, icon: Icon }: NavItem) => {
-    const active = pathname.startsWith(href);
+    const active = href === activeHref;
     return (
       <Link
         href={href}
