@@ -83,6 +83,7 @@ export interface MatchCandidateInput {
   name: string;
   age?: number | null;
   talentType?: string | null;
+  affiliation?: string | null; // 所属（商流上の立場。例: "1社先正社員"）
   skills: string[];
   desiredRateMin?: number | null;
   desiredRateMax?: number | null;

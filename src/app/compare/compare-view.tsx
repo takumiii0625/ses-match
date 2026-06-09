@@ -166,9 +166,6 @@ function talentSummary(t: TalentVM) {
         </Badge>
       </GF>
       <GF label="最寄駅">{t.nearestStation ?? "-"}</GF>
-      <GF label="区分">
-        {t.talentType === "INHOUSE" ? "自社" : t.talentType === "PARTNER" ? "他社" : "-"}
-      </GF>
       <div className="col-span-2 sm:col-span-3">
         <div className="mb-1 text-xs text-slate-400">スキル</div>
         <SkillTags main={t.mainSkills} all={t.skills} />
@@ -534,7 +531,10 @@ function talentHeader(t: TalentCardVM, top: boolean, dupes = 1) {
             </Badge>
             {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
           </div>
-          <div className="mt-0.5 text-[11px] text-slate-400">配信: {daysAgo(t.receivedDate)}</div>
+          <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-slate-400">
+            <span>所属: {t.affiliation ?? "-"}</span>
+            <span>配信: {daysAgo(t.receivedDate)}</span>
+          </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
           <Badge tone={scoreTone(t.score)} className="tabular-nums">

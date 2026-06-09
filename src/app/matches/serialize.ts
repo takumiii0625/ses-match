@@ -13,6 +13,7 @@ export function toMatchVM(m: Match & { talent: Talent; project: Project }): Matc
       id: m.talent.id,
       name: m.talent.name,
       talentType: m.talent.talentType,
+      affiliation: m.talent.affiliation,
       mainSkills: m.talent.mainSkills,
       skills: m.talent.skills,
       desiredRateMin: m.talent.desiredRateMin,

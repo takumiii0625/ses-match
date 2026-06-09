@@ -211,6 +211,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
                         <span>{REMOTE_LABELS[talent.remotePreference] ?? talent.remotePreference}</span>
                       )}
                       {talent.nearestStation && <span>最寄: {talent.nearestStation}</span>}
+                      {talent.affiliation && <span>所属: {talent.affiliation}</span>}
                       <span>配信: {daysAgo(talent.receivedDate)}</span>
                     </div>
 

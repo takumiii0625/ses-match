@@ -443,7 +443,7 @@ export class AnthropicAIService implements AIService {
       .map((c) =>
         [
           `- talentId: ${c.talentId}`,
-          `  氏名: ${c.name} / 年齢: ${c.age ?? "?"} / 区分: ${c.talentType ?? "?"}`,
+          `  氏名: ${c.name} / 年齢: ${c.age ?? "?"} / 区分: ${c.talentType ?? "?"} / 所属: ${c.affiliation ?? "?"}`,
           `  スキル: ${c.skills.join(", ") || "(不明)"}`,
           `  希望単価: ${c.desiredRateMin ?? "?"}〜${c.desiredRateMax ?? "?"}万`,
           `  リモート希望: ${c.remotePreference ?? "?"}`,

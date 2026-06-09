@@ -24,6 +24,7 @@ export interface MatchVM {
     id: string;
     name: string;
     talentType: string | null;
+    affiliation: string | null;
     mainSkills: string[];
     skills: string[];
     desiredRateMin: number | null;
@@ -381,6 +382,9 @@ export function MatchesList({
                             <span className="text-xs text-muted">
                               {REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}
                             </span>
+                          )}
+                          {t.affiliation && (
+                            <span className="text-xs text-muted">所属: {t.affiliation}</span>
                           )}
                           <span className="text-xs text-muted">配信: {daysAgo(t.receivedDate)}</span>
                         </div>

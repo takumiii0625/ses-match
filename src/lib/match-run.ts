@@ -66,6 +66,7 @@ function toCandidateInput(t: Talent): MatchCandidateInput {
     name: t.name,
     age: t.age,
     talentType: t.talentType,
+    affiliation: t.affiliation,
     skills: [...new Set([...t.mainSkills, ...t.skills])],
     desiredRateMin: t.desiredRateMin,
     desiredRateMax: t.desiredRateMax,
