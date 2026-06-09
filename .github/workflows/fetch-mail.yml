@@ -16,9 +16,16 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: 取り込みエンドポイントを呼び出す
+      - name: 取り込みエンドポイントを呼び出す（ページ方式で完了までループ）
         run: |
-          curl -fsS --max-time 300 -X POST \
-            "https://sesmatch.encore-biz.com/api/cron/fetch-mail?limit=200" \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
-            -w "\nHTTP %{http_code}\n"
+          token=""
+          for i in $(seq 1 500); do
+            url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=10"
+            [ -n "$token" ] && url="$url&pageToken=$token"
+            resp=$(curl -fsS --max-time 300 -X POST "$url" \
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+            echo "$resp"
+            echo "$resp" | grep -q '"done":true' && { echo "完了"; break; }
+            token=$(echo "$resp" | grep -o '"nextPageToken":"[^"]*"' | sed 's/.*:"//;s/"//')
+            [ -z "$token" ] && { echo "次ページなし"; break; }
+          done

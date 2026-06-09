@@ -130,18 +130,21 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-/** List + fetch messages matching the query (default: addressed to MAIL_ADDRESS). */
-export async function fetchEmails(limit = 20): Promise<FetchedEmail[]> {
-  const gmail = await authedGmail();
-  const q =
+function mailQuery(): string {
+  return (
     process.env.MAIL_QUERY ??
     (process.env.MAIL_ADDRESS
       ? `to:${process.env.MAIL_ADDRESS} newer_than:60d`
-      : "newer_than:30d");
+      : "newer_than:30d")
+  );
+}
 
+/** List + fetch messages matching the query (default: addressed to MAIL_ADDRESS). */
+export async function fetchEmails(limit = 20): Promise<FetchedEmail[]> {
+  const gmail = await authedGmail();
   const list = await gmail.users.messages.list({
     userId: "me",
-    q,
+    q: mailQuery(),
     maxResults: limit,
   });
   const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
@@ -151,6 +154,35 @@ export async function fetchEmails(limit = 20): Promise<FetchedEmail[]> {
     out.push(await parseMessage(gmail, id));
   }
   return out;
+}
+
+export interface FetchedEmailPage {
+  emails: FetchedEmail[];
+  nextPageToken: string | null;
+}
+
+/**
+ * ページ単位でメールを取得（pageToken で続きを辿れる）。
+ * 1リクエストの処理時間を短く保ち、取り込みのタイムアウトを防ぐために使う。
+ */
+export async function fetchEmailsPage(
+  pageSize = 12,
+  pageToken?: string,
+): Promise<FetchedEmailPage> {
+  const gmail = await authedGmail();
+  const list = await gmail.users.messages.list({
+    userId: "me",
+    q: mailQuery(),
+    maxResults: pageSize,
+    pageToken: pageToken || undefined,
+  });
+  const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
+
+  const emails: FetchedEmail[] = [];
+  for (const id of ids) {
+    emails.push(await parseMessage(gmail, id));
+  }
+  return { emails, nextPageToken: list.data.nextPageToken ?? null };
 }
 
 /** Fetch + parse a single message by its Gmail id (for backfill). */

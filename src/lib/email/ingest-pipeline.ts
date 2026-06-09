@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { getAI } from "@/lib/ai";
-import { fetchEmails } from "./gmail";
+import { fetchEmails, fetchEmailsPage, type FetchedEmail } from "./gmail";
 import { companyDomain } from "@/lib/matching";
 import { runMatchingForNew } from "@/lib/match-run";
 import type { RemotePreference } from "@prisma/client";
@@ -54,12 +54,15 @@ export interface IngestRunResult {
   }[];
 }
 
-/** Fetch new mail, classify with AI, and register talents/projects. */
-export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
-  const org = await getCurrentOrg();
-  const ai = getAI();
-  const emails = await fetchEmails(limit);
+type IngestOrg = Awaited<ReturnType<typeof getCurrentOrg>>;
+type IngestAI = ReturnType<typeof getAI>;
 
+/** メール配列を分類・登録し、結果と新規作成IDを返す（マッチングは行わない）。 */
+async function ingestEmails(
+  emails: FetchedEmail[],
+  org: IngestOrg,
+  ai: IngestAI,
+): Promise<{ result: IngestRunResult; newTalentIds: string[]; newProjectIds: string[] }> {
   const result: IngestRunResult = {
     fetched: emails.length,
     created: { talent: 0, project: 0 },
@@ -215,8 +218,16 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
     }
   }
 
-  // 取込で増えた人材・案件を、その場で既存データと突き合わせて自動マッチ。
-  // ここが無いと、メールは取り込まれてもマッチが一切付かないままになる。
+  return { result, newTalentIds, newProjectIds };
+}
+
+/** 取込で増えた人材・案件を、その場で既存データと突き合わせて自動マッチ。 */
+async function attachMatches(
+  result: IngestRunResult,
+  org: IngestOrg,
+  newTalentIds: string[],
+  newProjectIds: string[],
+): Promise<void> {
   try {
     const m = await runMatchingForNew(org.id, newTalentIds, newProjectIds);
     result.matched = { pairs: m.pairs, saved: m.saved };
@@ -225,6 +236,38 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
     const message = e instanceof Error ? e.message : String(e);
     result.items.push({ kind: "MATCH_ERROR", reason: message });
   }
+}
 
+/** Fetch new mail, classify with AI, and register talents/projects.（最新 limit 件を一括処理） */
+export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
+  const org = await getCurrentOrg();
+  const ai = getAI();
+  const emails = await fetchEmails(limit);
+  const { result, newTalentIds, newProjectIds } = await ingestEmails(emails, org, ai);
+  await attachMatches(result, org, newTalentIds, newProjectIds);
   return result;
+}
+
+export interface IngestPageResult extends IngestRunResult {
+  nextPageToken: string | null;
+  done: boolean;
+}
+
+/**
+ * ページ単位の取り込み（タイムアウト回避）。pageToken で続きを辿る。
+ * 1ページ分だけ処理し、最新→古い順に進む。ページ全件が既取込（skipped）なら、
+ * それ以前は処理済みとみなして done=true（追いついた）にする。
+ */
+export async function runMailIngestPage(
+  pageSize = 12,
+  pageToken?: string,
+): Promise<IngestPageResult> {
+  const org = await getCurrentOrg();
+  const ai = getAI();
+  const { emails, nextPageToken } = await fetchEmailsPage(pageSize, pageToken);
+  const { result, newTalentIds, newProjectIds } = await ingestEmails(emails, org, ai);
+  await attachMatches(result, org, newTalentIds, newProjectIds);
+  // 取得ゼロ or 次ページ無し or このページが全件既取込 → 完了。
+  const caughtUp = emails.length > 0 && result.skipped === emails.length;
+  return { ...result, nextPageToken, done: emails.length === 0 || !nextPageToken || caughtUp };
 }
