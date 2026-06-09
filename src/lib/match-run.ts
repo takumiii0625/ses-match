@@ -174,8 +174,9 @@ export async function runMatchingForOrg(
     resolveMatchPrompt(orgId),
   ]);
 
-  // 商流が「貴社社員/貴社まで」の案件はマッチング対象外。
-  const projectsAll = projectsRaw.filter((p) => !isOwnOnlyChannel(p.channelText));
+  // 「貴社社員/貴社まで」案件は“貴社社員＝自社保有人材”だけが提案可。案件は除外せず残し、
+  // 候補を自社人材だけに絞る（下の candidates 構築で対応）。他社人材には出さない。
+  const projectsAll = projectsRaw;
 
   // クリーン再生成は先頭チャンクのみ。
   // inhouse スコープでは自社人材のマッチだけ削除し、他社のマッチは残す。
@@ -192,7 +193,11 @@ export async function runMatchingForOrg(
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
     slice.map((project) => {
-      const candidates = talents.filter((t) => !isSameCompany(t, project));
+      let candidates = talents.filter((t) => !isSameCompany(t, project));
+      // 貴社社員まで/貴社まで案件は自社保有人材のみ候補にする。
+      if (isOwnOnlyChannel(project.channelText)) {
+        candidates = candidates.filter((t) => t.talentType === "INHOUSE");
+      }
       return rankAndSave(project, candidates, systemPrompt);
     }),
   );
@@ -252,8 +257,8 @@ export async function runMatchingForNew(
     resolveMatchPrompt(orgId),
   ]);
 
-  // 商流が「貴社社員/貴社まで」の案件はマッチング対象外。
-  const projects = projectsRaw.filter((p) => !isOwnOnlyChannel(p.channelText));
+  // 「貴社社員/貴社まで」案件も残す（候補を自社人材だけに絞って提案対象にする）。
+  const projects = projectsRaw;
 
   const isNewProject = new Set(newProjectIds);
   const isNewTalent = new Set(newTalentIds);
@@ -271,7 +276,11 @@ export async function runMatchingForNew(
 
   const settled = await Promise.allSettled(
     targets.map(({ project, pool }) => {
-      const candidates = pool.filter((t) => !isSameCompany(t, project));
+      let candidates = pool.filter((t) => !isSameCompany(t, project));
+      // 貴社社員まで/貴社まで案件は自社保有人材のみ候補にする。
+      if (isOwnOnlyChannel(project.channelText)) {
+        candidates = candidates.filter((t) => t.talentType === "INHOUSE");
+      }
       return rankAndSave(project, candidates, systemPrompt);
     }),
   );

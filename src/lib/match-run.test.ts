@@ -119,15 +119,28 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.done).toBe(true);
   });
 
-  it("商流『貴社社員/貴社まで』の案件はマッチング対象から除外する", async () => {
+  it("貴社社員/貴社まで案件は他社人材を除外する（案件は残す・自社人材のみ候補）", async () => {
     db.project.findMany.mockResolvedValue([
       project("p1"),
       { ...project("p2"), channelText: "貴社まで" },
       { ...project("p3"), channelText: "貴社社員まで" },
     ]);
+    // TALENTS は全員 PARTNER → 貴社まで案件は候補0でLLM呼び出しなし。
     const res = await runMatchingForOrg("org1", { offset: 0 });
-    expect(res.totalProjects).toBe(1); // p1 のみ対象
+    expect(res.totalProjects).toBe(3); // 案件は除外しない
+    expect(rankMock).toHaveBeenCalledTimes(1); // p1のみ（他社も可）
+    expect(res.saved).toBe(2); // p1 × t1,t2
+  });
+
+  it("貴社まで案件でも自社保有人材は候補に含む", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "貴社まで" }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "INHOUSE" },
+      talent("t2"), // PARTNER → 除外される
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(rankMock).toHaveBeenCalledTimes(1);
+    expect(res.saved).toBe(1); // 自社人材 t1 のみ
   });
 
   it("提案不可(channelOk=false)も保存するが proposable=false で記録", async () => {
