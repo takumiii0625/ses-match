@@ -57,6 +57,14 @@ function extractAge(text: string): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
+function extractGender(text: string): string | undefined {
+  const m = text.match(/性別\s*】?[:：]?\s*([男女])/);
+  if (m) return m[1] === "男" ? "MALE" : "FEMALE";
+  if (/男性/.test(text)) return "MALE";
+  if (/女性/.test(text)) return "FEMALE";
+  return undefined;
+}
+
 function extractStart(text: string): string | undefined {
   const m = text.match(/(即日|\d{1,2}\s*月\s*[〜~]?|[〜~]?\s*\d{1,2}\s*月)[^\n。、]*/);
   return m ? m[0].trim() : undefined;
@@ -80,13 +88,14 @@ export class MockAIService implements AIService {
     const rate = extractRate(rawEmail);
     const nameM = rawEmail.match(/(?:氏名|名前|お名前)[:：]?\s*([^\s\n、。]+)/);
     const stationM = rawEmail.match(/(?:最寄|最寄り駅)[:：]?\s*([^\s\n、。]+)/);
-    // 「【所属】1社先正社員」「所属: 2社先」などをそのまま拾う。
+    // 人材メールでは所属が「所属」「商流」ラベルで書かれる（例「【商流】自社所属フリーランス」）。
     const affM =
-      rawEmail.match(/【?\s*所属\s*】?[:：]?\s*([^\n、。【】]+)/) ??
+      rawEmail.match(/【?\s*(?:所属|商流)\s*】?[:：]?\s*([^\n、。【】]+)/) ??
       rawEmail.match(/(\d+社先[^\s\n、。]*|プロパー|個人事業主|フリーランス|弊社社員)/);
     return {
       name: nameM?.[1],
       age: extractAge(rawEmail),
+      gender: extractGender(rawEmail),
       skills,
       mainSkills: skills.slice(0, 3),
       desiredRateMin: rate.min,

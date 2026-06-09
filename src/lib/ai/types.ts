@@ -4,6 +4,7 @@
 export interface ParsedTalent {
   name?: string;
   age?: number;
+  gender?: string; // MALE | FEMALE | OTHER
   skills: string[];
   mainSkills: string[];
   desiredRateMin?: number;

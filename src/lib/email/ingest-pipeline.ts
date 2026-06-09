@@ -26,6 +26,11 @@ function toRemote(v?: string): RemotePreference | null {
     : null;
 }
 
+const GENDER_VALUES = new Set(["MALE", "FEMALE", "OTHER"]);
+function toGender(v?: string): "MALE" | "FEMALE" | "OTHER" | null {
+  return v && GENDER_VALUES.has(v) ? (v as "MALE" | "FEMALE" | "OTHER") : null;
+}
+
 /** Extract the bare email address from a From header ("名前 <a@b.com>" → a@b.com). */
 function parseFromEmail(from?: string | null): string | null {
   if (!from) return null;
@@ -106,6 +111,7 @@ export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
             dataFrom: "EMAIL",
             name: p.name ?? mail.from ?? "（氏名不明）",
             age: p.age ?? null,
+            gender: toGender(p.gender),
             skills: p.skills ?? [],
             mainSkills: p.mainSkills ?? [],
             desiredRateMin: p.desiredRateMin ?? null,

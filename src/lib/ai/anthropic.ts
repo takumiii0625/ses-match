@@ -68,6 +68,7 @@ const TALENT_SCHEMA = {
   properties: {
     name: nullableString,
     age: nullableInt,
+    gender: { anyOf: [{ type: "string", enum: ["MALE", "FEMALE", "OTHER"] }, { type: "null" }] },
     skills: { type: "array", items: { type: "string" } },
     mainSkills: { type: "array", items: { type: "string" } },
     desiredRateMin: nullableInt,
@@ -81,6 +82,7 @@ const TALENT_SCHEMA = {
   required: [
     "name",
     "age",
+    "gender",
     "skills",
     "mainSkills",
     "desiredRateMin",

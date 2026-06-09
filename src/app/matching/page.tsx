@@ -185,9 +185,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
                       <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">
                         {Math.round(m.score)}点
                       </Badge>
-                      <Badge tone={talent.talentType === "INHOUSE" ? "green" : "slate"}>
-                        {talent.talentType === "INHOUSE" ? "自社" : "他社"}
-                      </Badge>
+                      {talent.talentType === "INHOUSE" && <Badge tone="green">自社</Badge>}
                       {(() => {
                         const cs = channelStatus(m.proposable, m.channelNote);
                         return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
