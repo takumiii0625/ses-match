@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { formatRate, daysAgo } from "@/lib/utils";
 import { REMOTE_LABELS } from "@/lib/enums";
-import { channelStatus } from "@/lib/channel";
+import { inhouseChannelStatus } from "@/lib/channel";
 import { ProposalButton } from "../../matching/proposal-button";
 import { groupByTalent } from "./group";
 import type { MatchVM } from "../matches-list";
@@ -188,7 +188,7 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                 {rows.map(({ m, dupes }) => {
                   const { strengths, concerns } = splitReasons(m.reasons);
                   const p = m.project;
-                  const cs = channelStatus(m.proposable, m.channelNote);
+                  const cs = inhouseChannelStatus(m.proposable, m.channelNote);
                   return (
                     <div key={m.id} className="flex items-start gap-4 px-5 py-4">
                       <div className="w-12 shrink-0 text-center">
