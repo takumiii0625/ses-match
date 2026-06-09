@@ -31,7 +31,13 @@ async function handle(req: Request) {
   }
   try {
     const org = await getCurrentOrg();
-    const result = await runMatchingForOrg(org.id);
+    // 分割実行: ?offset=&limit= で案件を小分けに処理（タイムアウト回避）。
+    // パラメータ無し（クロン）は従来どおり全件処理。
+    const url = new URL(req.url);
+    const offset = Number(url.searchParams.get("offset") ?? "0") || 0;
+    const limitRaw = url.searchParams.get("limit");
+    const limit = limitRaw ? Number(limitRaw) : undefined;
+    const result = await runMatchingForOrg(org.id, { offset, limit });
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

@@ -116,25 +116,50 @@ async function rankAndSave(
   return { pairs: shortlist.length, saved };
 }
 
+export interface RematchPageResult {
+  totalProjects: number; // 対象案件の総数（1週間以内）
+  processed: number; // ここまでに処理した案件数（= 次回 offset）
+  done: boolean; // 全件処理が完了したか
+  talents: number;
+  pairs: number;
+  saved: number;
+  errors: number;
+  minScore: number;
+}
+
 /**
- * 組織内の全案件を LLM マッチング（rematch クロン／手動「全件マッチ」用）。
- * 各案件につきLLM呼び出しは最大1回（候補はまとめて1リクエストで判定）。
+ * 組織内の全案件を LLM マッチング（手動「全件マッチ」/ rematch クロン用）。
+ * offset/limit で案件を分割処理できる（1リクエストの時間を短く保ちタイムアウトを防ぐ）。
+ * offset=0 のときだけクリーン再生成（既存マッチを全削除）する。
  */
-export async function runMatchingForOrg(orgId: string): Promise<MatchRunResult> {
+export async function runMatchingForOrg(
+  orgId: string,
+  opts: { offset?: number; limit?: number } = {},
+): Promise<RematchPageResult> {
+  const offset = Math.max(0, opts.offset ?? 0);
+  const limit = opts.limit && opts.limit > 0 ? opts.limit : Number.MAX_SAFE_INTEGER;
   const since = windowStart();
-  const [projects, talents, systemPrompt] = await Promise.all([
-    prisma.project.findMany({ where: { orgId, receivedDate: { gte: since } } }),
+
+  const [projectsAll, talents, systemPrompt] = await Promise.all([
+    // ページングを安定させるため作成日昇順で固定。
+    prisma.project.findMany({
+      where: { orgId, receivedDate: { gte: since } },
+      orderBy: { createdAt: "asc" },
+    }),
     prisma.talent.findMany({ where: { orgId, receivedDate: { gte: since } } }),
     resolveMatchPrompt(orgId),
   ]);
 
-  // クリーン再生成: 既存マッチを全削除してから入れ直す。
-  // → 点数が下がった/無効になった古いマッチや、1週間より古い案件・人材のマッチが残らない。
-  await prisma.match.deleteMany({ where: { project: { orgId } } });
+  // クリーン再生成は先頭チャンクのみ（既存マッチを全削除→入れ直し）。
+  if (offset === 0) {
+    await prisma.match.deleteMany({ where: { project: { orgId } } });
+  }
+
+  const slice = projectsAll.slice(offset, offset + limit);
 
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
-    projects.map((project) => {
+    slice.map((project) => {
       const candidates = talents.filter((t) => !isSameCompany(t, project));
       return rankAndSave(project, candidates, systemPrompt);
     }),
@@ -153,8 +178,11 @@ export async function runMatchingForOrg(orgId: string): Promise<MatchRunResult> 
     }
   }
 
+  const processed = Math.min(offset + slice.length, projectsAll.length);
   return {
-    projects: projects.length,
+    totalProjects: projectsAll.length,
+    processed,
+    done: processed >= projectsAll.length,
     talents: talents.length,
     pairs,
     saved,
