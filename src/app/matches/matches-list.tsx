@@ -43,11 +43,21 @@ export interface MatchVM {
 }
 
 const SCORE_OPTIONS = [
-  { value: "0", label: "すべての点数" },
-  { value: "50", label: "50点以上" },
-  { value: "60", label: "60点以上" },
   { value: "70", label: "70点以上" },
   { value: "80", label: "80点以上" },
+  { value: "90", label: "90点以上" },
+];
+
+const TYPE_OPTIONS = [
+  { value: "ALL", label: "自社＋他社" },
+  { value: "INHOUSE", label: "自社保有人材" },
+  { value: "PARTNER", label: "他社人材" },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: "ALL", label: "商流：すべて" },
+  { value: "OK", label: "提案可のみ" },
+  { value: "NG", label: "提案不可のみ" },
 ];
 
 function scoreBadgeTone(score: number): "green" | "amber" | "slate" {
@@ -82,13 +92,21 @@ function splitReasons(reasons: string[]): { strengths: string[]; concerns: strin
 
 export function MatchesList({ matches }: { matches: MatchVM[] }) {
   const [query, setQuery] = useState("");
-  const [minScore, setMinScore] = useState("0");
+  const [minScore, setMinScore] = useState("70");
+  const [talentType, setTalentType] = useState("ALL");
+  const [channel, setChannel] = useState("ALL");
+
+  const isFiltered =
+    !!query || minScore !== "70" || talentType !== "ALL" || channel !== "ALL";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const min = Number(minScore);
     return matches.filter((m) => {
       if (m.score < min) return false;
+      if (talentType !== "ALL" && m.talent.talentType !== talentType) return false;
+      if (channel === "OK" && !m.proposable) return false;
+      if (channel === "NG" && m.proposable) return false;
       if (!q) return true;
       const hay = [
         m.project.title,
@@ -102,7 +120,7 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [matches, query, minScore]);
+  }, [matches, query, minScore, talentType, channel]);
 
   // 案件ごとにグループ化。重複（同名案件/同一人材）はまとめ、最新配信を代表にする。
   const groups = useMemo(() => {
@@ -167,7 +185,23 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
             placeholder="例: Java / 田中 / ◯◯案件"
           />
         </div>
-        <div className="w-44">
+        <div className="w-40">
+          <label className="mb-1 block text-xs font-medium text-slate-500">区分</label>
+          <Select
+            options={TYPE_OPTIONS}
+            value={talentType}
+            onChange={(e) => setTalentType(e.target.value)}
+          />
+        </div>
+        <div className="w-36">
+          <label className="mb-1 block text-xs font-medium text-slate-500">商流</label>
+          <Select
+            options={CHANNEL_OPTIONS}
+            value={channel}
+            onChange={(e) => setChannel(e.target.value)}
+          />
+        </div>
+        <div className="w-32">
           <label className="mb-1 block text-xs font-medium text-slate-500">点数</label>
           <Select
             options={SCORE_OPTIONS}
@@ -175,12 +209,14 @@ export function MatchesList({ matches }: { matches: MatchVM[] }) {
             onChange={(e) => setMinScore(e.target.value)}
           />
         </div>
-        {(query || minScore !== "0") && (
+        {isFiltered && (
           <button
             type="button"
             onClick={() => {
               setQuery("");
-              setMinScore("0");
+              setMinScore("70");
+              setTalentType("ALL");
+              setChannel("ALL");
             }}
             className="h-10 text-sm text-slate-500 underline hover:text-slate-700"
           >
