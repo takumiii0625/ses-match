@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { Card } from "@/components/ui/card";
-import { MatchesList } from "../matches-list";
+import { InhouseMatchesList } from "./inhouse-list";
 import { toMatchVM } from "../serialize";
 import { RematchButton } from "../../matching/rematch-button";
 
@@ -31,7 +31,7 @@ export default async function InhouseMatchesPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">自社保有人材のマッチ</h1>
           <p className="mt-1 text-sm text-muted">
-            自社保有人材に対する案件マッチだけを表示します（70点以上）。
+            自社保有人材ごとに、マッチした案件を点数順で表示します（70点以上）。
           </p>
         </div>
         <Link
@@ -49,7 +49,7 @@ export default async function InhouseMatchesPage() {
         <RematchButton scope="inhouse" />
       </Card>
 
-      <MatchesList matches={vm} scope="inhouse" />
+      <InhouseMatchesList matches={vm} />
     </div>
   );
 }
