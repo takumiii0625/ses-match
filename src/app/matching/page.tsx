@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { formatRate, daysAgo } from "@/lib/utils";
 import { dedupeLatest, talentDedupeKey } from "@/lib/dedupe";
+import { channelStatus } from "@/lib/channel";
 import { REMOTE_LABELS, TALENT_STATUS_LABELS } from "@/lib/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -94,9 +95,9 @@ export default async function MatchingPage({ searchParams }: PageProps) {
     );
   }
 
-  // 保存済みマッチ（DB）をそのまま表示。LLMはここでは動かさない。
+  // 保存済みマッチ（DB）をそのまま表示。LLMはここでは動かさない。70点以上のみ。
   const rawMatches = await prisma.match.findMany({
-    where: { projectId: project.id, talent: { orgId: org.id } },
+    where: { projectId: project.id, talent: { orgId: org.id }, score: { gte: 70 } },
     include: { talent: true },
     orderBy: { score: "desc" },
   });
@@ -177,7 +178,13 @@ export default async function MatchingPage({ searchParams }: PageProps) {
                       <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">
                         {Math.round(m.score)}点
                       </Badge>
-                      {!m.proposable && <Badge tone="red">提案不可（商流）</Badge>}
+                      <Badge tone={talent.talentType === "INHOUSE" ? "green" : "slate"}>
+                        {talent.talentType === "INHOUSE" ? "自社" : "他社"}
+                      </Badge>
+                      {(() => {
+                        const cs = channelStatus(m.proposable, m.channelNote);
+                        return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
+                      })()}
                       {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
                       {talent.status !== "NONE" && (
                         <Badge tone="slate">
@@ -238,9 +245,16 @@ export default async function MatchingPage({ searchParams }: PageProps) {
                         ))}
                       </div>
                     )}
-                    {!m.proposable && m.channelNote && (
-                      <p className="mt-2 text-xs text-red-600">商流: {m.channelNote}</p>
-                    )}
+                    {m.channelNote &&
+                      (m.proposable ? (
+                        <p className="mt-2 text-xs text-slate-500">商流: {m.channelNote}</p>
+                      ) : (
+                        <div className="mt-2">
+                          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs text-red-700">
+                            提案不可の理由: {m.channelNote}
+                          </span>
+                        </div>
+                      ))}
 
                     <div className="mt-3">
                       <ProposalButton talentId={talent.id} projectId={projectId} />

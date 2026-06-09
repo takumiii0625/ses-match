@@ -61,7 +61,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
           receivedDate: t.receivedDate ? t.receivedDate.toISOString() : null,
         };
         const matches = await prisma.match.findMany({
-          where: { talentId: t.id, project: { orgId: org.id } },
+          where: { talentId: t.id, project: { orgId: org.id }, score: { gte: 70 } },
           include: { project: true },
           orderBy: { score: "desc" },
         });
@@ -122,7 +122,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
           receivedDate: p.receivedDate ? p.receivedDate.toISOString() : null,
         };
         const matches = await prisma.match.findMany({
-          where: { projectId: p.id, talent: { orgId: org.id } },
+          where: { projectId: p.id, talent: { orgId: org.id }, score: { gte: 70 } },
           include: { talent: true },
           orderBy: { score: "desc" },
         });

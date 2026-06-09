@@ -13,7 +13,7 @@ export default async function MatchesPage() {
   const org = await getCurrentOrg();
 
   const matches = await prisma.match.findMany({
-    where: { project: { orgId: org.id } },
+    where: { project: { orgId: org.id }, score: { gte: 70 } },
     include: { talent: true, project: true },
     orderBy: { score: "desc" },
   });
@@ -28,6 +28,7 @@ export default async function MatchesPage() {
     talent: {
       id: m.talent.id,
       name: m.talent.name,
+      talentType: m.talent.talentType,
       mainSkills: m.talent.mainSkills,
       skills: m.talent.skills,
       desiredRateMin: m.talent.desiredRateMin,

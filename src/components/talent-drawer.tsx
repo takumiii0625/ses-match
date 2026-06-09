@@ -243,9 +243,16 @@ export function TalentDrawer({
         </div>
 
         {/* footer */}
-        <div className="border-t border-border px-5 py-3">
-          <Link href={`/talent/${talent.id}`}>
-            <Button variant="primary" size="sm" className="w-full">詳細・編集ページを開く</Button>
+        <div className="flex gap-2 border-t border-border px-5 py-3">
+          <Link href={`/compare?mode=talent&talentId=${talent.id}`} className="flex-1">
+            <Button variant="outline" size="sm" className="w-full">
+              マッチを見る
+            </Button>
+          </Link>
+          <Link href={`/talent/${talent.id}`} className="flex-1">
+            <Button variant="primary" size="sm" className="w-full">
+              詳細・編集
+            </Button>
           </Link>
         </div>
       </aside>

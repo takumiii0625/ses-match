@@ -5,7 +5,14 @@ import { getAI } from "@/lib/ai";
 import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
 
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
-export const MIN_SCORE = 50;
+export const MIN_SCORE = 70;
+
+// 案件・他社人材は「直近1週間の配信」に限定するが、自社保有人材(INHOUSE)は
+// 常に対象（保有ロスターなので配信日に関係なく提案候補にする）。
+const talentWindowWhere = (orgId: string, since: Date) => ({
+  orgId,
+  OR: [{ talentType: "INHOUSE" as const }, { receivedDate: { gte: since } }],
+});
 
 // 1案件あたりLLMに渡す候補の上限（事前フィルタ後の上位N件）。
 const SHORTLIST_LIMIT = 30;
@@ -146,7 +153,7 @@ export async function runMatchingForOrg(
       where: { orgId, receivedDate: { gte: since } },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.talent.findMany({ where: { orgId, receivedDate: { gte: since } } }),
+    prisma.talent.findMany({ where: talentWindowWhere(orgId, since) }),
     resolveMatchPrompt(orgId),
   ]);
 
@@ -216,7 +223,7 @@ export async function runMatchingForNew(
   const since = windowStart();
   const [projects, talents, systemPrompt] = await Promise.all([
     prisma.project.findMany({ where: { orgId, receivedDate: { gte: since } } }),
-    prisma.talent.findMany({ where: { orgId, receivedDate: { gte: since } } }),
+    prisma.talent.findMany({ where: talentWindowWhere(orgId, since) }),
     resolveMatchPrompt(orgId),
   ]);
 

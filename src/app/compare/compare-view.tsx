@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { dedupeLatest, talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
+import { channelStatus } from "@/lib/channel";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select } from "@/components/ui/select";
@@ -468,7 +469,10 @@ function projectHeader(p: ProjectCardVM, top: boolean, dupes = 1) {
           <Badge tone={scoreTone(p.score)} className="tabular-nums">
             {Math.round(p.score)}点
           </Badge>
-          {!p.proposable && <Badge tone="red">提案不可</Badge>}
+          {(() => {
+            const cs = channelStatus(p.proposable, p.channelNote);
+            return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
+          })()}
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">
@@ -498,6 +502,13 @@ function projectHeader(p: ProjectCardVM, top: boolean, dupes = 1) {
           ))}
         </div>
       )}
+      {!p.proposable && p.channelNote && (
+        <div className="mt-2">
+          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs text-red-700">
+            提案不可の理由: {p.channelNote}
+          </span>
+        </div>
+      )}
     </>
   );
 }
@@ -521,7 +532,10 @@ function talentHeader(t: TalentCardVM, top: boolean, dupes = 1) {
           <Badge tone={scoreTone(t.score)} className="tabular-nums">
             {Math.round(t.score)}点
           </Badge>
-          {!t.proposable && <Badge tone="red">提案不可</Badge>}
+          {(() => {
+            const cs = channelStatus(t.proposable, t.channelNote);
+            return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
+          })()}
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">
@@ -545,6 +559,13 @@ function talentHeader(t: TalentCardVM, top: boolean, dupes = 1) {
       {(t.mainSkills.length > 0 || t.skills.length > 0) && (
         <div className="mt-2">
           <SkillTags main={t.mainSkills} all={t.skills} />
+        </div>
+      )}
+      {!t.proposable && t.channelNote && (
+        <div className="mt-2">
+          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs text-red-700">
+            提案不可の理由: {t.channelNote}
+          </span>
         </div>
       )}
     </>
