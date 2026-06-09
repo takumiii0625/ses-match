@@ -147,7 +147,11 @@ function SkillTags({ main, all }: { main: string[]; all: string[] }) {
 }
 
 // ---------- 人材のサマリ・詳細ノード ----------
-function talentSummary(t: TalentVM) {
+function talentSummary(
+  t: TalentVM,
+  channel?: { proposable: boolean; channelNote: string | null },
+) {
+  const cs = channel ? channelStatus(channel.proposable, channel.channelNote) : null;
   return (
     <>
       <GF label="名前">{t.name}</GF>
@@ -167,6 +171,14 @@ function talentSummary(t: TalentVM) {
       <GF label="区分">
         {t.talentType === "INHOUSE" ? "自社" : t.talentType === "PARTNER" ? "他社" : "-"}
       </GF>
+      {channel && (
+        <GF label="商流">
+          {cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : "-"}
+          {channel.channelNote && (
+            <span className="ml-1 text-xs text-slate-500">{channel.channelNote}</span>
+          )}
+        </GF>
+      )}
       <div className="col-span-2 sm:col-span-3">
         <div className="mb-1 text-xs text-slate-400">スキル</div>
         <SkillTags main={t.mainSkills} all={t.skills} />
@@ -663,7 +675,10 @@ function RightPane({
               onToggle={() => toggle(t.id)}
               header={talentHeader(t, i === 0, dupes)}
               detail={{
-                summary: talentSummary(t),
+                summary: talentSummary(t, {
+                  proposable: t.proposable,
+                  channelNote: t.channelNote,
+                }),
                 email: talentEmail(t),
                 detailNode: noteDetail(t.note, "備考情報"),
                 match: { score: t.score, reasons: t.reasons },
