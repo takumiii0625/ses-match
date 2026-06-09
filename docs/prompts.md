@@ -1,6 +1,6 @@
 # AIプロンプト仕様
 
-このアプリでLLM（Claude `claude-opus-4-8`）に渡しているプロンプトの一覧です。
+このアプリでLLM（Claude、既定は `claude-haiku-4-5`）に渡しているプロンプトの一覧です。
 実装は `src/lib/ai/anthropic.ts`（分類・抽出・提案生成）と `src/lib/matching.ts`（スコアリング）。
 
 > 補足：**マッチングの「スコア計算」自体はLLMを使いません**（決定論的な関数）。
@@ -270,7 +270,7 @@ LLMは使わず、以下の重み付けで計算します（`src/lib/matching.ts
 
 ## モデル・実装メモ
 
-- モデル: **`claude-opus-4-8`**（環境変数 `ANTHROPIC_MODEL` で変更可）
+- モデル: **`claude-haiku-4-5`**（コスト最優先の既定。環境変数 `ANTHROPIC_MODEL` で `claude-sonnet-4-6` / `claude-opus-4-8` 等に変更可）
 - 抽出・分類は **構造化出力**（`output_config.format` の `json_schema`）で型安全に取得
 - システムプロンプトには **プロンプトキャッシュ**（`cache_control: ephemeral`）を付与
 - `AI_PROVIDER` 未設定時は **モック実装**（`src/lib/ai/mock.ts`）にフォールバック
