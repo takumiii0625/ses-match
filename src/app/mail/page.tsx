@@ -110,12 +110,22 @@ export default async function MailPage(props: {
 
       {/* 既存データの再抽出 */}
       <Card className="p-5">
-        <h2 className="mb-3 text-base font-semibold text-slate-800">所属・性別の再抽出</h2>
+        <h2 className="mb-1 text-base font-semibold text-slate-800">既存データの再抽出</h2>
         <p className="mb-3 text-sm text-slate-500">
-          抽出機能を追加する前に取り込んだ人材について、保存済みメール本文からAIで
-          所属・性別を補完します（未設定のみ・既存の値は上書きしません）。
+          抽出機能を追加する前に取り込んだ人材・案件について、保存済みメール本文からAIで
+          項目を補完します（未設定のみ・既存の値は上書きしません）。マッチボタンでは再抽出
+          されないため、所属や案件の商流が出ない場合はこちらを実行してください。
         </p>
-        <ReextractButton />
+        <div className="space-y-3">
+          <ReextractButton
+            endpoint="/api/cron/reextract-talents"
+            label="人材の所属・性別を再抽出"
+          />
+          <ReextractButton
+            endpoint="/api/cron/reextract-projects"
+            label="案件の商流を再抽出"
+          />
+        </div>
       </Card>
 
       {/* Log */}

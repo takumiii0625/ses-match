@@ -14,11 +14,18 @@ interface ReextractResult {
   errors: number;
 }
 
-// 1リクエストで処理する人材数。小さいほど各リクエストが短く＝タイムアウトしない。
+// 1リクエストで処理する件数。小さいほど各リクエストが短く＝タイムアウトしない。
 const CHUNK = 6;
 
-/** 既存人材の所属・性別をAIで再抽出。少しずつ分割して完了まで繰り返す。 */
-export function ReextractButton() {
+interface ReextractButtonProps {
+  /** 叩く再抽出API（人材 or 案件）。 */
+  endpoint: string;
+  /** ボタン文言（例: 所属・性別を再抽出 / 案件の商流を再抽出）。 */
+  label: string;
+}
+
+/** 既存データをAIで再抽出。少しずつ分割して完了まで繰り返す（人材/案件で共用）。 */
+export function ReextractButton({ endpoint, label }: ReextractButtonProps) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [percent, setPercent] = useState<number | null>(null);
@@ -38,7 +45,7 @@ export function ReextractButton() {
       let total = 0;
       for (;;) {
         const data = await fetchJson<ReextractResult>(
-          `/api/cron/reextract-talents?offset=${offset}&limit=${CHUNK}`,
+          `${endpoint}?offset=${offset}&limit=${CHUNK}`,
           { method: "POST" },
         );
         total = data.total;
@@ -70,7 +77,7 @@ export function ReextractButton() {
     <div className="space-y-2">
       <div className="flex items-center gap-3">
         <Button variant="secondary" onClick={run} disabled={running}>
-          {running ? `再抽出中… ${percent ?? 0}%` : "所属・性別を再抽出"}
+          {running ? `再抽出中… ${percent ?? 0}%` : label}
         </Button>
         {msg && (
           <span className={`text-sm ${isError ? "text-red-600" : "text-slate-600"}`}>
