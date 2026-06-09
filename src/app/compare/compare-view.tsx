@@ -526,7 +526,6 @@ function talentHeader(t: TalentCardVM, top: boolean, dupes = 1) {
           <div className="flex items-center gap-2">
             {top && <Badge tone="amber">最有力</Badge>}
             <span className="truncate font-semibold text-slate-800">{t.name}</span>
-            {t.talentType === "INHOUSE" && <Badge tone="green">自社</Badge>}
             {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
           </div>
           <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-slate-400">

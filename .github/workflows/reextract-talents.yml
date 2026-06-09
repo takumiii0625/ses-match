@@ -1,0 +1,17 @@
+name: 人材の所属・性別を再抽出（手動実行）
+
+# 既存の取り込み済み人材に、保存済みメール本文からAIで所属/性別を補完する。
+# 抽出機能を追加する前のデータ向け。Actionsタブから手動実行。
+on:
+  workflow_dispatch: {}
+
+jobs:
+  reextract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 再抽出を実行
+        run: |
+          curl -fsS --max-time 300 -X POST \
+            "https://sesmatch.encore-biz.com/api/cron/reextract-talents?limit=200" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n"

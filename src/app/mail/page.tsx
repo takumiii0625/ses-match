@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { RunButton } from "./run-button";
+import { ReextractButton } from "./reextract-button";
 import { Mail, CheckCircle2, AlertCircle } from "lucide-react";
 
 const KIND_LABELS: Record<string, string> = {
@@ -105,6 +106,16 @@ export default async function MailPage(props: {
             : "（定期実行はデプロイ後にCronで自動化できます）"}
         </p>
         <RunButton disabled={!connection} />
+      </Card>
+
+      {/* 既存データの再抽出 */}
+      <Card className="p-5">
+        <h2 className="mb-3 text-base font-semibold text-slate-800">所属・性別の再抽出</h2>
+        <p className="mb-3 text-sm text-slate-500">
+          抽出機能を追加する前に取り込んだ人材について、保存済みメール本文からAIで
+          所属・性別を補完します（未設定のみ・既存の値は上書きしません）。
+        </p>
+        <ReextractButton />
       </Card>
 
       {/* Log */}
