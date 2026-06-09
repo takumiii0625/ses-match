@@ -69,7 +69,11 @@ const TALENT_SCHEMA = {
   properties: {
     name: nullableString,
     age: nullableInt,
-    gender: { anyOf: [{ type: "string", enum: ["MALE", "FEMALE", "OTHER"] }, { type: "null" }] },
+    gender: {
+      anyOf: [{ type: "string", enum: ["MALE", "FEMALE", "OTHER"] }, { type: "null" }],
+      description:
+        "性別。男性/男→MALE、女性/女→FEMALE、それ以外→OTHER。記載が無ければ null。",
+    },
     skills: { type: "array", items: { type: "string" } },
     mainSkills: { type: "array", items: { type: "string" } },
     desiredRateMin: nullableInt,
@@ -77,7 +81,13 @@ const TALENT_SCHEMA = {
     remotePreference: nullableRemote,
     availabilityText: nullableString,
     nearestStation: nullableString,
-    affiliation: nullableString,
+    affiliation: {
+      anyOf: [{ type: "string" }, { type: "null" }],
+      description:
+        "人材の所属（商流上の立場）。メール内の「所属」「商流」「立場」ラベルの値をそのまま抽出する。" +
+        "例: 『自社所属フリーランス』『一社先正社員』『1社先フリーランス』『プロパー』。" +
+        "【所属】【商流】等のラベルや全角スペースは除く。記載が無ければ null。",
+    },
     note: nullableString,
   },
   required: [
@@ -109,8 +119,17 @@ const PROJECT_SCHEMA = {
     location: nullableString,
     startText: nullableString,
     description: nullableString,
-    channelText: nullableString,
-    supportFee: { type: "boolean" },
+    channelText: {
+      anyOf: [{ type: "string" }, { type: "null" }],
+      description:
+        "案件の商流制限の原文/要約。メール内の「商流」「エンド」「商流制限」等の記載を抽出する。" +
+        "例: 『エンド直のみ』『プロパー〜1社先まで』『貴社社員まで』『1社先まで』。記載が無ければ null。",
+    },
+    supportFee: {
+      type: "boolean",
+      description:
+        "支援費/営業支援費/中抜き等、支援費で商流を飛ばせる旨の記載があれば true、無ければ false。",
+    },
   },
   required: [
     "title",
