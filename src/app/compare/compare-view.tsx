@@ -54,6 +54,8 @@ export interface ProjectVM {
   location: string | null;
   startText: string | null;
   description: string | null;
+  channelText: string | null;
+  supportFee: boolean;
   emailSubject: string | null;
   emailBody: string | null;
   emailFrom: string | null;
@@ -191,6 +193,10 @@ function projectSummary(p: ProjectVM) {
       </GF>
       <GF label="開始時期">{p.startText ?? "-"}</GF>
       <GF label="勤務地">{p.location ?? "-"}</GF>
+      <GF label="商流">
+        {p.channelText ?? "-"}
+        {p.supportFee && <span className="ml-1 text-emerald-600">（支援費あり）</span>}
+      </GF>
       <div className="col-span-2 sm:col-span-3">
         <div className="mb-1 text-xs text-slate-400">必須スキル</div>
         {p.requiredSkills.length > 0 ? (

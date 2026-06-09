@@ -25,6 +25,16 @@ function windowStart(): Date {
   return new Date(Date.now() - MATCH_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 }
 
+/**
+ * 商流が「貴社社員（まで）」「貴社まで」の案件は、弊社以遠の人材を提案できないため
+ * マッチング対象から除外する（マッチを作らない）。
+ */
+function isOwnOnlyChannel(channelText: string | null): boolean {
+  if (!channelText) return false;
+  const t = channelText.replace(/\s/g, "");
+  return /貴社社員|貴社まで|貴社迄|貴社のみ/.test(t);
+}
+
 export interface MatchRunResult {
   projects: number;
   talents: number;
@@ -153,7 +163,7 @@ export async function runMatchingForOrg(
     ? { orgId, talentType: "INHOUSE" as const }
     : talentWindowWhere(orgId, since);
 
-  const [projectsAll, talents, systemPrompt] = await Promise.all([
+  const [projectsRaw, talents, systemPrompt] = await Promise.all([
     // ページングを安定させるため作成日昇順で固定。
     prisma.project.findMany({
       where: { orgId, receivedDate: { gte: since } },
@@ -162,6 +172,9 @@ export async function runMatchingForOrg(
     prisma.talent.findMany({ where: talentWhere }),
     resolveMatchPrompt(orgId),
   ]);
+
+  // 商流が「貴社社員/貴社まで」の案件はマッチング対象外。
+  const projectsAll = projectsRaw.filter((p) => !isOwnOnlyChannel(p.channelText));
 
   // クリーン再生成は先頭チャンクのみ。
   // inhouse スコープでは自社人材のマッチだけ削除し、他社のマッチは残す。
@@ -232,11 +245,14 @@ export async function runMatchingForNew(
   }
 
   const since = windowStart();
-  const [projects, talents, systemPrompt] = await Promise.all([
+  const [projectsRaw, talents, systemPrompt] = await Promise.all([
     prisma.project.findMany({ where: { orgId, receivedDate: { gte: since } } }),
     prisma.talent.findMany({ where: talentWindowWhere(orgId, since) }),
     resolveMatchPrompt(orgId),
   ]);
+
+  // 商流が「貴社社員/貴社まで」の案件はマッチング対象外。
+  const projects = projectsRaw.filter((p) => !isOwnOnlyChannel(p.channelText));
 
   const isNewProject = new Set(newProjectIds);
   const isNewTalent = new Set(newTalentIds);

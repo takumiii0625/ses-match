@@ -138,6 +138,13 @@ export default async function MatchingPage({ searchParams }: PageProps) {
               {REMOTE_LABELS[project.remotePreference] ?? project.remotePreference}
             </Badge>
           )}
+          {(project.channelText || project.supportFee) && (
+            <div className="mt-1 flex w-full flex-wrap items-center gap-1.5">
+              <span className="self-center text-xs text-muted">商流:</span>
+              {project.channelText && <Badge tone="amber">{project.channelText}</Badge>}
+              {project.supportFee && <Badge tone="green">支援費あり</Badge>}
+            </div>
+          )}
           {project.requiredSkills.length > 0 && (
             <div className="mt-1 flex w-full flex-wrap gap-1">
               <span className="self-center text-xs text-muted">必須スキル:</span>

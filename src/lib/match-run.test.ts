@@ -119,6 +119,17 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.done).toBe(true);
   });
 
+  it("商流『貴社社員/貴社まで』の案件はマッチング対象から除外する", async () => {
+    db.project.findMany.mockResolvedValue([
+      project("p1"),
+      { ...project("p2"), channelText: "貴社まで" },
+      { ...project("p3"), channelText: "貴社社員まで" },
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.totalProjects).toBe(1); // p1 のみ対象
+    expect(rankMock).toHaveBeenCalledTimes(1);
+  });
+
   it("提案不可(channelOk=false)も保存するが proposable=false で記録", async () => {
     rankMock.mockImplementation(async (_p: unknown, candidates: { talentId: string }[]) =>
       candidates.map((c) => ({

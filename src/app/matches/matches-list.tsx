@@ -39,6 +39,8 @@ export interface MatchVM {
     rateMax: number | null;
     requiredSkills: string[];
     receivedDate: string | null;
+    channelText: string | null;
+    supportFee: boolean;
   };
 }
 
@@ -315,6 +317,15 @@ export function MatchesList({
                     <Columns2 className="h-3.5 w-3.5" /> 見比べる
                   </Link>
                 </div>
+                {(project.channelText || project.supportFee) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs text-muted">商流:</span>
+                    {project.channelText && (
+                      <Badge tone="amber">{project.channelText}</Badge>
+                    )}
+                    {project.supportFee && <Badge tone="green">支援費あり</Badge>}
+                  </div>
+                )}
                 {project.requiredSkills.length > 0 && (
                   <div className="mt-2 flex flex-wrap items-center gap-1">
                     <span className="text-xs text-muted">必須スキル:</span>

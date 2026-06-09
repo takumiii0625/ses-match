@@ -28,6 +28,8 @@ export function toMatchVM(m: Match & { talent: Talent; project: Project }): Matc
       rateMax: m.project.rateMax,
       requiredSkills: m.project.requiredSkills,
       receivedDate: m.project.receivedDate ? m.project.receivedDate.toISOString() : null,
+      channelText: m.project.channelText,
+      supportFee: m.project.supportFee,
     },
   };
 }
