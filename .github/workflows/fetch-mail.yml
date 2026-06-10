@@ -4,9 +4,11 @@ name: メール自動取込（11/14/17時 JST）
 # JST = UTC+9 なので、11/14/17時 JST = 2/5/8時 UTC。
 # GitHub のスケジュールは数分前後する場合があります（仕様）。
 on:
-  schedule:
-    - cron: "0 2,5,8 * * *"
-  workflow_dispatch: {} # 手動実行も可
+  # 一時停止中: 自動取込＋自動マッチを止めるためスケジュールを無効化。
+  # 再開する時は下の schedule 2行のコメント(#)を外すこと。
+  # schedule:
+  #   - cron: "0 2,5,8 * * *"
+  workflow_dispatch: {} # 手動実行のみ（自動実行は停止中）
 
 concurrency:
   group: fetch-mail
