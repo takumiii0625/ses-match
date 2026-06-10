@@ -31,6 +31,40 @@ import { createLimiter } from "@/lib/limit";
 // claude-haiku-4-5 / claude-sonnet-4-6 などに上書き可。
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
 
+// LLMに渡すメール本文の最大文字数。転送スレッド等の巨大本文で入力トークンが膨らむのを防ぐ。
+const MAX_EMAIL_CHARS = 12000;
+
+// 100万トークンあたりの単価（USD）。コスト可視化ログ用。
+const PRICES: Record<string, { in: number; out: number }> = {
+  "claude-opus-4-8": { in: 5, out: 25 },
+  "claude-opus-4-7": { in: 5, out: 25 },
+  "claude-opus-4-6": { in: 5, out: 25 },
+  "claude-sonnet-4-6": { in: 3, out: 15 },
+  "claude-haiku-4-5": { in: 1, out: 5 },
+};
+
+interface UsageLike {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+}
+
+/** 1コールのトークン使用量と概算コストをログ出力（コスト調査用）。 */
+function logUsage(tag: string, usage: UsageLike | undefined): void {
+  if (!usage) return;
+  const p = PRICES[MODEL] ?? { in: 5, out: 25 };
+  const inp = usage.input_tokens ?? 0;
+  const cacheR = usage.cache_read_input_tokens ?? 0;
+  const cacheW = usage.cache_creation_input_tokens ?? 0;
+  const out = usage.output_tokens ?? 0;
+  const cost =
+    (inp * p.in + cacheR * p.in * 0.1 + cacheW * p.in * 1.25 + out * p.out) / 1e6;
+  console.log(
+    `[ai:${tag}] model=${MODEL} in=${inp} cacheR=${cacheR} cacheW=${cacheW} out=${out} ~$${cost.toFixed(4)}`,
+  );
+}
+
 // マッチ判定の1リクエストあたり候補数。小さいほど1回の出力が短く、件数が多くても
 // max_tokens で打ち切られない。バッチは並列・独立なので1つ失敗しても他は残る。
 const MATCH_BATCH_SIZE = 5;
@@ -229,9 +263,11 @@ export class AnthropicAIService implements AIService {
     rawEmail: string,
     attachments?: EmailAttachment[],
   ): Anthropic.ContentBlockParam[] {
-    const content: Anthropic.ContentBlockParam[] = [
-      { type: "text", text: rawEmail },
-    ];
+    const text =
+      rawEmail.length > MAX_EMAIL_CHARS
+        ? rawEmail.slice(0, MAX_EMAIL_CHARS) + "\n…（以下省略）"
+        : rawEmail;
+    const content: Anthropic.ContentBlockParam[] = [{ type: "text", text }];
     for (const att of attachments ?? []) {
       if (att.mediaType === "application/pdf") {
         content.push({
@@ -269,6 +305,7 @@ export class AnthropicAIService implements AIService {
       },
       messages: [{ role: "user", content: this.buildContent(rawEmail, attachments) }],
     });
+    logUsage("extract", res.usage);
 
     const text = res.content.find((b) => b.type === "text");
     if (!text || text.type !== "text") {
@@ -279,14 +316,14 @@ export class AnthropicAIService implements AIService {
 
   async classifyEmail(
     rawEmail: string,
-    attachments?: EmailAttachment[],
+    _attachments?: EmailAttachment[],
     systemPrompt?: string,
   ): Promise<EmailClassification> {
+    // 分類(人材/案件/対象外)は本文・件名で十分。添付PDFは送らない（コスト削減・PDFを2回送る無駄を排除）。
     return this.extract<EmailClassification>(
       systemPrompt?.trim() || DEFAULT_CLASSIFY_PROMPT,
       CLASSIFY_SCHEMA as unknown as Record<string, unknown>,
       rawEmail,
-      attachments,
     );
   }
 
@@ -500,6 +537,8 @@ export class AnthropicAIService implements AIService {
         ],
       }),
     );
+
+    logUsage("match", res.usage);
 
     // 打ち切り時は曖昧なパースエラーにせず原因の分かるメッセージにする。
     if (res.stop_reason === "max_tokens") {
