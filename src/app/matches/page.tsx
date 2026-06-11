@@ -5,7 +5,7 @@ import { DEFAULT_MATCH_PROMPT } from "@/lib/ai/prompts";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { MatchesList } from "./matches-list";
-import { toMatchVM } from "./serialize";
+import { toMatchVM, matchVmSelect } from "./serialize";
 
 export const metadata = { title: "マッチ一覧 — SES Match" };
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export default async function MatchesPage() {
 
   const matches = await prisma.match.findMany({
     where: { project: { orgId: org.id }, score: { gte: 80 } },
-    include: { talent: true, project: true },
+    select: matchVmSelect,
     orderBy: { score: "desc" },
   });
 

@@ -1,8 +1,47 @@
-import type { Match, Talent, Project } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { MatchVM } from "./matches-list";
 
+// VM化に必要な列だけ取得する select。emailBody（フルのメール本文）等の重い列を読まず、
+// Neonのネットワーク転送量を削減する（無料枠の超過対策）。一覧ページで共通利用。
+export const matchVmSelect = {
+  id: true,
+  score: true,
+  reasons: true,
+  proposable: true,
+  channelNote: true,
+  talent: {
+    select: {
+      id: true,
+      name: true,
+      talentType: true,
+      affiliation: true,
+      mainSkills: true,
+      skills: true,
+      desiredRateMin: true,
+      desiredRateMax: true,
+      remotePreference: true,
+      receivedDate: true,
+    },
+  },
+  project: {
+    select: {
+      id: true,
+      title: true,
+      clientName: true,
+      rateMin: true,
+      rateMax: true,
+      requiredSkills: true,
+      receivedDate: true,
+      channelText: true,
+      supportFee: true,
+    },
+  },
+} satisfies Prisma.MatchSelect;
+
+type MatchVmRow = Prisma.MatchGetPayload<{ select: typeof matchVmSelect }>;
+
 /** Prisma の Match(+talent,+project) を、クライアント用 VM に直列化する。 */
-export function toMatchVM(m: Match & { talent: Talent; project: Project }): MatchVM {
+export function toMatchVM(m: MatchVmRow): MatchVM {
   return {
     id: m.id,
     score: m.score,

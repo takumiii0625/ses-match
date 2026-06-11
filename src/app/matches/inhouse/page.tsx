@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { Card } from "@/components/ui/card";
 import { InhouseMatchesList } from "./inhouse-list";
-import { toMatchVM } from "../serialize";
+import { toMatchVM, matchVmSelect } from "../serialize";
 import { RematchButton } from "../../matching/rematch-button";
 
 export const metadata = { title: "自社保有人材のマッチ — SES Match" };
@@ -19,7 +19,7 @@ export default async function InhouseMatchesPage() {
       talent: { orgId: org.id, talentType: "INHOUSE" },
       score: { gte: 80 },
     },
-    include: { talent: true, project: true },
+    select: matchVmSelect,
     orderBy: { score: "desc" },
   });
 

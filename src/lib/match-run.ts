@@ -1,4 +1,4 @@
-import type { Project, Talent } from "@prisma/client";
+import { Prisma, type Project, type Talent } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   prefilterCandidates,
@@ -11,6 +11,43 @@ import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
 
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
 export const MIN_SCORE = 80;
+
+// マッチ処理で実際に使う列だけ取得する。emailBody（フルのメール本文）等の重い列を
+// 読まないことで、Neonのネットワーク転送量を大幅に削減する（無料枠の超過対策）。
+const TALENT_MATCH_SELECT = {
+  id: true,
+  name: true,
+  age: true,
+  talentType: true,
+  affiliation: true,
+  mainSkills: true,
+  skills: true,
+  desiredRateMin: true,
+  desiredRateMax: true,
+  remotePreference: true,
+  availabilityText: true,
+  nearestStation: true,
+  note: true,
+  sourceEmail: true,
+} satisfies Prisma.TalentSelect;
+
+const PROJECT_MATCH_SELECT = {
+  id: true,
+  title: true,
+  clientName: true,
+  requiredSkills: true,
+  rateMin: true,
+  rateMax: true,
+  remotePreference: true,
+  location: true,
+  startText: true,
+  description: true,
+  channelText: true,
+  supportFee: true,
+  sourceEmail: true,
+  emailSubject: true,
+  receivedDate: true,
+} satisfies Prisma.ProjectSelect;
 
 // 案件・他社人材は「直近3日の配信」に限定するが、自社保有人材(INHOUSE)は
 // 常に対象（保有ロスターなので配信日に関係なく提案候補にする）。
@@ -206,12 +243,16 @@ export async function runMatchingForOrg(
     : talentWindowWhere(orgId, since);
 
   const [projectsRaw, talents, systemPrompt] = await Promise.all([
-    // ページングを安定させるため作成日昇順で固定。
+    // ページングを安定させるため作成日昇順で固定。必要列のみ取得（転送量削減）。
     prisma.project.findMany({
       where: { orgId, receivedDate: { gte: since } },
       orderBy: { createdAt: "asc" },
-    }),
-    prisma.talent.findMany({ where: talentWhere }),
+      select: PROJECT_MATCH_SELECT,
+    }) as unknown as Promise<Project[]>,
+    prisma.talent.findMany({
+      where: talentWhere,
+      select: TALENT_MATCH_SELECT,
+    }) as unknown as Promise<Talent[]>,
     resolveMatchPrompt(orgId),
   ]);
 
@@ -296,8 +337,14 @@ export async function runMatchingForNew(
 
   const since = windowStart();
   const [projectsRaw, talents, systemPrompt] = await Promise.all([
-    prisma.project.findMany({ where: { orgId, receivedDate: { gte: since } } }),
-    prisma.talent.findMany({ where: talentWindowWhere(orgId, since) }),
+    prisma.project.findMany({
+      where: { orgId, receivedDate: { gte: since } },
+      select: PROJECT_MATCH_SELECT,
+    }) as unknown as Promise<Project[]>,
+    prisma.talent.findMany({
+      where: talentWindowWhere(orgId, since),
+      select: TALENT_MATCH_SELECT,
+    }) as unknown as Promise<Talent[]>,
     resolveMatchPrompt(orgId),
   ]);
 
