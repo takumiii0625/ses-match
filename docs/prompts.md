@@ -270,7 +270,7 @@ LLMは使わず、以下の重み付けで計算します（`src/lib/matching.ts
 
 ## モデル・実装メモ
 
-- モデル: **`claude-opus-4-8`**（精度最優先の既定。環境変数 `ANTHROPIC_MODEL` で `claude-sonnet-4-6` / `claude-haiku-4-5` 等に変更可）
+- モデル: **`claude-haiku-4-5`**（コスト最優先の既定。環境変数 `ANTHROPIC_MODEL` で `claude-sonnet-4-6` / `claude-opus-4-8` 等に変更可）
 - 抽出・分類は **構造化出力**（`output_config.format` の `json_schema`）で型安全に取得
 - システムプロンプトには **プロンプトキャッシュ**（`cache_control: ephemeral`）を付与
 - `AI_PROVIDER` 未設定時は **モック実装**（`src/lib/ai/mock.ts`）にフォールバック

@@ -27,9 +27,9 @@ import { createLimiter } from "@/lib/limit";
 // - Prompt caching on the (stable) system prompt
 // Selected when AI_PROVIDER=anthropic and ANTHROPIC_API_KEY is set (see ./index.ts).
 
-// 精度最優先で最上位の Opus 4.8 をデフォルトに。コスト優先なら ANTHROPIC_MODEL で
-// claude-haiku-4-5 / claude-sonnet-4-6 などに上書き可。
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-4-8";
+// コスト最優先で最も安い Haiku をデフォルトに（Opusの約1/5）。精度を上げたい場合は
+// ANTHROPIC_MODEL で claude-sonnet-4-6 / claude-opus-4-8 に上書き可。
+const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5";
 
 // LLMに渡すメール本文の最大文字数。転送スレッド等の巨大本文で入力トークンが膨らむのを防ぐ。
 const MAX_EMAIL_CHARS = 12000;
