@@ -1,6 +1,11 @@
 import type { Project, Talent } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { prefilterCandidates, isSameCompany, isStrictDirectChannel } from "@/lib/matching";
+import {
+  prefilterCandidates,
+  isSameCompany,
+  isStrictDirectChannel,
+  dedupeProjectsForMatch,
+} from "@/lib/matching";
 import { getAI } from "@/lib/ai";
 import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
 
@@ -189,9 +194,9 @@ export async function runMatchingForOrg(
     resolveMatchPrompt(orgId),
   ]);
 
-  // 「貴社社員/貴社まで」案件は“貴社社員＝自社保有人材”だけが提案可。案件は除外せず残し、
-  // 候補を自社人材だけに絞る（下の candidates 構築で対応）。他社人材には出さない。
-  const projectsAll = projectsRaw;
+  // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
+  // 「貴社社員/貴社まで」案件は除外せず残し、候補を自社人材だけに絞る（下で対応）。
+  const projectsAll = dedupeProjectsForMatch(projectsRaw);
 
   // クリーン再生成は先頭チャンクのみ。
   // inhouse スコープでは自社人材のマッチだけ削除し、他社のマッチは残す。
@@ -271,8 +276,8 @@ export async function runMatchingForNew(
     resolveMatchPrompt(orgId),
   ]);
 
-  // 「貴社社員/貴社まで」案件も残す（候補を自社人材だけに絞って提案対象にする）。
-  const projects = projectsRaw;
+  // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
+  const projects = dedupeProjectsForMatch(projectsRaw);
 
   const isNewProject = new Set(newProjectIds);
   const isNewTalent = new Set(newTalentIds);

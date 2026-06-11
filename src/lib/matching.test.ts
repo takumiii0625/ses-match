@@ -7,6 +7,8 @@ import {
   isSameCompany,
   prefilterCandidates,
   isStrictDirectChannel,
+  channelDepth,
+  dedupeProjectsForMatch,
 } from "./matching";
 
 function talent(p: Partial<Talent>): Talent {
@@ -141,6 +143,46 @@ describe("prefilterCandidates", () => {
     const ids = prefilterCandidates(p, [one, two]).map((h) => h.talent.id);
     expect(ids).toContain("two");
     expect(ids).not.toContain("one");
+  });
+});
+
+describe("channelDepth", () => {
+  it("エンド直/プロパー=0、N社先=N、不明=99", () => {
+    expect(channelDepth("エンド直のみ")).toBe(0);
+    expect(channelDepth("プロパー")).toBe(0);
+    expect(channelDepth("1社先まで")).toBe(1);
+    expect(channelDepth("二社先")).toBe(2);
+    expect(channelDepth(null)).toBe(99);
+  });
+});
+
+describe("dedupeProjectsForMatch", () => {
+  it("同じ会社×件名は重複→単価が高い方を採用", () => {
+    const a = project({ id: "a", sourceEmail: "x@acme.co.jp", emailSubject: "Java案件", rateMax: 80 } as Partial<Project>);
+    const b = project({ id: "b", sourceEmail: "y@acme.co.jp", emailSubject: "Re: Java案件", rateMax: 100 } as Partial<Project>);
+    const out = dedupeProjectsForMatch([a, b]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("b"); // 単価高い & Re: は同一件名扱い
+  });
+
+  it("単価同じなら商流が浅い方を採用", () => {
+    const a = project({ id: "a", sourceEmail: "x@acme.co.jp", emailSubject: "S", rateMax: 80, channelText: "2社先" } as Partial<Project>);
+    const b = project({ id: "b", sourceEmail: "y@acme.co.jp", emailSubject: "S", rateMax: 80, channelText: "エンド直" } as Partial<Project>);
+    const out = dedupeProjectsForMatch([a, b]);
+    expect(out).toHaveLength(1);
+    expect(out[0].id).toBe("b"); // 商流浅い
+  });
+
+  it("会社が違えば同じ件名でも別案件（名寄せしない）", () => {
+    const a = project({ id: "a", sourceEmail: "x@acme.co.jp", emailSubject: "S", rateMax: 80 } as Partial<Project>);
+    const b = project({ id: "b", sourceEmail: "y@other.co.jp", emailSubject: "S", rateMax: 100 } as Partial<Project>);
+    expect(dedupeProjectsForMatch([a, b])).toHaveLength(2);
+  });
+
+  it("会社不明(フリーメール/なし)は名寄せしない", () => {
+    const a = project({ id: "a", sourceEmail: null, emailSubject: "S" } as Partial<Project>);
+    const b = project({ id: "b", sourceEmail: "z@gmail.com", emailSubject: "S" } as Partial<Project>);
+    expect(dedupeProjectsForMatch([a, b])).toHaveLength(2);
   });
 });
 

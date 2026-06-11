@@ -207,6 +207,66 @@ export function isStrictDirectChannel(channelText: string | null): boolean {
   return /エンド直|プロパー|直のみ|直案件/.test(channelText.replace(/\s/g, ""));
 }
 
+/**
+ * 商流の深さ（小さいほど浅い＝エンド寄りで取り分が大きい）。
+ * 例: エンド直/プロパー=0、1社先=1、2社先=2、不明=99。
+ */
+export function channelDepth(channelText: string | null): number {
+  if (!channelText) return 99; // 不明は深い扱い（既知の浅い方を優先する）
+  const t = channelText.replace(/\s/g, "");
+  if (/エンド直|直案件|直のみ|プロパー/.test(t)) return 0;
+  const num = t.match(/(\d+)\s*社/);
+  if (num) return Number(num[1]);
+  const kanjiMap: Record<string, number> = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5 };
+  const kanji = t.match(/([一二三四五])社/);
+  if (kanji) return kanjiMap[kanji[1]];
+  if (/貴社/.test(t)) return 1; // 貴社まで＝受信側まで（概ね浅め）
+  return 50; // 文言はあるが深さ不明
+}
+
+/** 件名の正規化（Re:/Fwd: 等の接頭辞を除去して比較しやすくする）。 */
+function subjectKey(subject: string | null): string {
+  let s = (subject ?? "").toLowerCase().replace(/\s+/g, "");
+  // 先頭の re: / fwd: / fw: を繰り返し除去。
+  let prev = "";
+  while (prev !== s) {
+    prev = s;
+    s = s.replace(/^(re|fwd|fw|転送|返信)[:：]/, "");
+  }
+  return s;
+}
+
+/** 重複案件のうち、単価が高く商流が浅い方を代表に選ぶ。 */
+function betterProject(a: Project, b: Project): Project {
+  const ra = a.rateMax ?? a.rateMin ?? -1;
+  const rb = b.rateMax ?? b.rateMin ?? -1;
+  if (ra !== rb) return ra > rb ? a : b; // 単価が高い方
+  const da = channelDepth(a.channelText);
+  const db = channelDepth(b.channelText);
+  if (da !== db) return da < db ? a : b; // 商流が浅い方
+  const ta = a.receivedDate ? a.receivedDate.getTime() : 0;
+  const tb = b.receivedDate ? b.receivedDate.getTime() : 0;
+  return ta >= tb ? a : b; // タイブレークは新しい配信
+}
+
+/**
+ * マッチ用の案件重複名寄せ。同じ会社（送信元ドメイン）が同じ件名で配信した案件を
+ * 重複とみなし、単価が高く商流が浅い方だけを代表として残す。
+ * 会社が特定できない（フリーメール等）案件は名寄せしない（取りこぼし防止）。
+ */
+export function dedupeProjectsForMatch(projects: Project[]): Project[] {
+  const map = new Map<string, Project>();
+  for (const p of projects) {
+    const domain = companyDomain(p.sourceEmail);
+    const key = domain
+      ? `${domain}#${subjectKey(p.emailSubject ?? p.title)}`
+      : `id#${p.id}`; // 会社不明は名寄せしない
+    const cur = map.get(key);
+    map.set(key, cur ? betterProject(cur, p) : p);
+  }
+  return [...map.values()];
+}
+
 export function prefilterCandidates(
   project: Project,
   talents: Talent[],
