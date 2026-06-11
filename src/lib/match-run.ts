@@ -22,12 +22,21 @@ const talentWindowWhere = (orgId: string, since: Date) => ({
 // 1案件あたりLLMに渡す候補の上限（事前フィルタ後の上位N件）。
 const SHORTLIST_LIMIT = 30;
 
-// マッチ対象にする配信日の範囲（日数）。これより古い案件・人材はマッチしない。
+// 取込時の差分マッチで対象にする配信日の範囲（日数）。これより古い案件・人材はマッチしない。
 export const MATCH_WINDOW_DAYS = 3;
 
-/** マッチ対象とする配信日の下限（今からこの日数前まで）。 */
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** 取込時の差分マッチ用：今からこの日数前まで。 */
 function windowStart(): Date {
   return new Date(Date.now() - MATCH_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+}
+
+/** 今日(JST)の0:00をUTCのDateで返す。手動の全件マッチは「今日の配信」だけを対象にする。 */
+function startOfTodayJst(): Date {
+  const jst = new Date(Date.now() + JST_OFFSET_MS);
+  jst.setUTCHours(0, 0, 0, 0);
+  return new Date(jst.getTime() - JST_OFFSET_MS);
 }
 
 /**
@@ -155,7 +164,7 @@ async function rankAndSave(
 }
 
 export interface RematchPageResult {
-  totalProjects: number; // 対象案件の総数（直近3日以内）
+  totalProjects: number; // 対象案件の総数（今日の配信のみ・名寄せ後）
   processed: number; // ここまでに処理した案件数（= 次回 offset）
   done: boolean; // 全件処理が完了したか
   talents: number;
@@ -177,7 +186,8 @@ export async function runMatchingForOrg(
   const offset = Math.max(0, opts.offset ?? 0);
   const limit = opts.limit && opts.limit > 0 ? opts.limit : Number.MAX_SAFE_INTEGER;
   const inhouseOnly = opts.scope === "inhouse";
-  const since = windowStart();
+  // 手動の全件マッチは「今日(JST)配信」の案件・他社人材のみ対象（自社人材は常に対象）。
+  const since = startOfTodayJst();
 
   // inhouse スコープでは候補を自社保有人材だけに限定する。
   const talentWhere = inhouseOnly

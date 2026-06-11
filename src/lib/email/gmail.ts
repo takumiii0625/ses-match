@@ -148,16 +148,22 @@ function stripHtml(html: string): string {
     .trim();
 }
 
+/** 今日(JST)の日付を Gmail 用 YYYY/MM/DD で返す。 */
+function jstTodayStr(): string {
+  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const y = jst.getUTCFullYear();
+  const m = String(jst.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(jst.getUTCDate()).padStart(2, "0");
+  return `${y}/${m}/${d}`;
+}
+
 function mailQuery(): string {
-  // 取得対象の日数。既定は1日（コスト最優先）。MAIL_WINDOW_DAYS で変更可。
-  // MAIL_QUERY を直接指定した場合はそれを最優先で使う。
-  const days = process.env.MAIL_WINDOW_DAYS ?? "1";
-  return (
-    process.env.MAIL_QUERY ??
-    (process.env.MAIL_ADDRESS
-      ? `to:${process.env.MAIL_ADDRESS} newer_than:${days}d`
-      : `newer_than:${days}d`)
-  );
+  // 優先度: MAIL_QUERY（直接指定）> MAIL_WINDOW_DAYS（newer_than:Nd）> 既定は今日(JST)のみ。
+  if (process.env.MAIL_QUERY) return process.env.MAIL_QUERY;
+  const to = process.env.MAIL_ADDRESS ? `to:${process.env.MAIL_ADDRESS} ` : "";
+  const days = process.env.MAIL_WINDOW_DAYS;
+  if (days) return `${to}newer_than:${days}d`;
+  return `${to}after:${jstTodayStr()}`; // 今日(JST)0:00以降
 }
 
 /** List + fetch messages matching the query (default: addressed to MAIL_ADDRESS). */
