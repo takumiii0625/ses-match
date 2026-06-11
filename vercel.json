@@ -1,3 +1,8 @@
 {
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/cron/fetch-mail",
+      "schedule": "0 0 * * *"
+    }
+  ]
 }
