@@ -3,7 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { fetchJson } from "@/lib/http";
+
+const PERIOD_OPTIONS = [
+  { value: "1", label: "今日のみ" },
+  { value: "3", label: "過去3日" },
+  { value: "7", label: "過去7日" },
+];
 
 interface RematchPageResult {
   totalProjects: number;
@@ -38,6 +45,7 @@ export function RematchButton({
   const [percent, setPercent] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [days, setDays] = useState("1"); // 既定は今日のみ（過去復旧時に変更）
 
   async function handleRun() {
     if (running) return;
@@ -53,7 +61,7 @@ export function RematchButton({
       let talents = 0;
       for (;;) {
         const data = await fetchJson<RematchPageResult>(
-          `/api/cron/rematch?offset=${offset}&limit=${CHUNK}&scope=${scope}`,
+          `/api/cron/rematch?offset=${offset}&limit=${CHUNK}&scope=${scope}&days=${days}`,
           { method: "POST" },
         );
         total = data.totalProjects;
@@ -86,6 +94,15 @@ export function RematchButton({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-3">
+        <div className="w-32">
+          <Select
+            options={PERIOD_OPTIONS}
+            value={days}
+            onChange={(e) => setDays(e.target.value)}
+            disabled={running}
+            aria-label="対象期間"
+          />
+        </div>
         <Button variant="secondary" size="md" onClick={handleRun} disabled={running}>
           {running ? `実行中… ${percent ?? 0}%` : runLabel}
         </Button>

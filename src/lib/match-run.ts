@@ -181,13 +181,24 @@ export interface RematchPageResult {
  */
 export async function runMatchingForOrg(
   orgId: string,
-  opts: { offset?: number; limit?: number; scope?: "all" | "inhouse" } = {},
+  opts: {
+    offset?: number;
+    limit?: number;
+    scope?: "all" | "inhouse";
+    sinceDays?: number; // 対象とする配信日の幅（1=今日のみ。例 3=今日含む直近3日）
+  } = {},
 ): Promise<RematchPageResult> {
   const offset = Math.max(0, opts.offset ?? 0);
   const limit = opts.limit && opts.limit > 0 ? opts.limit : Number.MAX_SAFE_INTEGER;
   const inhouseOnly = opts.scope === "inhouse";
-  // 手動の全件マッチは「今日(JST)配信」の案件・他社人材のみ対象（自社人材は常に対象）。
-  const since = startOfTodayJst();
+  // 既定は「今日(JST)配信」のみ。sinceDays で過去に遡る（過去マッチの復旧用）。
+  // 自社人材は常に対象。
+  const sinceDays = opts.sinceDays && opts.sinceDays > 0 ? opts.sinceDays : 1;
+  const todayStart = startOfTodayJst();
+  const since =
+    sinceDays <= 1
+      ? todayStart
+      : new Date(todayStart.getTime() - (sinceDays - 1) * 24 * 60 * 60 * 1000);
 
   // inhouse スコープでは候補を自社保有人材だけに限定する。
   const talentWhere = inhouseOnly

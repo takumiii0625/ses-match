@@ -38,9 +38,12 @@ async function handle(req: Request) {
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw ? Number(limitRaw) : undefined;
     const scope = url.searchParams.get("scope") === "inhouse" ? "inhouse" : "all";
-    const result = await runMatchingForOrg(org.id, { offset, limit, scope });
+    // ?days=N で対象期間を指定（1=今日のみ・既定。過去のマッチ復旧時に 3 等を指定）。
+    const daysRaw = url.searchParams.get("days");
+    const sinceDays = daysRaw ? Number(daysRaw) : undefined;
+    const result = await runMatchingForOrg(org.id, { offset, limit, scope, sinceDays });
     console.log(
-      `[rematch] scope=${scope} offset=${offset} processed=${result.processed}/${result.totalProjects} saved=${result.saved} errors=${result.errors} done=${result.done}`,
+      `[rematch] scope=${scope} days=${sinceDays ?? 1} offset=${offset} processed=${result.processed}/${result.totalProjects} saved=${result.saved} errors=${result.errors} done=${result.done}`,
     );
     return NextResponse.json(result);
   } catch (e) {
