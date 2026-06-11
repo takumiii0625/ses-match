@@ -25,18 +25,20 @@ function makeClient() {
   const base = new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
+  // 再試行の待ち時間（ms）。Neon等のコンピュート起床は数秒かかるため、
+  // 合計で十分長く待つ（初回失敗後に起床→次の試行で成功させる）。
+  const BACKOFFS = [1000, 2000, 4000, 6000, 8000]; // 計約21秒・最大6試行
   return base.$extends({
     query: {
       async $allOperations({ args, query }) {
         let lastErr: unknown;
-        // 最大3回（初回＋2回再試行）。コールドスタートの復帰を吸収する。
-        for (let attempt = 0; attempt < 3; attempt++) {
+        for (let attempt = 0; attempt <= BACKOFFS.length; attempt++) {
           try {
             return await query(args);
           } catch (e) {
             lastErr = e;
-            if (!isTransient(e) || attempt === 2) throw e;
-            await sleep(200 * (attempt + 1)); // 200ms, 400ms
+            if (!isTransient(e) || attempt === BACKOFFS.length) throw e;
+            await sleep(BACKOFFS[attempt]);
           }
         }
         throw lastErr;
