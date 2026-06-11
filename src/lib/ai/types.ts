@@ -50,6 +50,7 @@ export interface EmailAttachment {
   filename: string;
   mediaType: string; // 例: application/pdf
   dataBase64: string;
+  text?: string; // PDFから抽出した本文テキスト（あればLLMにはテキストで送り、トークンを節約）
 }
 
 export type IngestKind = "TALENT" | "PROJECT" | "IGNORE";

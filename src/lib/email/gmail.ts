@@ -1,7 +1,25 @@
 import { google } from "googleapis";
 import type { gmail_v1 } from "googleapis";
+import { extractText, getDocumentProxy } from "unpdf";
 import { prisma } from "@/lib/prisma";
 import type { EmailAttachment } from "@/lib/ai/types";
+
+/**
+ * PDFバイト列からテキストを抽出する。テキストPDFなら成功し、LLMには
+ * （高価な画像トークンの document ブロックではなく）安価なテキストで送れる。
+ * スキャンPDF等で抽出できない場合は undefined を返し、呼び出し側で document に
+ * フォールバックする。
+ */
+async function extractPdfText(bytes: Buffer): Promise<string | undefined> {
+  try {
+    const pdf = await getDocumentProxy(new Uint8Array(bytes));
+    const { text } = await extractText(pdf, { mergePages: true });
+    const t = (Array.isArray(text) ? text.join("\n") : text)?.trim();
+    return t && t.length > 0 ? t : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 // Gmail integration (read-only). Reads messages from the connected mailbox,
 // extracts plain-text body + PDF attachments. OAuth refresh token is stored
@@ -131,11 +149,14 @@ function stripHtml(html: string): string {
 }
 
 function mailQuery(): string {
+  // 取得対象の日数。既定は1日（コスト最優先）。MAIL_WINDOW_DAYS で変更可。
+  // MAIL_QUERY を直接指定した場合はそれを最優先で使う。
+  const days = process.env.MAIL_WINDOW_DAYS ?? "1";
   return (
     process.env.MAIL_QUERY ??
     (process.env.MAIL_ADDRESS
-      ? `to:${process.env.MAIL_ADDRESS} newer_than:60d`
-      : "newer_than:30d")
+      ? `to:${process.env.MAIL_ADDRESS} newer_than:${days}d`
+      : `newer_than:${days}d`)
   );
 }
 
@@ -211,11 +232,14 @@ async function parseMessage(
         messageId: id,
         id: a.body!.attachmentId!,
       });
-      const b64 = Buffer.from(att.data.data ?? "", "base64url").toString("base64");
+      const bytes = Buffer.from(att.data.data ?? "", "base64url");
+      const b64 = bytes.toString("base64");
       attachments.push({
         filename: a.filename ?? "attachment.pdf",
         mediaType: "application/pdf",
         dataBase64: b64,
+        // PDFからテキストを抽出（テキストPDFならLLMには安価なテキストで送れる）。
+        text: await extractPdfText(bytes),
       });
     } catch {}
   }
