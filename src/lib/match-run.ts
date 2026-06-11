@@ -209,12 +209,16 @@ export async function runMatchingForOrg(
   const projectsAll = dedupeProjectsForMatch(projectsRaw);
 
   // クリーン再生成は先頭チャンクのみ。
-  // inhouse スコープでは自社人材のマッチだけ削除し、他社のマッチは残す。
+  // 重要: 削除は「今回の対象（今日配信の案件）」に限定する。全マッチを消すと、
+  // 窓外（過去日）のマッチまで消えて作り直されず、過去のマッチが消失してしまう。
+  // inhouse スコープでは対象案件のうち自社人材のマッチだけ削除し、他社のマッチは残す。
   if (offset === 0) {
+    const windowProjectIds = projectsRaw.map((p) => p.id);
     await prisma.match.deleteMany({
-      where: inhouseOnly
-        ? { project: { orgId }, talent: { talentType: "INHOUSE" } }
-        : { project: { orgId } },
+      where: {
+        projectId: { in: windowProjectIds },
+        ...(inhouseOnly ? { talent: { talentType: "INHOUSE" as const } } : {}),
+      },
     });
   }
 
