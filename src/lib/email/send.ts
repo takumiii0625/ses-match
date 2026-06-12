@@ -67,6 +67,38 @@ export function contactNameFromFrom(from?: string | null): string {
   return "ご担当者";
 }
 
+/**
+ * メール本文の挨拶・署名から担当者名を抽出する（Fromに表示名が無い場合の救済）。
+ * 例: 「ハルミナの菅原です」→ 菅原 / 「株式会社ABCの田中と申します」→ 田中
+ */
+export function contactNameFromBody(body?: string | null): string | null {
+  if (!body) return null;
+  // 名乗りはメール冒頭にあるはずなので先頭300字だけ見る（署名の引用等での誤検出を防ぐ）。
+  const head = body.slice(0, 300);
+  // 名前は漢字/カタカナ始まり（「ご紹介です」等のひらがな始まりを除外）。
+  const m = head.match(/[のノ]\s*([一-龯ァ-ヶ][一-龯ぁ-んァ-ヶー]{0,7})\s*(?:です|と申します)/);
+  const name = m?.[1];
+  if (!name) return null;
+  // 「〜のご紹介です」「〜の件です」等のビジネス常套句は名前ではない。
+  if (/^(紹介|案内|連絡|提案|確認|報告|共有|送付|展開|相談|件|者|通り|状況)/.test(name)) return null;
+  return name;
+}
+
+/**
+ * 案内メールの宛名を決める。優先順位:
+ * Fromの表示名 → DB保存の担当者名（LLM抽出） → 本文署名からの抽出 → ご担当者
+ */
+export function resolveContactName(
+  from?: string | null,
+  contactName?: string | null,
+  emailBody?: string | null,
+): string {
+  const fromName = contactNameFromFrom(from);
+  if (fromName !== "ご担当者") return fromName;
+  if (contactName?.trim()) return contactName.trim();
+  return contactNameFromBody(emailBody) ?? "ご担当者";
+}
+
 function stripParen(s: string): string {
   // 全角/半角の括弧書き（例: （当社同席））を除去
   return s.replace(/[（(][^）)]*[）)]/g, "").replace(/[ 　]+$/, "");
@@ -127,6 +159,8 @@ export function transformProjectBody(raw: string): string {
 export interface ProjectEmailInput {
   talentName: string; // エンジニアのイニシャル/氏名
   contactFrom: string | null; // 人材を送ってきたメールの From（担当者名の抽出元）
+  contactName?: string | null; // 担当者名（LLM抽出済み。Fromに表示名が無い場合のフォールバック）
+  contactBody?: string | null; // 人材メール本文（署名から担当者名を抽出する最終フォールバック）
   projectTitle: string;
   projectBlock: string; // 整形済みの案件本文（LLM整形 or ルール整形の結果）
 }
@@ -136,7 +170,7 @@ export function buildProjectEmail(input: ProjectEmailInput): {
   subject: string;
   text: string;
 } {
-  const contactName = contactNameFromFrom(input.contactFrom);
+  const contactName = resolveContactName(input.contactFrom, input.contactName, input.contactBody);
   const block = input.projectBlock.trim();
   const subject = `【案件のご案内】${input.projectTitle}`;
   const text = [

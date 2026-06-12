@@ -124,6 +124,13 @@ const TALENT_SCHEMA = {
         "例: 『自社所属フリーランス』『一社先正社員』『1社先フリーランス』『プロパー』。" +
         "【所属】【商流】等のラベルや全角スペースは除く。記載が無ければ null。",
     },
+    contactName: {
+      anyOf: [{ type: "string" }, { type: "null" }],
+      description:
+        "メールを送ってきた営業担当者の名前（人材本人の名前ではない）。" +
+        "冒頭の挨拶や末尾の署名から抽出する。例: 『ハルミナの菅原です』→『菅原』、" +
+        "署名の『営業部 田中太郎』→『田中太郎』。会社名や敬称は含めない。不明なら null。",
+    },
     note: nullableString,
   },
   required: [
@@ -138,6 +145,7 @@ const TALENT_SCHEMA = {
     "availabilityText",
     "nearestStation",
     "affiliation",
+    "contactName",
     "note",
   ],
 } as const;

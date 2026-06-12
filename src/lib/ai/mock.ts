@@ -11,6 +11,7 @@ import type {
   ParsedSkillSheet,
 } from "./types";
 import { expandSkills } from "@/lib/matching";
+import { contactNameFromBody } from "@/lib/email/send";
 
 // Heuristic, dependency-free stand-in for a real LLM. Good enough to demo the
 // full email→data→proposal flow without any API key. Replace with a real
@@ -104,6 +105,7 @@ export class MockAIService implements AIService {
       availabilityText: extractStart(rawEmail),
       nearestStation: stationM?.[1],
       affiliation: (affM?.[1] ?? affM?.[0])?.trim(),
+      contactName: contactNameFromBody(rawEmail) ?? undefined,
       note: rawEmail.slice(0, 400),
     };
   }

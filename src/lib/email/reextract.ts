@@ -15,7 +15,7 @@ const GENDERS = new Set(["MALE", "FEMALE", "OTHER"]);
 
 /**
  * 既存の人材（メール本文あり）を offset/limit で分割しながらAI再解析し、
- * 未設定の所属(affiliation)・性別(gender)を補完する。
+ * 未設定の所属(affiliation)・性別(gender)・担当者名(contactName)を補完する。
  * 安定した順序（作成日昇順）で全件を一度ずつ処理するので、繰り返し呼べば全件完了する。
  * 既に入っている項目は上書きしない。
  */
@@ -42,8 +42,8 @@ export async function reextractTalentFields(
   let errors = 0;
 
   for (const t of talents) {
-    // 両方とも入っていれば再解析不要。
-    if (t.affiliation != null && t.gender != null) {
+    // すべて入っていれば再解析不要。
+    if (t.affiliation != null && t.gender != null && t.contactName != null) {
       skipped++;
       continue;
     }
@@ -51,11 +51,12 @@ export async function reextractTalentFields(
       const raw = `件名: ${t.emailSubject ?? ""}\n差出人: ${t.emailFrom ?? ""}\n\n${t.emailBody ?? ""}`;
       const p = await ai.parseTalentEmail(raw, undefined, org.talentPrompt ?? undefined);
 
-      const data: { affiliation?: string; gender?: "MALE" | "FEMALE" | "OTHER" } = {};
+      const data: { affiliation?: string; gender?: "MALE" | "FEMALE" | "OTHER"; contactName?: string } = {};
       if (t.affiliation == null && p.affiliation) data.affiliation = p.affiliation;
       if (t.gender == null && p.gender && GENDERS.has(p.gender)) {
         data.gender = p.gender as "MALE" | "FEMALE" | "OTHER";
       }
+      if (t.contactName == null && p.contactName) data.contactName = p.contactName;
 
       if (Object.keys(data).length === 0) {
         skipped++;

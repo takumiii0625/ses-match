@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { transformProjectBody, contactNameFromFrom, buildProjectEmail } from "./send";
+import {
+  transformProjectBody,
+  contactNameFromFrom,
+  contactNameFromBody,
+  resolveContactName,
+  buildProjectEmail,
+} from "./send";
 
 const SAMPLE = `お世話になっております。〇〇社の田中です。下記案件です。
 
@@ -78,6 +84,38 @@ describe("contactNameFromFrom", () => {
   });
 });
 
+describe("contactNameFromBody", () => {
+  it("挨拶「〇〇の△△です」から名前を抽出", () => {
+    expect(contactNameFromBody("お世話になっております。\nハルミナの菅原です。")).toBe("菅原");
+    expect(contactNameFromBody("株式会社ABCの田中と申します。")).toBe("田中");
+  });
+  it("該当パターンが無ければ null", () => {
+    expect(contactNameFromBody("お世話になっております。下記人材のご紹介です。")).toBeNull();
+    expect(contactNameFromBody(null)).toBeNull();
+    expect(contactNameFromBody("")).toBeNull();
+  });
+});
+
+describe("resolveContactName", () => {
+  it("Fromの表示名が最優先", () => {
+    expect(
+      resolveContactName("山田太郎 <yamada@x.com>", "菅原", "ハルミナの鈴木です"),
+    ).toBe("山田太郎");
+  });
+  it("Fromに表示名が無ければDBの担当者名", () => {
+    expect(resolveContactName("k.sugawara@harumina.jp", "菅原", null)).toBe("菅原");
+  });
+  it("DBにも無ければ本文署名から抽出", () => {
+    expect(
+      resolveContactName("k.sugawara@harumina.jp", null, "お世話になっております。\nハルミナの菅原です。"),
+    ).toBe("菅原");
+  });
+  it("どれも無ければ ご担当者", () => {
+    expect(resolveContactName("info@x.com", null, "本文のみ")).toBe("ご担当者");
+    expect(resolveContactName(null, null, null)).toBe("ご担当者");
+  });
+});
+
 describe("buildProjectEmail", () => {
   it("挨拶・氏名・署名が入る", () => {
     const { subject, text } = buildProjectEmail({
@@ -92,5 +130,17 @@ describe("buildProjectEmail", () => {
     expect(text).toContain("OBFall株式会社");
     expect(text).toContain("sales@obfall.co.jp");
     expect(text).toContain("■単価：");
+  });
+  it("Fromに表示名が無くても本文署名から宛名を補完", () => {
+    const { text } = buildProjectEmail({
+      talentName: "Y.S",
+      contactFrom: "k.sugawara@harumina.jp",
+      contactName: null,
+      contactBody: "お世話になっております。\nハルミナの菅原です。\n弊社注力要員のご紹介でございます。",
+      projectTitle: "旅行サイトエンハンス開発（Java）",
+      projectBlock: "■案件名：\n　旅行サイトエンハンス開発",
+    });
+    expect(text).toContain("菅原様");
+    expect(text).not.toContain("ご担当者様");
   });
 });

@@ -136,6 +136,7 @@ async function ingestEmails(
             availabilityText: p.availabilityText ?? null,
             nearestStation: p.nearestStation ?? null,
             affiliation: p.affiliation ?? null,
+            contactName: p.contactName ?? null,
             emailSubject: mail.subject ?? null,
             emailBody: mail.text || null,
             emailFrom: mail.from ?? null,

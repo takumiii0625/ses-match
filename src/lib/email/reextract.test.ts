@@ -72,21 +72,21 @@ describe("reextractProjectFields — 案件の商流再抽出", () => {
   });
 });
 
-describe("reextractTalentFields — 所属・性別の再抽出", () => {
-  it("未設定のみ補完し、両方埋まっている人材はskip", async () => {
+describe("reextractTalentFields — 所属・性別・担当者名の再抽出", () => {
+  it("未設定のみ補完し、全項目埋まっている人材はskip", async () => {
     db.talent.count.mockResolvedValue(2);
     db.talent.findMany.mockResolvedValue([
-      { id: "t1", emailSubject: "", emailFrom: "", emailBody: "b", affiliation: null, gender: null },
-      { id: "t2", emailSubject: "", emailFrom: "", emailBody: "b", affiliation: "自社", gender: "MALE" },
+      { id: "t1", emailSubject: "", emailFrom: "", emailBody: "b", affiliation: null, gender: null, contactName: null },
+      { id: "t2", emailSubject: "", emailFrom: "", emailBody: "b", affiliation: "自社", gender: "MALE", contactName: "菅原" },
     ]);
-    parseTalent.mockResolvedValue({ affiliation: "一社先フリーランス", gender: "FEMALE" });
+    parseTalent.mockResolvedValue({ affiliation: "一社先フリーランス", gender: "FEMALE", contactName: "田中" });
 
     const res = await reextractTalentFields(0, 8);
 
     expect(parseTalent).toHaveBeenCalledTimes(1); // t1のみ
     expect(db.talent.update.mock.calls[0][0]).toMatchObject({
       where: { id: "t1" },
-      data: { affiliation: "一社先フリーランス", gender: "FEMALE" },
+      data: { affiliation: "一社先フリーランス", gender: "FEMALE", contactName: "田中" },
     });
     expect(res).toMatchObject({ updated: 1, skipped: 1, done: true });
   });
@@ -94,9 +94,9 @@ describe("reextractTalentFields — 所属・性別の再抽出", () => {
   it("既存値は上書きしない（所属のみ未設定なら所属だけ補完）", async () => {
     db.talent.count.mockResolvedValue(1);
     db.talent.findMany.mockResolvedValue([
-      { id: "t1", emailSubject: "", emailFrom: "", emailBody: "b", affiliation: null, gender: "MALE" },
+      { id: "t1", emailSubject: "", emailFrom: "", emailBody: "b", affiliation: null, gender: "MALE", contactName: "菅原" },
     ]);
-    parseTalent.mockResolvedValue({ affiliation: "二社先", gender: "FEMALE" });
+    parseTalent.mockResolvedValue({ affiliation: "二社先", gender: "FEMALE", contactName: "田中" });
 
     await reextractTalentFields(0, 8);
 

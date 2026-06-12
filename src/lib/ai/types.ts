@@ -13,6 +13,7 @@ export interface ParsedTalent {
   availabilityText?: string;
   nearestStation?: string;
   affiliation?: string; // 所属（商流上の立場。例: "1社先社員" "プロパー" "個人事業主"）
+  contactName?: string; // 紹介元の営業担当者名（メール署名・挨拶から。例「ハルミナの菅原です」→ 菅原）
   note?: string;
 }
 

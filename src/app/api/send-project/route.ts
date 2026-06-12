@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     const [talent, project] = await Promise.all([
       prisma.talent.findFirst({
         where: { id: talentId, orgId: org.id },
-        select: { id: true, name: true, sourceEmail: true, emailFrom: true },
+        select: { id: true, name: true, sourceEmail: true, emailFrom: true, contactName: true, emailBody: true },
       }),
       prisma.project.findFirst({
         where: { id: projectId, orgId: org.id },
@@ -64,6 +64,8 @@ export async function POST(req: NextRequest) {
     const { subject, text } = buildProjectEmail({
       talentName: talent.name,
       contactFrom: talent.emailFrom,
+      contactName: talent.contactName,
+      contactBody: talent.emailBody,
       projectTitle: project.title,
       projectBlock: block,
     });

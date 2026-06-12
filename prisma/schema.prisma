@@ -134,6 +134,7 @@ model Talent {
   age        Int?
   gender     Gender?
   affiliation String? // 所属（例: 弊社個人事業主）
+  contactName String? // 紹介元の営業担当者名（メール署名から抽出。案内メールの宛名に使用）
 
   employmentType   EmploymentType?
   nationality      Nationality?
