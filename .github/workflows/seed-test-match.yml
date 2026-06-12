@@ -1,0 +1,17 @@
+name: テスト用ダミーマッチ作成＆テスト送信（手動実行）
+
+# ダミー案件＋ダミー人材(t.arai@obfall.co.jp)＋マッチを作成し、その場で
+# t.arai@obfall.co.jp にマッチ案内メールをテスト送信する。Actionsタブから手動実行。
+on:
+  workflow_dispatch: {}
+
+jobs:
+  seed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: シード＆テスト送信
+        run: |
+          curl -fsS --max-time 60 -X POST \
+            "https://sesmatch.encore-biz.com/api/dev/seed-test-match" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            -w "\nHTTP %{http_code}\n"
