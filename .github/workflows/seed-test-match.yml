@@ -12,6 +12,6 @@ jobs:
       - name: シード＆テスト送信
         run: |
           curl -fsS --max-time 60 -X POST \
-            "https://sesmatch.encore-biz.com/api/dev/seed-test-match" \
+            "https://sesmatch.encore-biz.com/api/cron/seed-test-match" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
             -w "\nHTTP %{http_code}\n"
