@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { sendMail, buildProjectEmail, transformProjectBody } from "@/lib/email/send";
 import { getAI } from "@/lib/ai";
+import { cronAuthorized } from "@/lib/cron-auth";
 
 export const maxDuration = 60;
 
@@ -61,26 +61,8 @@ const PROJECT_BODY = `■案件名：
 ■備考：
 　・勤務時間：一部、時差対応（夜間会議）の可能性あり`;
 
-const authEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
-async function authorized(req: Request): Promise<boolean> {
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
-    const url = new URL(req.url);
-    const header = req.headers.get("x-cron-secret") ?? url.searchParams.get("secret");
-    if (header === secret) return true;
-  }
-  if (authEnabled) {
-    try {
-      const { userId } = await auth();
-      if (userId) return true;
-    } catch {}
-  }
-  return !secret && !authEnabled;
-}
-
 export async function POST(req: Request) {
-  if (!(await authorized(req))) {
+  if (!(await cronAuthorized(req))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {

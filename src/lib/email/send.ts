@@ -41,16 +41,28 @@ export function textToHtml(text: string): string {
   return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"></head><body><div style="white-space:pre-wrap;font-family:'Hiragino Sans','Yu Gothic','Meiryo',sans-serif;font-size:14px;line-height:1.7;color:#1a1a1a;">${body}</div></body></html>`;
 }
 
+/**
+ * メールヘッダ値のサニタイズ。改行（CR/LF）を除去してヘッダインジェクションを防ぐ。
+ * 件名は受信メール由来（=外部入力）の案件タイトルから作られるため必須。
+ */
+function sanitizeHeader(value: string): string {
+  return value.replace(/[\r\n]+/g, " ").trim();
+}
+
 /** Resend でメール送信。RESEND_API_KEY 必須。HTML＋テキストの両方を送る（文字化け対策）。 */
 export async function sendMail(input: SendMailInput): Promise<{ id: string | null }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY が未設定です");
+  const to = sanitizeHeader(input.to);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    throw new Error(`送信先メールアドレスが不正です: ${to.slice(0, 50)}`);
+  }
   const resend = new Resend(apiKey);
   const { data, error } = await resend.emails.send({
     from: FROM,
-    to: input.to,
+    to,
     replyTo: REPLY_TO,
-    subject: input.subject,
+    subject: sanitizeHeader(input.subject),
     text: input.text,
     html: textToHtml(input.text),
   });
