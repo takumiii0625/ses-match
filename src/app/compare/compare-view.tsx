@@ -35,6 +35,7 @@ export interface TalentVM {
   availabilityText: string | null;
   nearestStation: string | null;
   note: string | null;
+  summaryText: string | null; // スキルシート（PDF）から抽出したテキスト
   emailSubject: string | null;
   emailBody: string | null;
   emailFrom: string | null;
@@ -350,6 +351,7 @@ function DetailTabsBody({
   detail,
   match,
   sendPair,
+  skillSheet,
   scrollAll = false,
 }: {
   summary: React.ReactNode;
@@ -357,16 +359,18 @@ function DetailTabsBody({
   detail: React.ReactNode;
   match?: { score: number; reasons: string[] }; // 指定時「マッチング項目」タブを表示
   sendPair?: SendPair; // 指定時「メール送信」タブを表示（案件→人材の案内メール）
+  // 指定時「スキルシート」タブを表示（人材のみ）。null/空文字は「スキルシートなし」表示。
+  skillSheet?: string | null;
   // true: サマリ+タブ+本文を1つのスクロール領域にまとめる（左ペイン用＝本文を広く読める）。
   // false: 本文だけが flex-1 でスクロール（アコーディオン展開部はそのまま下に伸びる）。
   scrollAll?: boolean;
 }) {
   const hasEmail = !!(email.body || email.from || email.subject);
-  const [tab, setTab] = useState<"mail" | "detail" | "match" | "send">(
+  const [tab, setTab] = useState<"mail" | "detail" | "match" | "send" | "sheet">(
     hasEmail ? "mail" : "detail",
   );
 
-  const tabBtn = (key: "mail" | "detail" | "match" | "send", label: string) => (
+  const tabBtn = (key: "mail" | "detail" | "match" | "send" | "sheet", label: string) => (
     <button
       onClick={() => setTab(key)}
       className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
@@ -390,6 +394,7 @@ function DetailTabsBody({
         {tabBtn("detail", "詳細情報")}
         {match && tabBtn("match", "マッチング項目")}
         {sendPair && tabBtn("send", "メール送信")}
+        {skillSheet !== undefined && tabBtn("sheet", "スキルシート")}
       </div>
 
       <div className={scrollAll ? "px-5 py-4" : "flex-1 overflow-y-auto px-5 py-4"}>
@@ -419,6 +424,14 @@ function DetailTabsBody({
           detail
         ) : tab === "send" ? (
           sendPair && <SendTab pair={sendPair} />
+        ) : tab === "sheet" ? (
+          skillSheet?.trim() ? (
+            <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">
+              {skillSheet}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-sm text-slate-400">スキルシートなし</p>
+          )
         ) : (
           match && <MatchTab score={match.score} reasons={match.reasons} />
         )}
@@ -438,6 +451,7 @@ function DetailView({
   detail,
   editHref,
   match,
+  skillSheet,
 }: {
   heading: string;
   summary: React.ReactNode;
@@ -445,6 +459,7 @@ function DetailView({
   detail: React.ReactNode;
   editHref: string;
   match?: { score: number; reasons: string[] };
+  skillSheet?: string | null;
 }) {
   return (
     <Card className="flex h-full flex-col overflow-hidden p-0">
@@ -454,7 +469,14 @@ function DetailView({
           詳細・編集 →
         </Link>
       </div>
-      <DetailTabsBody summary={summary} email={email} detail={detail} match={match} scrollAll />
+      <DetailTabsBody
+        summary={summary}
+        email={email}
+        detail={detail}
+        match={match}
+        skillSheet={skillSheet}
+        scrollAll
+      />
     </Card>
   );
 }
@@ -538,7 +560,7 @@ function AccordionItem({
   open: boolean;
   onToggle: () => void;
   header: React.ReactNode;
-  detail: { summary: React.ReactNode; email: EmailInfo; detailNode: React.ReactNode; match: { score: number; reasons: string[] }; editHref: string; sendPair?: SendPair };
+  detail: { summary: React.ReactNode; email: EmailInfo; detailNode: React.ReactNode; match: { score: number; reasons: string[] }; editHref: string; sendPair?: SendPair; skillSheet?: string | null };
 }) {
   return (
     <div
@@ -571,6 +593,7 @@ function AccordionItem({
             detail={detail.detailNode}
             match={detail.match}
             sendPair={detail.sendPair}
+            skillSheet={detail.skillSheet}
           />
           <div className="border-t border-border px-5 py-2 text-right">
             <Link href={detail.editHref} className="text-xs text-slate-500 hover:text-primary">
@@ -797,6 +820,7 @@ function RightPane({
                 match: { score: t.score, reasons: t.reasons },
                 editHref: `/talent/${t.id}`,
                 sendPair: { talentId: t.id, projectId: selfId },
+                skillSheet: t.summaryText,
               }}
             />
           ))
@@ -885,6 +909,7 @@ export function CompareView({
                 email={talentEmail(talent)}
                 detail={noteDetail(talent.note, "備考情報")}
                 editHref={`/talent/${talent.id}`}
+                skillSheet={talent.summaryText}
               />
             ) : project ? (
               <DetailView
