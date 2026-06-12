@@ -20,7 +20,28 @@ export interface SendMailInput {
   text: string;
 }
 
-/** Resend でメール送信。RESEND_API_KEY 必須。 */
+/**
+ * プレーンテキスト本文をHTMLに変換する。
+ * - UTF-8で安定表示（文字化け対策）。
+ * - 「-----」だけの行は罫線<hr>に変換（Gmailが署名とみなして折りたたむのを防ぐ）。
+ */
+export function textToHtml(text: string): string {
+  const body = text
+    .split("\n")
+    .map((line) => {
+      if (/^[-=ー─━_]{4,}\s*$/.test(line.trim())) {
+        return `<hr style="border:none;border-top:1px solid #d0d0d0;margin:10px 0;">`;
+      }
+      return line
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    })
+    .join("\n");
+  return `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"></head><body><div style="white-space:pre-wrap;font-family:'Hiragino Sans','Yu Gothic','Meiryo',sans-serif;font-size:14px;line-height:1.7;color:#1a1a1a;">${body}</div></body></html>`;
+}
+
+/** Resend でメール送信。RESEND_API_KEY 必須。HTML＋テキストの両方を送る（文字化け対策）。 */
 export async function sendMail(input: SendMailInput): Promise<{ id: string | null }> {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) throw new Error("RESEND_API_KEY が未設定です");
@@ -31,6 +52,7 @@ export async function sendMail(input: SendMailInput): Promise<{ id: string | nul
     replyTo: REPLY_TO,
     subject: input.subject,
     text: input.text,
+    html: textToHtml(input.text),
   });
   if (error) throw new Error(error.message ?? "メール送信に失敗しました");
   return { id: data?.id ?? null };
