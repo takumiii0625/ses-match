@@ -111,11 +111,20 @@ async function ingestEmails(
         );
         // 送信元ドメインで自社/他社を自動判定
         const isOwn = companyDomain(sourceEmail) === OWN_DOMAIN;
+        // PDF添付（スキルシート）の抽出テキストを保存し、後で閲覧できるようにする
+        // （軽量＝テキスト。生PDFは保存しない）。最大8000文字に切り詰め。
+        const skillSheetText =
+          mail.attachments
+            .filter((a) => a.mediaType === "application/pdf" && a.text?.trim())
+            .map((a) => `【${a.filename}】\n${a.text!.trim()}`)
+            .join("\n\n")
+            .slice(0, 8000) || null;
         const t = await prisma.talent.create({
           data: {
             orgId: org.id,
             talentType: isOwn ? "INHOUSE" : "PARTNER",
             dataFrom: "EMAIL",
+            summaryText: skillSheetText,
             name: p.name ?? mail.from ?? "（氏名不明）",
             age: p.age ?? null,
             gender: toGender(p.gender),
