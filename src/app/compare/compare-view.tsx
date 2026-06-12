@@ -223,28 +223,140 @@ interface EmailInfo {
   fallback: string | null;
 }
 
+// ---------- メール送信タブ（案件→人材の案内メールを確認して送る） ----------
+// プレビューはオンデマンド生成（LLM整形のため、展開のたびに自動生成しない＝コスト対策）。
+type SendPair = { talentId: string; projectId: string };
+
+function SendTab({ pair }: { pair: SendPair }) {
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [mail, setMail] = useState<{ to: string; subject: string; text: string } | null>(null);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+
+  async function loadPreview() {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/send-project", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...pair, preview: true }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "プレビューの取得に失敗しました");
+      setMail({ to: data.to, subject: data.subject, text: data.text });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function send() {
+    if (!mail) return;
+    if (!window.confirm(`${mail.to} 宛に案件案内メールを送信します。よろしいですか？`)) return;
+    setSending(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/send-project", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(pair),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "送信に失敗しました");
+      setSentTo(mail.to);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (sentTo) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+        ✅ {sentTo} 宛に送信しました。
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+      {!mail ? (
+        <div className="py-6 text-center">
+          <p className="mb-3 text-sm text-slate-500">
+            送信するメールの内容（件名・本文）を生成して確認できます。
+          </p>
+          <button
+            onClick={loadPreview}
+            disabled={loading}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+          >
+            {loading ? "生成中…" : "メール内容を表示"}
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm">
+            <MetaRow label="To:" value={mail.to} />
+            <MetaRow label="件名:" value={mail.subject} />
+          </div>
+          <div className="whitespace-pre-wrap break-words rounded-lg border border-border p-3 text-sm leading-relaxed text-slate-700">
+            {mail.text}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={loadPreview}
+              disabled={loading}
+              className="rounded-lg border border-border px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {loading ? "再生成中…" : "再生成"}
+            </button>
+            <button
+              onClick={send}
+              disabled={sending}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+            >
+              {sending ? "送信中…" : "このメールを送信"}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ---------- 詳細本体（サマリ + タブ）。左ペインCardにも右ペインの展開部にも使う ----------
 function DetailTabsBody({
   summary,
   email,
   detail,
   match,
+  sendPair,
   scrollAll = false,
 }: {
   summary: React.ReactNode;
   email: EmailInfo;
   detail: React.ReactNode;
   match?: { score: number; reasons: string[] }; // 指定時「マッチング項目」タブを表示
+  sendPair?: SendPair; // 指定時「メール送信」タブを表示（案件→人材の案内メール）
   // true: サマリ+タブ+本文を1つのスクロール領域にまとめる（左ペイン用＝本文を広く読める）。
   // false: 本文だけが flex-1 でスクロール（アコーディオン展開部はそのまま下に伸びる）。
   scrollAll?: boolean;
 }) {
   const hasEmail = !!(email.body || email.from || email.subject);
-  const [tab, setTab] = useState<"mail" | "detail" | "match">(
+  const [tab, setTab] = useState<"mail" | "detail" | "match" | "send">(
     hasEmail ? "mail" : "detail",
   );
 
-  const tabBtn = (key: "mail" | "detail" | "match", label: string) => (
+  const tabBtn = (key: "mail" | "detail" | "match" | "send", label: string) => (
     <button
       onClick={() => setTab(key)}
       className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
@@ -267,6 +379,7 @@ function DetailTabsBody({
         {tabBtn("mail", "メール本文")}
         {tabBtn("detail", "詳細情報")}
         {match && tabBtn("match", "マッチング項目")}
+        {sendPair && tabBtn("send", "メール送信")}
       </div>
 
       <div className={scrollAll ? "px-5 py-4" : "flex-1 overflow-y-auto px-5 py-4"}>
@@ -294,6 +407,8 @@ function DetailTabsBody({
           )
         ) : tab === "detail" ? (
           detail
+        ) : tab === "send" ? (
+          sendPair && <SendTab pair={sendPair} />
         ) : (
           match && <MatchTab score={match.score} reasons={match.reasons} />
         )}
@@ -413,7 +528,7 @@ function AccordionItem({
   open: boolean;
   onToggle: () => void;
   header: React.ReactNode;
-  detail: { summary: React.ReactNode; email: EmailInfo; detailNode: React.ReactNode; match: { score: number; reasons: string[] }; editHref: string };
+  detail: { summary: React.ReactNode; email: EmailInfo; detailNode: React.ReactNode; match: { score: number; reasons: string[] }; editHref: string; sendPair?: SendPair };
 }) {
   return (
     <div
@@ -445,6 +560,7 @@ function AccordionItem({
             email={detail.email}
             detail={detail.detailNode}
             match={detail.match}
+            sendPair={detail.sendPair}
           />
           <div className="border-t border-border px-5 py-2 text-right">
             <Link href={detail.editHref} className="text-xs text-slate-500 hover:text-primary">
@@ -580,10 +696,12 @@ function talentHeader(t: TalentCardVM, top: boolean, dupes = 1) {
 // ---------- 右ペイン（一覧。各項目はクリックで下に展開） ----------
 function RightPane({
   mode,
+  selfId,
   projects,
   talents,
 }: {
   mode: CompareMode;
+  selfId: string; // 左ペインで選択中の人材/案件のID（送信ペアの相手側）
   projects: ProjectCardVM[];
   talents: TalentCardVM[];
 }) {
@@ -650,6 +768,7 @@ function RightPane({
                 detailNode: noteDetail(p.description, "概要"),
                 match: { score: p.score, reasons: p.reasons },
                 editHref: `/projects/${p.id}`,
+                sendPair: { talentId: selfId, projectId: p.id },
               }}
             />
           ))
@@ -667,6 +786,7 @@ function RightPane({
                 detailNode: noteDetail(t.note, "備考情報"),
                 match: { score: t.score, reasons: t.reasons },
                 editHref: `/talent/${t.id}`,
+                sendPair: { talentId: t.id, projectId: selfId },
               }}
             />
           ))
@@ -768,7 +888,7 @@ export function CompareView({
           </div>
 
           {/* 右 */}
-          <RightPane mode={mode} projects={rightProjects} talents={rightTalents} />
+          <RightPane mode={mode} selfId={leftSelected.id} projects={rightProjects} talents={rightTalents} />
         </div>
       )}
     </div>

@@ -16,9 +16,10 @@ function parseEmail(s?: string | null): string | null {
 export async function POST(req: NextRequest) {
   try {
     const org = await getCurrentOrg();
-    const { talentId, projectId } = (await req.json()) as {
+    const { talentId, projectId, preview } = (await req.json()) as {
       talentId?: string;
       projectId?: string;
+      preview?: boolean;
     };
     if (!talentId || !projectId) {
       return NextResponse.json(
@@ -66,6 +67,11 @@ export async function POST(req: NextRequest) {
       projectTitle: project.title,
       projectBlock: block,
     });
+
+    // プレビュー: 送信もログもせず、件名・本文・宛先だけ返す（見比べ画面の確認用）。
+    if (preview) {
+      return NextResponse.json({ ok: true, preview: true, to, subject, text });
+    }
 
     try {
       const { id } = await sendMail({ to, subject, text });
