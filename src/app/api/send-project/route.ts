@@ -33,18 +33,7 @@ export async function POST(req: NextRequest) {
       }),
       prisma.project.findFirst({
         where: { id: projectId, orgId: org.id },
-        select: {
-          id: true,
-          title: true,
-          clientName: true,
-          requiredSkills: true,
-          rateMin: true,
-          rateMax: true,
-          location: true,
-          startText: true,
-          description: true,
-          channelText: true,
-        },
+        select: { id: true, title: true, emailBody: true, description: true },
       }),
     ]);
 
@@ -60,7 +49,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { subject, text } = buildProjectEmail(talent.name, project);
+    const { subject, text } = buildProjectEmail({
+      talentName: talent.name,
+      contactFrom: talent.emailFrom,
+      projectTitle: project.title,
+      projectBody: project.emailBody || project.description || "",
+    });
 
     try {
       const { id } = await sendMail({ to, subject, text });
