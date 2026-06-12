@@ -145,12 +145,35 @@ function Section({
 
 export const dynamic = "force-dynamic";
 
+/** JSTの今日0時／今月1日0時（UTC Dateで返す） */
+function jstBoundaries(): { todayStart: Date; monthStart: Date } {
+  const JST_OFFSET = 9 * 60 * 60 * 1000;
+  const jstNow = new Date(Date.now() + JST_OFFSET);
+  const todayStart = new Date(
+    Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - JST_OFFSET,
+  );
+  const monthStart = new Date(
+    Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), 1) - JST_OFFSET,
+  );
+  return { todayStart, monthStart };
+}
+
+const AI_TAG_LABELS: Record<string, string> = {
+  extract: "メール分類・抽出",
+  match: "マッチ判定",
+  "project-email": "案件メール整形",
+  proposal: "提案文生成",
+  skillsheet: "スキルシート解析",
+  "skillsheet-improve": "スキルシート改善",
+};
+
 export default async function ReportsPage() {
   const org = await getCurrentOrg();
   const orgId = org.id;
+  const { todayStart, monthStart } = jstBoundaries();
 
   // Run all independent queries in parallel
-  const [talents, projectGroups, matchCount, proposalGroups] =
+  const [talents, projectGroups, matchCount, proposalGroups, aiToday, aiMonth] =
     await Promise.all([
       // All talent lightweight fields
       prisma.talent.findMany({
@@ -179,7 +202,30 @@ export default async function ReportsPage() {
         where: { orgId },
         _count: { _all: true },
       }),
+      // 今日のAIコスト（タグ別）
+      prisma.aiUsage.groupBy({
+        by: ["tag"],
+        where: { createdAt: { gte: todayStart } },
+        _sum: { cost: true },
+        _count: { _all: true },
+      }),
+      // 今月のAIコスト合計
+      prisma.aiUsage.aggregate({
+        where: { createdAt: { gte: monthStart } },
+        _sum: { cost: true },
+      }),
     ]);
+
+  // -- AI cost aggregates --
+  const aiTodayCost = aiToday.reduce((s, g) => s + (g._sum.cost ?? 0), 0);
+  const aiMonthCost = aiMonth._sum.cost ?? 0;
+  const aiTagRows = aiToday
+    .map((g) => ({
+      label: AI_TAG_LABELS[g.tag] ?? g.tag,
+      cost: g._sum.cost ?? 0,
+      calls: g._count._all,
+    }))
+    .sort((a, b) => b.cost - a.cost);
 
   // -- KPI aggregates --
 
@@ -304,7 +350,7 @@ export default async function ReportsPage() {
       </div>
 
       {/* KPI cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard label="人材総数" value={totalTalents} />
         <StatCard
           label="自社 / 他社"
@@ -318,7 +364,28 @@ export default async function ReportsPage() {
         />
         <StatCard label="マッチ件数" value={matchCount} />
         <StatCard label="提案件数" value={totalProposals} />
+        <StatCard
+          label="今日のAIコスト"
+          value={`$${aiTodayCost.toFixed(2)}`}
+          sub={`今月累計 $${aiMonthCost.toFixed(2)}`}
+        />
       </div>
+
+      {/* 今日のAIコスト内訳（暴騰の早期検知用） */}
+      {aiTagRows.length > 0 && (
+        <Section title="今日のAIコスト内訳">
+          <div className="flex flex-col gap-2">
+            {aiTagRows.map((r) => (
+              <div key={r.label} className="flex items-center justify-between text-sm">
+                <span className="text-slate-700">{r.label}</span>
+                <span className="text-muted">
+                  {r.calls}回 / <span className="font-medium text-slate-800">${r.cost.toFixed(3)}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {/* Status breakdowns */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

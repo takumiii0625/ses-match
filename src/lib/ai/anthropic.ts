@@ -22,6 +22,7 @@ import {
   DEFAULT_SKILLSHEET_IMPROVE_PROMPT,
 } from "./prompts";
 import { createLimiter } from "@/lib/limit";
+import { prisma } from "@/lib/prisma";
 
 // Real LLM implementation of AIService backed by the Claude API.
 // - Structured JSON extraction via output_config.format (json_schema)
@@ -53,7 +54,10 @@ interface UsageLike {
   cache_creation_input_tokens?: number | null;
 }
 
-/** 1コールのトークン使用量と概算コストをログ出力（コスト調査用）。 */
+/**
+ * 1コールのトークン使用量と概算コストをログ出力＋DBに記録（/reportsで日次・月次集計）。
+ * DB書き込みは fire-and-forget（失敗しても本処理に影響させない）。
+ */
 function logUsage(tag: string, usage: UsageLike | undefined): void {
   if (!usage) return;
   const p = PRICES[MODEL] ?? { in: 5, out: 25 };
@@ -66,6 +70,19 @@ function logUsage(tag: string, usage: UsageLike | undefined): void {
   console.log(
     `[ai:${tag}] model=${MODEL} in=${inp} cacheR=${cacheR} cacheW=${cacheW} out=${out} ~$${cost.toFixed(4)}`,
   );
+  void prisma.aiUsage
+    .create({
+      data: {
+        tag,
+        model: MODEL,
+        inputTokens: inp,
+        cacheRead: cacheR,
+        cacheWrite: cacheW,
+        outputTokens: out,
+        cost,
+      },
+    })
+    .catch(() => {});
 }
 
 // マッチ判定の1リクエストあたり候補数。小さいほど1回の出力が短く、件数が多くても
@@ -408,6 +425,7 @@ export class AnthropicAIService implements AIService {
         },
       ],
     });
+    logUsage("proposal", res.usage);
 
     const text = res.content.find((b) => b.type === "text");
     if (!text || text.type !== "text") {
@@ -465,6 +483,7 @@ export class AnthropicAIService implements AIService {
       },
       messages: [{ role: "user", content: this.buildContent(rawText, attachments) }],
     });
+    logUsage("skillsheet", res.usage);
     const text = res.content.find((b) => b.type === "text");
     if (!text || text.type !== "text") {
       throw new Error("AI応答にテキストが含まれていません");
@@ -485,6 +504,7 @@ export class AnthropicAIService implements AIService {
       ],
       messages: [{ role: "user", content: currentText }],
     });
+    logUsage("skillsheet-improve", res.usage);
     const text = res.content.find((b) => b.type === "text");
     if (!text || text.type !== "text") {
       throw new Error("AI応答にテキストが含まれていません");

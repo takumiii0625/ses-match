@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // 依存をモック（Gmail・DB・LLM・マッチ不要でページング制御を検証）。
 const db = vi.hoisted(() => ({
-  ingestedEmail: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
+  ingestedEmail: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
   talent: { create: vi.fn() },
   project: { create: vi.fn() },
 }));
@@ -35,6 +35,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   db.ingestedEmail.create.mockResolvedValue({});
   db.ingestedEmail.findUnique.mockResolvedValue(null); // messageId 重複は無し（既取込は gmailId で事前除外）
+  db.ingestedEmail.findFirst.mockResolvedValue(null); // 再送（同一本文）も無し
   db.ingestedEmail.findMany.mockResolvedValue([]);
   matchNew.mockResolvedValue({ pairs: 0, saved: 0 });
   classify.mockResolvedValue({ kind: "IGNORE", reason: "対象外" });
@@ -79,5 +80,20 @@ describe("runMailIngestPage — ページング制御（ID事前除外）", () =
     expect(res.fetched).toBe(0);
     expect(res.done).toBe(true);
     expect(db.ingestedEmail.findMany).not.toHaveBeenCalled();
+  });
+
+  it("再送メール（同一本文ハッシュが3日内に存在）はLLMを呼ばずDUPLICATEで記録", async () => {
+    listIds.mockResolvedValue({ ids: ["a"], nextPageToken: null });
+    db.ingestedEmail.findFirst.mockResolvedValue({ id: "prev", kind: "PROJECT" });
+
+    const res = await runMailIngestPage(10);
+
+    expect(classify).not.toHaveBeenCalled(); // LLM未実行
+    expect(res.skipped).toBe(1);
+    expect(db.ingestedEmail.create).toHaveBeenCalledTimes(1);
+    expect(db.ingestedEmail.create.mock.calls[0][0].data).toMatchObject({
+      kind: "DUPLICATE",
+    });
+    expect(db.ingestedEmail.create.mock.calls[0][0].data.bodyHash).toBeTruthy();
   });
 });

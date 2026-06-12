@@ -332,10 +332,11 @@ model SharedLink {
 // ---------- Email ingestion (メール自動取り込み) ----------
 
 enum IngestKind {
-  TALENT  // 人材として登録
-  PROJECT // 案件として登録
-  IGNORE  // 対象外
-  ERROR   // 処理エラー
+  TALENT    // 人材として登録
+  PROJECT   // 案件として登録
+  IGNORE    // 対象外
+  ERROR     // 処理エラー
+  DUPLICATE // 再送メール（同一ドメイン×同一本文。LLM未実行でスキップ）
 }
 
 model OAuthToken {
@@ -360,9 +361,26 @@ model IngestedEmail {
   talentId   String? // 作成した人材
   projectId  String? // 作成した案件
   reason     String? // 分類理由 / エラー内容
+  bodyHash   String? // 送信元ドメイン＋正規化本文のハッシュ（再送メール検出用）
   createdAt  DateTime   @default(now())
 
   @@index([orgId, createdAt])
+  @@index([orgId, bodyHash])
+}
+
+// LLM使用量の記録。logUsage から書き込み、/reports で日次・月次コストを可視化する。
+model AiUsage {
+  id           String   @id @default(cuid())
+  tag          String // extract / match / project-email / proposal など
+  model        String
+  inputTokens  Int
+  cacheRead    Int      @default(0)
+  cacheWrite   Int      @default(0)
+  outputTokens Int
+  cost         Float // 概算USD
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 // 送信したメール（案件→人材）の履歴。重複送信防止・送信履歴の表示に使う。

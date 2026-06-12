@@ -8,6 +8,7 @@ import {
   type FetchedEmail,
 } from "./gmail";
 import { companyDomain } from "@/lib/matching";
+import { cleanEmailText, emailBodyHash } from "./clean";
 import type { RemotePreference } from "@prisma/client";
 
 // 自社ドメイン。送信元がこのドメインなら自社保有人材(INHOUSE)、それ以外は他社(PARTNER)。
@@ -82,7 +83,7 @@ async function ingestEmails(
   const newProjectIds: string[] = [];
 
   for (const mail of emails) {
-    // dedup
+    // dedup（同一メッセージ）
     const existing = await prisma.ingestedEmail.findUnique({
       where: { messageId: mail.messageId },
     });
@@ -91,8 +92,47 @@ async function ingestEmails(
       continue;
     }
 
-    const raw = `件名: ${mail.subject ?? ""}\n差出人: ${mail.from ?? ""}\n\n${mail.text}`;
     const sourceEmail = parseFromEmail(mail.from);
+    // LLM入力は引用・免責フッタを除去した本文（DB保存は原文のまま）。
+    const cleanedText = cleanEmailText(mail.text);
+    const bodyHash = emailBodyHash(companyDomain(sourceEmail), cleanedText);
+
+    // 再送メール検出: 同一ドメイン×同一本文を3日以内に取込済みなら、LLMを呼ばずスキップ。
+    // SES業者は同じ案件/人材を毎日再送するため、分類・抽出コストとレコード重複を防ぐ。
+    // 本文が少しでも変われば（単価改定等）ハッシュが変わるので取り込まれる。
+    const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const resent = await prisma.ingestedEmail.findFirst({
+      where: {
+        orgId: org.id,
+        bodyHash,
+        createdAt: { gte: since },
+        kind: { not: "ERROR" }, // エラーだった取込は再試行させる
+      },
+      select: { id: true, kind: true },
+    });
+    if (resent) {
+      const reason = `再送メール（3日以内に同一本文を取込済み: ${resent.kind}）`;
+      await prisma.ingestedEmail
+        .create({
+          data: {
+            orgId: org.id,
+            messageId: mail.messageId,
+            gmailId: mail.gmailId,
+            fromAddr: mail.from ?? null,
+            subject: mail.subject ?? null,
+            receivedAt: mail.date ?? null,
+            kind: "DUPLICATE",
+            reason,
+            bodyHash,
+          },
+        })
+        .catch(() => {});
+      result.skipped++;
+      result.items.push({ subject: mail.subject, from: mail.from, kind: "DUPLICATE", reason });
+      continue;
+    }
+
+    const raw = `件名: ${mail.subject ?? ""}\n差出人: ${mail.from ?? ""}\n\n${cleanedText}`;
 
     try {
       const cls = await ai.classifyEmail(
@@ -197,6 +237,7 @@ async function ingestEmails(
           talentId,
           projectId,
           reason: cls.reason,
+          bodyHash,
         },
       });
 
@@ -220,6 +261,7 @@ async function ingestEmails(
             receivedAt: mail.date ?? null,
             kind: "ERROR",
             reason: message.slice(0, 500),
+            bodyHash,
           },
         })
         .catch(() => {});

@@ -14,12 +14,14 @@ const KIND_LABELS: Record<string, string> = {
   PROJECT: "案件",
   IGNORE: "対象外",
   ERROR: "エラー",
+  DUPLICATE: "再送",
 };
 const KIND_TONE: Record<string, "green" | "blue" | "slate" | "red"> = {
   TALENT: "green",
   PROJECT: "blue",
   IGNORE: "slate",
   ERROR: "red",
+  DUPLICATE: "slate",
 };
 
 export default async function MailPage(props: {
