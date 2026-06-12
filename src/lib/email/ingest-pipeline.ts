@@ -8,7 +8,6 @@ import {
   type FetchedEmail,
 } from "./gmail";
 import { companyDomain } from "@/lib/matching";
-import { runMatchingForNew } from "@/lib/match-run";
 import type { RemotePreference } from "@prisma/client";
 
 // 自社ドメイン。送信元がこのドメインなら自社保有人材(INHOUSE)、それ以外は他社(PARTNER)。
@@ -226,30 +225,15 @@ async function ingestEmails(
   return { result, newTalentIds, newProjectIds };
 }
 
-/** 取込で増えた人材・案件を、その場で既存データと突き合わせて自動マッチ。 */
-async function attachMatches(
-  result: IngestRunResult,
-  org: IngestOrg,
-  newTalentIds: string[],
-  newProjectIds: string[],
-): Promise<void> {
-  try {
-    const m = await runMatchingForNew(org.id, newTalentIds, newProjectIds);
-    result.matched = { pairs: m.pairs, saved: m.saved };
-  } catch (e) {
-    // マッチングで落ちても取込結果は返す（マッチは rematch で後追いできる）。
-    const message = e instanceof Error ? e.message : String(e);
-    result.items.push({ kind: "MATCH_ERROR", reason: message });
-  }
-}
+// 取込とマッチは分離した（高流量で自動マッチが爆発し課金が大きいため）。
+// 取込は分類・登録のみ。マッチは別途（1日1回のスケジュール rematch / 手動）で行う。
 
 /** Fetch new mail, classify with AI, and register talents/projects.（最新 limit 件を一括処理） */
 export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
   const org = await getCurrentOrg();
   const ai = getAI();
   const emails = await fetchEmails(limit);
-  const { result, newTalentIds, newProjectIds } = await ingestEmails(emails, org, ai);
-  await attachMatches(result, org, newTalentIds, newProjectIds);
+  const { result } = await ingestEmails(emails, org, ai);
   return result;
 }
 
@@ -290,8 +274,7 @@ export async function runMailIngestPage(
     if (m) emails.push(m);
   }
 
-  const { result, newTalentIds, newProjectIds } = await ingestEmails(emails, org, ai);
-  await attachMatches(result, org, newTalentIds, newProjectIds);
+  const { result } = await ingestEmails(emails, org, ai);
 
   // 表示用集計を1ページ全体に補正（gmailId事前除外分も重複に含める）。
   const gmailDup = ids.length - newIds.length;

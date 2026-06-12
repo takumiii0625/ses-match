@@ -1,0 +1,28 @@
+name: 1日1回マッチ（15時 JST・今日のみ）
+
+# 取込とマッチを分離したため、マッチは1日1回だけ実行する。
+# 日本時間 15:00（= 6:00 UTC）。対象は「今日(JST)配信」の案件のみ（days=1）。
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {} # 手動実行も可
+
+concurrency:
+  group: rematch-daily
+  cancel-in-progress: false
+
+jobs:
+  rematch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 今日のマッチを実行（完了までページループ）
+        run: |
+          offset=0
+          for i in $(seq 1 500); do
+            resp=$(curl -fsS --max-time 300 -X POST \
+              "https://sesmatch.encore-biz.com/api/cron/rematch?offset=$offset&limit=3&scope=all&days=1" \
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+            echo "$resp"
+            echo "$resp" | grep -q '"done":true' && { echo "完了"; break; }
+            offset=$(echo "$resp" | grep -o '"processed":[0-9]*' | grep -o '[0-9]*')
+          done

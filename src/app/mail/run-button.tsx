@@ -40,7 +40,6 @@ export function RunButton({ disabled }: { disabled?: boolean }) {
       let ignored = 0;
       let skipped = 0;
       let errors = 0;
-      let matched = 0;
       let processed = 0;
 
       for (let i = 0; i < MAX_PAGES; i++) {
@@ -55,11 +54,10 @@ export function RunButton({ disabled }: { disabled?: boolean }) {
         ignored += data.ignored;
         skipped += data.skipped;
         errors += data.errors;
-        matched += data.matched?.saved ?? 0;
         processed += data.fetched;
 
         setMsg(
-          `取り込み中… ${processed}件処理 ・ 人材${talent} / 案件${project} / マッチ${matched}`,
+          `取り込み中… ${processed}件処理 ・ 人材${talent} / 案件${project}`,
         );
 
         if (data.done) break;
@@ -68,7 +66,7 @@ export function RunButton({ disabled }: { disabled?: boolean }) {
       }
 
       setMsg(
-        `完了：人材${talent} / 案件${project} / 対象外${ignored} / 重複${skipped} / エラー${errors} / マッチ${matched}`,
+        `完了：人材${talent} / 案件${project} / 対象外${ignored} / 重複${skipped} / エラー${errors}（マッチは15時に自動実行）`,
       );
       router.refresh();
     } catch (e) {
