@@ -213,6 +213,8 @@ model Project {
   channelText String? // 商流制限の原文/要約（例: "プロパー〜1社先まで" "エンド直のみ"）
   supportFee  Boolean @default(false) // 支援費で商流を飛ばせる旨の記載があるか
 
+  formattedBody String? // 案内メール用に整形済みの案件本文（LLM整形結果のキャッシュ。再生成で更新）
+
   requiredSkills String[] @default([])
   tags           String[] @default([])
 

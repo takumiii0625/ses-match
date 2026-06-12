@@ -232,20 +232,22 @@ function SendTab({ pair }: { pair: SendPair }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mail, setMail] = useState<{ to: string; subject: string; text: string } | null>(null);
+  const [lastSentAt, setLastSentAt] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
 
-  async function loadPreview() {
+  async function loadPreview(regenerate = false) {
     setLoading(true);
     setError(null);
     try {
       const res = await fetch("/api/send-project", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...pair, preview: true }),
+        body: JSON.stringify({ ...pair, preview: true, regenerate }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "プレビューの取得に失敗しました");
       setMail({ to: data.to, subject: data.subject, text: data.text });
+      setLastSentAt(data.lastSentAt ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -255,7 +257,10 @@ function SendTab({ pair }: { pair: SendPair }) {
 
   async function send() {
     if (!mail) return;
-    if (!window.confirm(`${mail.to} 宛に案件案内メールを送信します。よろしいですか？`)) return;
+    const resendNote = lastSentAt
+      ? `\n\n⚠️ この人材×案件は ${fmtDate(lastSentAt)} に送信済みです。再送しますか？`
+      : "";
+    if (!window.confirm(`${mail.to} 宛に案件案内メールを送信します。よろしいですか？${resendNote}`)) return;
     setSending(true);
     setError(null);
     try {
@@ -295,7 +300,7 @@ function SendTab({ pair }: { pair: SendPair }) {
             送信するメールの内容（件名・本文）を生成して確認できます。
           </p>
           <button
-            onClick={loadPreview}
+            onClick={() => loadPreview()}
             disabled={loading}
             className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
           >
@@ -304,6 +309,11 @@ function SendTab({ pair }: { pair: SendPair }) {
         </div>
       ) : (
         <>
+          {lastSentAt && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              ⚠️ この人材にはこの案件を {fmtDate(lastSentAt)} に送信済みです。
+            </div>
+          )}
           <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm">
             <MetaRow label="To:" value={mail.to} />
             <MetaRow label="件名:" value={mail.subject} />
@@ -313,7 +323,7 @@ function SendTab({ pair }: { pair: SendPair }) {
           </div>
           <div className="flex items-center justify-end gap-2">
             <button
-              onClick={loadPreview}
+              onClick={() => loadPreview(true)}
               disabled={loading}
               className="rounded-lg border border-border px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
             >

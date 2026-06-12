@@ -16,10 +16,11 @@ function parseEmail(s?: string | null): string | null {
 export async function POST(req: NextRequest) {
   try {
     const org = await getCurrentOrg();
-    const { talentId, projectId, preview } = (await req.json()) as {
+    const { talentId, projectId, preview, regenerate } = (await req.json()) as {
       talentId?: string;
       projectId?: string;
       preview?: boolean;
+      regenerate?: boolean; // true: 整形キャッシュを使わずLLMで再整形してキャッシュ更新
     };
     if (!talentId || !projectId) {
       return NextResponse.json(
@@ -28,14 +29,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const [talent, project] = await Promise.all([
+    const [talent, project, lastSent] = await Promise.all([
       prisma.talent.findFirst({
         where: { id: talentId, orgId: org.id },
         select: { id: true, name: true, sourceEmail: true, emailFrom: true, contactName: true, emailBody: true },
       }),
       prisma.project.findFirst({
         where: { id: projectId, orgId: org.id },
-        select: { id: true, title: true, emailBody: true, description: true },
+        select: { id: true, title: true, emailBody: true, description: true, formattedBody: true },
+      }),
+      // 二重送信ガード: 同じ人材×案件の送信済み記録（最新）
+      prisma.sentEmail.findFirst({
+        where: { orgId: org.id, talentId, projectId, status: "SENT" },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
       }),
     ]);
 
@@ -51,14 +58,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 案件本文は LLM で整形（どの形式でもルール適用）。失敗時はルール整形にフォールバック。
+    // 案件本文の整形。整形結果は案件にのみ依存するのでProjectにキャッシュし、
+    // 2回目以降（プレビュー→送信、同一案件の別人材送信）はLLMを呼ばない。
+    // これによりプレビューで確認した本文と送信本文の一致も保証される。
     const raw = project.emailBody || project.description || "";
-    let block: string;
-    try {
-      block = await getAI().formatProjectBody(raw, org.projectEmailPrompt ?? undefined);
-      if (!block.trim()) block = transformProjectBody(raw);
-    } catch {
-      block = transformProjectBody(raw);
+    let block = !regenerate ? (project.formattedBody ?? "").trim() : "";
+    if (!block) {
+      try {
+        block = (await getAI().formatProjectBody(raw, org.projectEmailPrompt ?? undefined)).trim();
+        if (block) {
+          // LLM整形に成功したときだけキャッシュ（ルール整形は次回LLM再試行の余地を残す）。
+          await prisma.project
+            .update({ where: { id: project.id }, data: { formattedBody: block } })
+            .catch(() => {});
+        }
+      } catch {
+        /* フォールバックへ */
+      }
+      if (!block) block = transformProjectBody(raw);
     }
 
     const { subject, text } = buildProjectEmail({
@@ -70,9 +87,16 @@ export async function POST(req: NextRequest) {
       projectBlock: block,
     });
 
-    // プレビュー: 送信もログもせず、件名・本文・宛先だけ返す（見比べ画面の確認用）。
+    // プレビュー: 送信もログもせず、件名・本文・宛先＋送信済み情報を返す（見比べ画面の確認用）。
     if (preview) {
-      return NextResponse.json({ ok: true, preview: true, to, subject, text });
+      return NextResponse.json({
+        ok: true,
+        preview: true,
+        to,
+        subject,
+        text,
+        lastSentAt: lastSent?.createdAt ?? null,
+      });
     }
 
     try {

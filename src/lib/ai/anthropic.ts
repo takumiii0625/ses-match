@@ -34,6 +34,8 @@ const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5";
 
 // LLMに渡すメール本文の最大文字数。転送スレッド等の巨大本文で入力トークンが膨らむのを防ぐ。
 const MAX_EMAIL_CHARS = 12000;
+// 分類は件名＋冒頭で判定できる。抽出と違い全文は不要（コスト削減）。
+const CLASSIFY_MAX_CHARS = 2000;
 
 // 100万トークンあたりの単価（USD）。コスト可視化ログ用。
 const PRICES: Record<string, { in: number; out: number }> = {
@@ -341,11 +343,12 @@ export class AnthropicAIService implements AIService {
     _attachments?: EmailAttachment[],
     systemPrompt?: string,
   ): Promise<EmailClassification> {
-    // 分類(人材/案件/対象外)は本文・件名で十分。添付PDFは送らない（コスト削減・PDFを2回送る無駄を排除）。
+    // 分類(人材/案件/対象外)は件名＋冒頭で判定できるので先頭だけ送る（入力トークン約8割減）。
+    // 添付PDFも送らない（コスト削減・PDFを2回送る無駄を排除）。
     return this.extract<EmailClassification>(
       systemPrompt?.trim() || DEFAULT_CLASSIFY_PROMPT,
       CLASSIFY_SCHEMA as unknown as Record<string, unknown>,
-      rawEmail,
+      rawEmail.slice(0, CLASSIFY_MAX_CHARS),
     );
   }
 
