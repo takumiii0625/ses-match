@@ -12,6 +12,7 @@ import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { ProposalButton } from "../matching/proposal-button";
+import { SendProjectButton } from "../matching/send-project-button";
 
 // サーバから渡る軽量ビューモデル（Prisma型から必要分だけ抜き出して直列化）。
 export interface MatchVM {
@@ -448,6 +449,11 @@ export function MatchesList({
                         {/* アクション: 提案へ進む / 見比べる */}
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <ProposalButton talentId={t.id} projectId={project.id} />
+                          <SendProjectButton
+                            talentId={t.id}
+                            projectId={project.id}
+                            talentName={t.name}
+                          />
                           <Link
                             href={`/compare?mode=talent&talentId=${t.id}`}
                             className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-border hover:bg-slate-50 hover:text-primary"

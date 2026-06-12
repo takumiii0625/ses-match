@@ -360,3 +360,19 @@ model IngestedEmail {
 
   @@index([orgId, createdAt])
 }
+
+// 送信したメール（案件→人材）の履歴。重複送信防止・送信履歴の表示に使う。
+model SentEmail {
+  id        String   @id @default(cuid())
+  orgId     String
+  talentId  String
+  projectId String
+  toAddr    String // 送信先メール
+  subject   String
+  status    String // SENT / FAILED
+  error     String? // 失敗時の理由
+  createdAt DateTime @default(now())
+
+  @@index([orgId, createdAt])
+  @@index([talentId, projectId])
+}

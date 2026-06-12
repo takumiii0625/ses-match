@@ -10,6 +10,7 @@ import { formatRate, daysAgo } from "@/lib/utils";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { inhouseChannelStatus } from "@/lib/channel";
 import { ProposalButton } from "../../matching/proposal-button";
+import { SendProjectButton } from "../../matching/send-project-button";
 import { groupByTalent } from "./group";
 import type { MatchVM } from "../matches-list";
 
@@ -263,8 +264,13 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                           </div>
                         )}
 
-                        <div className="mt-3">
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
                           <ProposalButton talentId={talent.id} projectId={p.id} />
+                          <SendProjectButton
+                            talentId={talent.id}
+                            projectId={p.id}
+                            talentName={talent.name}
+                          />
                         </div>
                       </div>
                     </div>
