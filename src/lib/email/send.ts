@@ -106,16 +106,16 @@ export interface ProjectEmailInput {
   talentName: string; // エンジニアのイニシャル/氏名
   contactFrom: string | null; // 人材を送ってきたメールの From（担当者名の抽出元）
   projectTitle: string;
-  projectBody: string; // 元案件メール本文（emailBody）。無ければ description
+  projectBlock: string; // 整形済みの案件本文（LLM整形 or ルール整形の結果）
 }
 
-/** 案件→人材への案内メール本文を組み立てる（定型の挨拶＋整形した案件＋署名）。 */
+/** 案件→人材への案内メール本文を組み立てる（定型の挨拶＋整形済み案件＋署名）。 */
 export function buildProjectEmail(input: ProjectEmailInput): {
   subject: string;
   text: string;
 } {
   const contactName = contactNameFromFrom(input.contactFrom);
-  const block = transformProjectBody(input.projectBody || "");
+  const block = input.projectBlock.trim();
   const subject = `【案件のご案内】${input.projectTitle}`;
   const text = [
     `${contactName}様`,

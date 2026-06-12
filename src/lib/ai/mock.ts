@@ -181,6 +181,11 @@ export class MockAIService implements AIService {
       .join("\n");
   }
 
+  async formatProjectBody(rawText: string): Promise<string> {
+    // モックはLLM無しなので、最初の見出し以降をそのまま返す（簡易）。
+    return rawText.trim();
+  }
+
   async rankCandidates(
     project: MatchProjectInput,
     candidates: MatchCandidateInput[],

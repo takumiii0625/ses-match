@@ -17,6 +17,7 @@ import {
   DEFAULT_TALENT_PROMPT,
   DEFAULT_PROJECT_PROMPT,
   DEFAULT_PROPOSAL_PROMPT,
+  DEFAULT_PROJECT_EMAIL_PROMPT,
   DEFAULT_SKILLSHEET_PROMPT,
   DEFAULT_SKILLSHEET_IMPROVE_PROMPT,
 } from "./prompts";
@@ -397,6 +398,32 @@ export class AnthropicAIService implements AIService {
       ],
     });
 
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") {
+      throw new Error("AI応答にテキストが含まれていません");
+    }
+    return text.text.trim();
+  }
+
+  async formatProjectBody(rawText: string, systemPrompt?: string): Promise<string> {
+    const res = await this.client.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      system: [
+        {
+          type: "text",
+          text: systemPrompt?.trim() || DEFAULT_PROJECT_EMAIL_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+      messages: [
+        {
+          role: "user",
+          content: `以下の案件メール本文を、ルールに従って案内用に整形してください。\n\n${rawText.slice(0, MAX_EMAIL_CHARS)}`,
+        },
+      ],
+    });
+    logUsage("project-email", res.usage);
     const text = res.content.find((b) => b.type === "text");
     if (!text || text.type !== "text") {
       throw new Error("AI応答にテキストが含まれていません");

@@ -127,6 +127,8 @@ export interface AIService {
   ): Promise<ParsedProject>;
   /** マッチング結果 → 提案メール文面（systemPrompt で上書き可） */
   generateProposal(input: ProposalInput, systemPrompt?: string): Promise<string>;
+  /** 案件メール本文を案内用に整形（単価→スキル見合い・支払サイト/商流削除等。systemPromptで上書き可） */
+  formatProjectBody(rawText: string, systemPrompt?: string): Promise<string>;
   /** 履歴書/スキルシート（テキスト＋添付）→ 提案用サマリ文＋構造化情報 */
   parseSkillSheet(
     rawText: string,

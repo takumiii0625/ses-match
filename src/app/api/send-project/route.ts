@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
-import { sendMail, buildProjectEmail } from "@/lib/email/send";
+import { sendMail, buildProjectEmail, transformProjectBody } from "@/lib/email/send";
+import { getAI } from "@/lib/ai";
 
 export const maxDuration = 60;
 
@@ -49,11 +50,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 案件本文は LLM で整形（どの形式でもルール適用）。失敗時はルール整形にフォールバック。
+    const raw = project.emailBody || project.description || "";
+    let block: string;
+    try {
+      block = await getAI().formatProjectBody(raw, org.projectEmailPrompt ?? undefined);
+      if (!block.trim()) block = transformProjectBody(raw);
+    } catch {
+      block = transformProjectBody(raw);
+    }
+
     const { subject, text } = buildProjectEmail({
       talentName: talent.name,
       contactFrom: talent.emailFrom,
       projectTitle: project.title,
-      projectBody: project.emailBody || project.description || "",
+      projectBlock: block,
     });
 
     try {

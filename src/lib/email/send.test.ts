@@ -84,7 +84,7 @@ describe("buildProjectEmail", () => {
       talentName: "T.K",
       contactFrom: "山田太郎 <yamada@partner.co.jp>",
       projectTitle: "SAPコンサル",
-      projectBody: SAMPLE,
+      projectBlock: transformProjectBody(SAMPLE),
     });
     expect(subject).toContain("SAPコンサル");
     expect(text).toContain("山田太郎様");
