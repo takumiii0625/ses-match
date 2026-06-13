@@ -5,6 +5,7 @@ import {
   contactNameFromBody,
   resolveContactName,
   buildProjectEmail,
+  buildTalentProposalEmail,
 } from "./send";
 
 const SAMPLE = `お世話になっております。〇〇社の田中です。下記案件です。
@@ -131,6 +132,32 @@ describe("buildProjectEmail", () => {
     expect(text).toContain("sales@obfall.co.jp");
     expect(text).toContain("■単価：");
   });
+  it("提案メール（自社マッチ）: 雛形どおりの本文・宛名・署名", () => {
+    const { subject, text } = buildTalentProposalEmail({
+      contactFrom: "アストロ 鈴木りら <rira.suzuki@astro-hd.com>",
+      projectTitle: "旅行サイトエンハンス開発（Java）",
+      talentBlock: "【氏名】Y.S\n【スキル】Java / Spring Boot",
+    });
+    expect(subject).toBe("【要員のご提案】旅行サイトエンハンス開発（Java）");
+    expect(text).toContain("アストロ 鈴木りら様");
+    expect(text).toContain("OBFall営業部です。");
+    expect(text).toContain("案件のご紹介ありがとうございます。");
+    expect(text).toContain("本案件に下記要員はいかがでしょうか。");
+    expect(text).toContain("【氏名】Y.S");
+    expect(text).toContain("何卒よろしくお願い致します。");
+    expect(text).toContain("OBFall株式会社");
+  });
+
+  it("提案メール: Fromに表示名が無ければ案件メール本文から宛名を補完", () => {
+    const { text } = buildTalentProposalEmail({
+      contactFrom: "info@astro-hd.com",
+      contactBody: "お世話になっております。アストロの鈴木です。",
+      projectTitle: "SAP案件",
+      talentBlock: "【氏名】T.A",
+    });
+    expect(text).toContain("鈴木様");
+  });
+
   it("Fromに表示名が無くても本文署名から宛名を補完", () => {
     const { text } = buildProjectEmail({
       talentName: "Y.S",

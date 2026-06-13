@@ -11,6 +11,7 @@ import { REMOTE_LABELS } from "@/lib/enums";
 import { inhouseChannelStatus } from "@/lib/channel";
 import { ProposalButton } from "../../matching/proposal-button";
 import { SendProjectButton } from "../../matching/send-project-button";
+import { SendTalentButton } from "../../matching/send-talent-button";
 import { groupByTalent } from "./group";
 import type { MatchVM } from "../matches-list";
 
@@ -266,6 +267,11 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
 
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <ProposalButton talentId={talent.id} projectId={p.id} />
+                          <SendTalentButton
+                            talentId={talent.id}
+                            projectId={p.id}
+                            projectTitle={p.title}
+                          />
                           <SendProjectButton
                             talentId={talent.id}
                             projectId={p.id}

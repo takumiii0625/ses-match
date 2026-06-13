@@ -389,6 +389,7 @@ model SentEmail {
   orgId     String
   talentId  String
   projectId String
+  kind      String   @default("PROJECT_INFO") // PROJECT_INFO=案件案内(人材へ) / TALENT_PROPOSAL=要員提案(案件元へ)
   toAddr    String // 送信先メール
   subject   String
   status    String // SENT / FAILED

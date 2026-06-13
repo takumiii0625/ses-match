@@ -38,9 +38,9 @@ export async function POST(req: NextRequest) {
         where: { id: projectId, orgId: org.id },
         select: { id: true, title: true, emailBody: true, description: true, formattedBody: true },
       }),
-      // 二重送信ガード: 同じ人材×案件の送信済み記録（最新）
+      // 二重送信ガード: 同じ人材×案件の案件案内メール送信記録（最新）
       prisma.sentEmail.findFirst({
-        where: { orgId: org.id, talentId, projectId, status: "SENT" },
+        where: { orgId: org.id, talentId, projectId, kind: "PROJECT_INFO", status: "SENT" },
         orderBy: { createdAt: "desc" },
         select: { createdAt: true },
       }),

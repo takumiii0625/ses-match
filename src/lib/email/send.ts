@@ -177,6 +177,42 @@ export interface ProjectEmailInput {
   projectBlock: string; // 整形済みの案件本文（LLM整形 or ルール整形の結果）
 }
 
+export interface TalentProposalEmailInput {
+  contactFrom: string | null; // 案件メールのFrom（宛名の抽出元）
+  contactBody?: string | null; // 案件メール本文（署名から担当者名を抽出するフォールバック）
+  projectTitle: string;
+  talentBlock: string; // 要員情報（人材メール本文 or スキルシート要約をそのまま）
+}
+
+/**
+ * 人材→案件元への提案メール本文を組み立てる（自社マッチ用）。
+ * 雛形は固定・LLM整形なし（要員情報はそのまま掲載）。
+ */
+export function buildTalentProposalEmail(input: TalentProposalEmailInput): {
+  subject: string;
+  text: string;
+} {
+  const contactName = resolveContactName(input.contactFrom, null, input.contactBody);
+  const subject = `【要員のご提案】${input.projectTitle}`;
+  const text = [
+    `${contactName}様`,
+    ``,
+    `お世話になっております。`,
+    `OBFall営業部です。`,
+    ``,
+    `案件のご紹介ありがとうございます。`,
+    ``,
+    `本案件に下記要員はいかがでしょうか。`,
+    `ご検討いただけますと幸いです。`,
+    ``,
+    input.talentBlock.trim(),
+    ``,
+    `何卒よろしくお願い致します。`,
+    SIGNATURE,
+  ].join("\n");
+  return { subject, text };
+}
+
 /** 案件→人材への案内メール本文を組み立てる（定型の挨拶＋整形済み案件＋署名）。 */
 export function buildProjectEmail(input: ProjectEmailInput): {
   subject: string;

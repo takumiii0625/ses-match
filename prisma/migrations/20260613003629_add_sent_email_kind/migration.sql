@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "SentEmail" ADD COLUMN     "kind" TEXT NOT NULL DEFAULT 'PROJECT_INFO';
