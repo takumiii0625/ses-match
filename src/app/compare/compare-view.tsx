@@ -257,11 +257,8 @@ function SendTab({ pair }: { pair: SendPair }) {
   }
 
   async function send() {
-    if (!mail) return;
-    const resendNote = lastSentAt
-      ? `\n\n⚠️ この人材×案件は ${fmtDate(lastSentAt)} に送信済みです。再送しますか？`
-      : "";
-    if (!window.confirm(`${mail.to} 宛に案件案内メールを送信します。よろしいですか？${resendNote}`)) return;
+    if (!mail || lastSentAt) return; // 送信済みは再送不可
+    if (!window.confirm(`${mail.to} 宛に案件案内メールを送信します。よろしいですか？`)) return;
     setSending(true);
     setError(null);
     try {
@@ -312,7 +309,7 @@ function SendTab({ pair }: { pair: SendPair }) {
         <>
           {lastSentAt && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-              ⚠️ この人材にはこの案件を {fmtDate(lastSentAt)} に送信済みです。
+              ⚠️ {fmtDate(lastSentAt)} に送信済みです。再送信はできません。
             </div>
           )}
           <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm">
@@ -330,13 +327,15 @@ function SendTab({ pair }: { pair: SendPair }) {
             >
               {loading ? "再生成中…" : "再生成"}
             </button>
-            <button
-              onClick={send}
-              disabled={sending}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
-            >
-              {sending ? "送信中…" : "このメールを送信"}
-            </button>
+            {!lastSentAt && (
+              <button
+                onClick={send}
+                disabled={sending}
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+              >
+                {sending ? "送信中…" : "このメールを送信"}
+              </button>
+            )}
           </div>
         </>
       )}

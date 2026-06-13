@@ -50,7 +50,7 @@ export function SendTalentButton({
   }
 
   async function send() {
-    if (!mail || sending) return;
+    if (!mail || sending || mail.lastSentAt) return; // 提案済みは再送不可
     setSending(true);
     setError(null);
     try {
@@ -116,8 +116,8 @@ export function SendTalentButton({
                 <>
                   {mail.lastSentAt && (
                     <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-                      ⚠️ この案件にはこの要員を{" "}
-                      {new Date(mail.lastSentAt).toLocaleDateString("ja-JP")} に提案済みです。
+                      ⚠️ {new Date(mail.lastSentAt).toLocaleDateString("ja-JP")}{" "}
+                      に提案済みです。再送信はできません。
                     </div>
                   )}
                   <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm">
@@ -144,15 +144,17 @@ export function SendTalentButton({
                   disabled={sending}
                   className="rounded-lg border border-border px-3 py-2 text-sm text-slate-600 hover:bg-slate-50"
                 >
-                  キャンセル
+                  {mail.lastSentAt ? "閉じる" : "キャンセル"}
                 </button>
-                <button
-                  onClick={send}
-                  disabled={sending}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {sending ? "送信中…" : "このメールを送信"}
-                </button>
+                {!mail.lastSentAt && (
+                  <button
+                    onClick={send}
+                    disabled={sending}
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {sending ? "送信中…" : "このメールを送信"}
+                  </button>
+                )}
               </div>
             )}
           </div>

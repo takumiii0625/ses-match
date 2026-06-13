@@ -101,6 +101,15 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // 二重送信ブロック: 同じ人材×案件に提案済みなら再送信不可（どの画面から呼ばれても適用）。
+    if (lastSent) {
+      const date = lastSent.createdAt.toLocaleDateString("ja-JP", { timeZone: "Asia/Tokyo" });
+      return NextResponse.json(
+        { error: `⚠️ ${date}に提案済みのため、再送信はできません` },
+        { status: 409 },
+      );
+    }
+
     try {
       const { id } = await sendMail({ to, subject, text });
       await prisma.sentEmail.create({
