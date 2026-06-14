@@ -45,6 +45,12 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
+    // 自動送信の上限（1〜200にクランプ）。
+    const autoEmailDailyCap =
+      body.autoEmailDailyCap !== undefined
+        ? Math.min(Math.max(Math.floor(Number(body.autoEmailDailyCap)) || 0, 1), 200)
+        : undefined;
+
     const updated = await prisma.organization.update({
       where: { id: org.id },
       data: {
@@ -54,6 +60,10 @@ export async function PATCH(req: NextRequest) {
         ...(isValidAiProvider(body.aiProvider)
           ? { aiProvider: body.aiProvider }
           : {}),
+        ...(typeof body.autoEmailEnabled === "boolean"
+          ? { autoEmailEnabled: body.autoEmailEnabled }
+          : {}),
+        ...(autoEmailDailyCap !== undefined ? { autoEmailDailyCap } : {}),
         // Allow clearing signature with empty string (stored as null)
         ...(body.proposalSignature !== undefined
           ? {

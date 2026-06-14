@@ -21,6 +21,9 @@ model Organization {
   slug              String   @unique
   aiProvider        String   @default("mock") // mock | anthropic | openai
   proposalSignature String? // 提案メールの署名
+  // 案件案内メールの自動送信。ON時、日次マッチ後に「商流OK・80点以上・その日の新規・未送信」を自動送信。
+  autoEmailEnabled  Boolean  @default(false)
+  autoEmailDailyCap Int      @default(20) // 1日の自動送信上限（安全装置。手動送信も含めて計上）
   // LLMシステムプロンプトの上書き（null=組み込みデフォルト）。編集はプロンプト管理画面から。
   matchPrompt       String? // マッチ判定
   classifyPrompt    String? // メール分類

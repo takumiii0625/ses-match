@@ -15,6 +15,8 @@ interface Org {
   slug: string;
   aiProvider: string;
   proposalSignature: string | null;
+  autoEmailEnabled: boolean;
+  autoEmailDailyCap: number;
   createdAt: string;
 }
 
@@ -47,6 +49,8 @@ export function SettingsForm({ org }: { org: Org }) {
   const [name, setName] = useState(org.name);
   const [aiProvider, setAiProvider] = useState(org.aiProvider);
   const [proposalSignature, setProposalSignature] = useState(org.proposalSignature ?? "");
+  const [autoEmailEnabled, setAutoEmailEnabled] = useState(org.autoEmailEnabled);
+  const [autoEmailDailyCap, setAutoEmailDailyCap] = useState(String(org.autoEmailDailyCap));
 
   const providerBadge = AI_PROVIDER_BADGE[aiProvider] ?? AI_PROVIDER_BADGE["mock"];
 
@@ -59,7 +63,13 @@ export function SettingsForm({ org }: { org: Org }) {
       const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, aiProvider, proposalSignature }),
+        body: JSON.stringify({
+          name,
+          aiProvider,
+          proposalSignature,
+          autoEmailEnabled,
+          autoEmailDailyCap: Number(autoEmailDailyCap) || 20,
+        }),
       });
 
       if (!res.ok) {
@@ -169,6 +179,54 @@ export function SettingsForm({ org }: { org: Org }) {
           placeholder="株式会社〇〇&#10;担当: 山田 太郎&#10;TEL: 03-XXXX-XXXX&#10;Email: taro@example.com"
           className="resize-y"
         />
+      </Card>
+
+      {/* 案件案内メールの自動送信 */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <h2 className="text-base font-semibold text-slate-700">案件案内メールの自動送信</h2>
+          <Badge tone={autoEmailEnabled ? "green" : "slate"}>
+            {autoEmailEnabled ? "ON" : "OFF"}
+          </Badge>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          毎日のマッチ後（15:40 JST）、<span className="font-medium text-slate-500">商流OK・80点以上・その日の新規・未送信</span>
+          の案件案内メールを人材の紹介元へ自動送信します。過去のマッチは送信しません。
+        </p>
+
+        <label className="flex items-center gap-3 cursor-pointer mb-4">
+          <input
+            type="checkbox"
+            checked={autoEmailEnabled}
+            onChange={(e) => setAutoEmailEnabled(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+          />
+          <span className="text-sm text-slate-700">自動送信を有効にする</span>
+        </label>
+
+        <div className="max-w-xs">
+          <Label htmlFor="auto-cap">1日の送信上限（安全装置）</Label>
+          <Input
+            id="auto-cap"
+            type="number"
+            min={1}
+            max={200}
+            value={autoEmailDailyCap}
+            onChange={(e) => setAutoEmailDailyCap(e.target.value)}
+            disabled={!autoEmailEnabled}
+            className={autoEmailEnabled ? "" : "bg-slate-50 text-slate-400"}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            手動送信も含めて、1日にこの通数を超えたら自動送信を停止します（1〜200）。
+          </p>
+        </div>
+
+        {autoEmailEnabled && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+            ⚠️ 実在の取引先へ自動でメールが送られます。最初は上限を小さく（例: 5通）にして、
+            送信内容・宛先が正しいか数日確認することをおすすめします。
+          </div>
+        )}
       </Card>
 
       {/* Actions */}

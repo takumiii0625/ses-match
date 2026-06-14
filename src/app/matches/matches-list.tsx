@@ -21,6 +21,7 @@ export interface MatchVM {
   reasons: string[];
   proposable: boolean;
   channelNote: string | null;
+  sentInfoAt: string | null; // 案件案内メールを送信済みの日時（未送信なら null）
   talent: {
     id: string;
     name: string;
@@ -67,6 +68,15 @@ function scoreBadgeTone(score: number): "green" | "amber" | "slate" {
   if (score >= 70) return "green";
   if (score >= 40) return "amber";
   return "slate";
+}
+
+/** 送信済みバッジ用の短い日付（M/D）。 */
+export function fmtSentDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    timeZone: "Asia/Tokyo",
+  });
 }
 
 function ScoreBar({ score }: { score: number }) {
@@ -448,6 +458,11 @@ export function MatchesList({
 
                         {/* アクション: 提案へ進む / 見比べる */}
                         <div className="mt-3 flex flex-wrap items-center gap-2">
+                          {m.sentInfoAt && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                              ✉ 送信済み {fmtSentDate(m.sentInfoAt)}
+                            </span>
+                          )}
                           <ProposalButton talentId={t.id} projectId={project.id} />
                           <SendProjectButton
                             talentId={t.id}

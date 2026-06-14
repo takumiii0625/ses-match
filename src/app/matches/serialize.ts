@@ -1,5 +1,21 @@
 import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import type { MatchVM } from "./matches-list";
+
+/** talentId#projectId → 案件案内メールの最新送信日時(ISO) のマップを作る（送信済みバッジ用）。 */
+export async function buildSentInfoMap(orgId: string): Promise<Map<string, string>> {
+  const sent = await prisma.sentEmail.findMany({
+    where: { orgId, kind: "PROJECT_INFO", status: "SENT" },
+    select: { talentId: true, projectId: true, createdAt: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const map = new Map<string, string>();
+  for (const s of sent) {
+    const key = `${s.talentId}#${s.projectId}`;
+    if (!map.has(key)) map.set(key, s.createdAt.toISOString()); // 最新（降順の先頭）を採用
+  }
+  return map;
+}
 
 // VM化に必要な列だけ取得する select。emailBody（フルのメール本文）等の重い列を読まず、
 // Neonのネットワーク転送量を削減する（無料枠の超過対策）。一覧ページで共通利用。
@@ -40,14 +56,18 @@ export const matchVmSelect = {
 
 type MatchVmRow = Prisma.MatchGetPayload<{ select: typeof matchVmSelect }>;
 
-/** Prisma の Match(+talent,+project) を、クライアント用 VM に直列化する。 */
-export function toMatchVM(m: MatchVmRow): MatchVM {
+/**
+ * Prisma の Match(+talent,+project) を、クライアント用 VM に直列化する。
+ * sentInfoAt は呼び出し側で算出した「この人材×案件の案件案内メール送信日時」（ISO文字列 or null）。
+ */
+export function toMatchVM(m: MatchVmRow, sentInfoAt: string | null = null): MatchVM {
   return {
     id: m.id,
     score: m.score,
     reasons: m.reasons,
     proposable: m.proposable,
     channelNote: m.channelNote,
+    sentInfoAt,
     talent: {
       id: m.talent.id,
       name: m.talent.name,

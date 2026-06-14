@@ -20,6 +20,7 @@ function mk(p: {
     reasons: [],
     proposable: p.proposable ?? true,
     channelNote: null,
+    sentInfoAt: null,
     talent: {
       id: `t-${p.talentName}`,
       name: p.talentName,

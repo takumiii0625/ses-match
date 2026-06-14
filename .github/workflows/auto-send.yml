@@ -1,0 +1,24 @@
+name: 案件案内メールの自動送信（15:40 JST）
+
+# 日次マッチ（15:00 JST）の後に実行。商流OK・80点以上・その日の新規・未送信を自動送信。
+# ON/OFF と 1日上限は設定画面（組織設定）で制御。OFF なら何も送らない。
+# 日本時間 15:40（= 6:40 UTC）。
+on:
+  schedule:
+    - cron: "40 6 * * *"
+  workflow_dispatch: {} # 手動実行も可
+
+concurrency:
+  group: auto-send
+  cancel-in-progress: false
+
+jobs:
+  auto-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 自動送信を実行
+        run: |
+          resp=$(curl -fsS --max-time 300 -X POST \
+            "https://sesmatch.encore-biz.com/api/cron/auto-send" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+          echo "$resp"

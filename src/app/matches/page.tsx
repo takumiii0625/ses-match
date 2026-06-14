@@ -5,7 +5,7 @@ import { DEFAULT_MATCH_PROMPT } from "@/lib/ai/prompts";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { MatchesList } from "./matches-list";
-import { toMatchVM, matchVmSelect } from "./serialize";
+import { toMatchVM, matchVmSelect, buildSentInfoMap } from "./serialize";
 
 export const metadata = { title: "マッチ一覧 — SES Match" };
 export const dynamic = "force-dynamic";
@@ -13,13 +13,18 @@ export const dynamic = "force-dynamic";
 export default async function MatchesPage() {
   const org = await getCurrentOrg();
 
-  const matches = await prisma.match.findMany({
-    where: { project: { orgId: org.id }, score: { gte: 80 } },
-    select: matchVmSelect,
-    orderBy: { score: "desc" },
-  });
+  const [matches, sentMap] = await Promise.all([
+    prisma.match.findMany({
+      where: { project: { orgId: org.id }, score: { gte: 80 } },
+      select: matchVmSelect,
+      orderBy: { score: "desc" },
+    }),
+    buildSentInfoMap(org.id),
+  ]);
 
-  const vm = matches.map(toMatchVM);
+  const vm = matches.map((m) =>
+    toMatchVM(m, sentMap.get(`${m.talent.id}#${m.project.id}`) ?? null),
+  );
 
   const activePrompt = org.matchPrompt ?? DEFAULT_MATCH_PROMPT;
   const usingDefault = !org.matchPrompt;
