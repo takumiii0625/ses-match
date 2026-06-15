@@ -22,6 +22,7 @@ import {
   FileText,
   ScrollText,
   BarChart3,
+  LineChart,
   UsersRound,
   Settings,
   Droplet,
@@ -67,6 +68,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     title: "管理",
     items: [
       { href: "/prompts", label: "プロンプト", icon: ScrollText },
+      { href: "/analytics", label: "分析", icon: LineChart },
       { href: "/reports", label: "レポート", icon: BarChart3 },
       { href: "/members", label: "メンバー", icon: UsersRound },
     ],
