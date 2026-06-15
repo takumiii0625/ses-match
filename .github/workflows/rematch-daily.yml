@@ -1,11 +1,8 @@
 name: 1日1回マッチ（15時台 JST・今日のみ）
 
-# 取込とマッチを分離したため、定時マッチは1日1回だけ実行する。
-# GitHubの定時実行はスキップされることがあるので、取りこぼし対策で15時台に
-# 複数回発火させる。実際のマッチは &daily=1 の冪等ガードで「1日1回だけ」になる
-# （最初に発火した回がマッチし、以降の回はスキップ＝コストは1回分）。
+# 定時マッチは1日1回だけ（取りこぼし対策で15時台に複数回発火・1日1回ガード付き）。
+# 手動(workflow_dispatch)は daily ガード無しで、days(対象期間) と startOffset(再開位置)を指定可。
 # 時刻(UTC→JST): 06:10→15:10, 07:00→16:00, 08:00→17:00, 09:30→18:30
-# 手動実行(workflow_dispatch)は daily ガードを使わず、days で対象期間を広げて再マッチできる。
 on:
   schedule:
     - cron: "10 6 * * *"
@@ -15,9 +12,13 @@ on:
   workflow_dispatch:
     inputs:
       days:
-        description: "対象とする配信日の幅（1=今日のみ。手動で再マッチ範囲を広げる時に3や7）"
+        description: "対象とする配信日の幅（1=今日のみ。再マッチ範囲を広げる時に3や7）"
         required: false
         default: "1"
+      startOffset:
+        description: "再開位置（0=先頭・クリーン再生成あり。途中再開時は前回の処理済み件数を指定）"
+        required: false
+        default: "0"
 
 concurrency:
   group: rematch-daily
@@ -27,20 +28,24 @@ jobs:
   rematch:
     runs-on: ubuntu-latest
     steps:
-      - name: マッチを実行（完了までページループ）
+      - name: マッチを実行（完了までページループ・遅いページはスキップして継続）
         run: |
-          # 定時(schedule)は1日1回ガード付き・今日のみ。手動はガード無し・days指定可。
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            days=1; guard="&daily=1"
+            days=1; guard="&daily=1"; offset=0
           else
-            days="${{ github.event.inputs.days }}"; guard=""
+            days="${{ github.event.inputs.days }}"; guard=""; offset="${{ github.event.inputs.startOffset }}"
           fi
-          offset=0
-          for i in $(seq 1 500); do
-            resp=$(curl -fsS --max-time 300 -X POST \
+          for i in $(seq 1 1000); do
+            resp=$(curl -fsS --max-time 290 -X POST \
               "https://sesmatch.encore-biz.com/api/cron/rematch?offset=$offset&limit=3&scope=all&days=$days$guard" \
-              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" || true)
+            if [ -z "$resp" ]; then
+              echo "page failed at offset=$offset — skip ahead"
+              offset=$((offset + 3))
+              continue
+            fi
             echo "$resp"
             echo "$resp" | grep -q '"done":true' && { echo "完了/本日処理済み"; break; }
-            offset=$(echo "$resp" | grep -o '"processed":[0-9]*' | grep -o '[0-9]*')
+            next=$(echo "$resp" | grep -o '"processed":[0-9]*' | grep -o '[0-9]*')
+            if [ -z "$next" ] || [ "$next" = "$offset" ]; then offset=$((offset + 3)); else offset=$next; fi
           done
