@@ -16,6 +16,7 @@ import {
   Link2,
   Mail,
   MailCheck,
+  Send,
   FileText,
   ScrollText,
   BarChart3,
@@ -55,6 +56,7 @@ const groups: { title: string; items: NavItem[] }[] = [
       { href: "/ingest", label: "メール取り込み", icon: Mail },
       { href: "/mail", label: "メール自動取込", icon: MailCheck },
       { href: "/proposals", label: "提案管理", icon: FileText },
+      { href: "/sent-emails", label: "送信履歴", icon: Send },
     ],
   },
   {
