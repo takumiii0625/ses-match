@@ -24,6 +24,8 @@ model Organization {
   // 案件案内メールの自動送信。ON時、日次マッチ後に「商流OK・80点以上・その日の新規・未送信」を自動送信。
   autoEmailEnabled  Boolean  @default(false)
   autoEmailDailyCap Int      @default(20) // 1日の自動送信上限（安全装置。手動送信も含めて計上）
+  // 提携先への一斉送信（ブラスト）の1日上限（安全装置。本日のBlastRecipient.SENT件数で判定）。
+  blastDailyCap     Int      @default(1000)
   // LLMシステムプロンプトの上書き（null=組み込みデフォルト）。編集はプロンプト管理画面から。
   matchPrompt       String? // マッチ判定
   classifyPrompt    String? // メール分類
@@ -35,11 +37,14 @@ model Organization {
   skillSheetImprovePrompt String? // サマリ文の改善
   createdAt         DateTime @default(now())
 
-  users       User[]
-  talents     Talent[]
-  projects    Project[]
-  proposals   Proposal[]
-  sharedLinks SharedLink[]
+  users            User[]
+  talents          Talent[]
+  projects         Project[]
+  proposals        Proposal[]
+  sharedLinks      SharedLink[]
+  partnerCompanies PartnerCompany[]
+  partnerContacts  PartnerContact[]
+  blastCampaigns   BlastCampaign[]
 }
 
 enum Role {
@@ -401,4 +406,113 @@ model SentEmail {
 
   @@index([orgId, createdAt])
   @@index([talentId, projectId])
+}
+
+// ---------- 提携先会社・連絡先（協力会社の一斉送信先） ----------
+
+enum PartnerContactStatus {
+  ACTIVE // 配信中（送信対象）
+  BOUNCED // エラー停止（不達。送信対象外）
+  UNSUBSCRIBED // 配信停止/解除/本人オプトアウト（送信対象外）
+}
+
+// 提携先（協力会社）。CSV取込・手動登録で作る。会社名でテナント内ユニーク。
+model PartnerCompany {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String // 会社名
+  domain    String? // 連絡先メールから導出したドメイン（将来の人材/案件紐付け用）
+  industry  String? // 業種
+  phone     String?
+  website   String?
+  note      String?
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org      Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contacts PartnerContact[]
+
+  @@unique([orgId, name]) // CSV取込の冪等キー
+  @@index([orgId])
+}
+
+// 提携先の連絡先（メールアドレス）。1社に複数可。配信状態を持つ。
+model PartnerContact {
+  id               String               @id @default(cuid())
+  orgId            String // 非正規化（送信クエリ・スコープ簡素化）
+  companyId        String
+  email            String
+  name             String? // 担当者名（CSVは「ご担当者」）
+  role             String? // 役職
+  status           PartnerContactStatus @default(ACTIVE)
+  unsubscribeToken String               @unique @default(cuid()) // 配信停止リンク用
+  bounceCount      Int                  @default(0)
+  unsubscribedAt   DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  org     Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  company PartnerCompany @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, email]) // CSV取込の冪等性（email一意）
+  @@index([orgId, status]) // 配信中の一括抽出
+  @@index([companyId])
+}
+
+// ---------- 一斉送信（ブラスト）キャンペーン ----------
+
+enum BlastStatus {
+  DRAFT
+  QUEUED // 送信待ち（recipient採番済み、cron待ち）
+  SENDING
+  DONE
+  FAILED
+  CANCELED
+}
+
+enum BlastRecipientStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+// 自社人材を提携先へ一斉紹介するキャンペーン。本文は確定済みを保存。
+model BlastCampaign {
+  id          String      @id @default(cuid())
+  orgId       String
+  subject     String
+  body        String // 確定本文（人材ブロック込み。配信停止URLは送信時に各通へ差し込む）
+  talentIds   String[]    @default([]) // 紹介した自社人材（履歴用）
+  status      BlastStatus @default(DRAFT)
+  totalCount  Int         @default(0)
+  sentCount   Int         @default(0)
+  failedCount Int         @default(0)
+  createdById String?
+  createdAt   DateTime    @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+
+  org        Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  recipients BlastRecipient[]
+
+  @@index([orgId, createdAt])
+  @@index([orgId, status])
+}
+
+// キャンペーンの送信対象1件（連絡先1つ）。PENDINGをcronが消化する。
+model BlastRecipient {
+  id         String               @id @default(cuid())
+  campaignId String
+  contactId  String
+  toAddr     String // 採番時点のメール（連絡先削除後も履歴が残る）
+  status     BlastRecipientStatus @default(PENDING)
+  error      String?
+  sentAt     DateTime?
+
+  campaign BlastCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, contactId]) // 同一キャンペーンで二重送信不可
+  @@index([campaignId, status]) // PENDINGだけ高速ドレイン
 }
