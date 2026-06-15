@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { sendMail, buildTalentProposalEmail } from "@/lib/email/send";
-import { buildTalentBlock } from "@/lib/email/talent-block";
+import { buildTalentIntroBlock } from "@/lib/email/talent-block";
 
 export const maxDuration = 60;
 
@@ -39,7 +39,6 @@ export async function POST(req: NextRequest) {
         select: {
           id: true,
           name: true,
-          emailBody: true,
           summaryText: true,
           mainSkills: true,
           skills: true,
@@ -72,8 +71,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 要員情報: 人材メール本文をそのまま。無ければスキルシート要約、それも無ければ項目から組み立て。
-    const talentBlock = buildTalentBlock(talent);
+    // 要員情報: 本人固有のみ（氏名見出し＋スキルシート要約 or 構造化項目）。
+    // 複数人をまとめた元メール(emailBody)は使わない＝別人の内容混入を防ぐ。
+    const talentBlock = buildTalentIntroBlock(talent);
 
     const { subject, text } = buildTalentProposalEmail({
       contactFrom: project.emailFrom,
