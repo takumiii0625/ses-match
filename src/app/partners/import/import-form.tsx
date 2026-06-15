@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { fetchJson } from "@/lib/http";
 import type { ImportResult } from "@/app/api/partners/import/route";
 
 export function ImportForm() {
@@ -22,10 +23,11 @@ export function ImportForm() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/partners/import", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "取込に失敗しました");
-      setResult(data as ImportResult);
+      const data = await fetchJson<ImportResult>("/api/partners/import", {
+        method: "POST",
+        body: fd,
+      });
+      setResult(data);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "取込に失敗しました");

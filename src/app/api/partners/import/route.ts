@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
-import { decodeCsv, parseBlastmailCsv } from "@/lib/partners/csv";
+import { decodeCsv, parseBlastmailCsv, type BlastmailRow } from "@/lib/partners/csv";
 import { companyDomain } from "@/lib/matching";
-import { mapLimit } from "@/lib/limit";
 import type { PartnerContactStatus } from "@prisma/client";
 
 export const maxDuration = 60;
@@ -18,15 +17,15 @@ export interface ImportResult {
   errors: { line: number; reason: string }[];
 }
 
-// 控えめな並行度（Neon接続枯渇の教訓。各upsertは短文なので5でも60秒内に収まる）。
-const CONCURRENCY = 5;
+const CHUNK = 500;
 
 /**
- * BLASTMAIL CSV を取り込み、提携先会社・連絡先を upsert する（冪等）。
- * 注意: Neonのプーラ(PgBouncer)では大きな対話的トランザクションが切れるため、
- * $transaction は使わず、個別upsert（各文がアトミック）を並行実行する。
- * - 会社は会社名でupsert（既存メタは壊さない）
- * - 連絡先はメールでupsert。既存が UNSUBSCRIBED ならCSVで上書きしない（本人の停止を尊重）
+ * BLASTMAIL CSV を取り込み、提携先会社・連絡先を一括登録する（冪等）。
+ * 行数に依存しないよう createMany/updateMany の一括クエリで実装する。
+ * （Neonプーラでは大量の個別往復はタイムアウトするため、対話的トランザクションも個別upsertも使わない）
+ * - 会社は会社名でユニーク（createMany skipDuplicates）
+ * - 連絡先はメールでユニーク。新規はcreateMany、既存はstatusをupdateMany。
+ * - 既存が UNSUBSCRIBED の連絡先はCSVで上書きしない（本人の停止を尊重）
  */
 export async function POST(req: NextRequest) {
   try {
@@ -41,84 +40,105 @@ export async function POST(req: NextRequest) {
     const text = decodeCsv(bytes);
     const { rows, errors } = parseBlastmailCsv(text);
 
-    const result: ImportResult = {
-      totalRows: rows.length,
-      companiesCreated: 0,
-      contactsCreated: 0,
-      contactsUpdated: 0,
-      skippedInvalid: errors.length,
-      byStatus: { active: 0, bounced: 0, unsubscribed: 0 },
-      errors: errors.slice(0, 50),
-    };
-
-    // --- 1) 会社を一意化してupsert（会社名→id マップを作る）。 ---
+    // --- 1) 会社を一意化して一括作成。 ---
     const uniqueCompanies = new Map<string, string | null>(); // name -> domain
     for (const r of rows) {
       if (!uniqueCompanies.has(r.company)) uniqueCompanies.set(r.company, companyDomain(r.email));
     }
-    const companyIdByName = new Map<string, string>();
-    await mapLimit([...uniqueCompanies], CONCURRENCY, async ([name, domain]) => {
-      const c = await prisma.partnerCompany.upsert({
-        where: { orgId_name: { orgId: org.id, name } },
-        create: { orgId: org.id, name, domain },
-        update: domain ? { domain } : {},
-        select: { id: true },
-      });
-      companyIdByName.set(name, c.id);
+    const companyCreate = await prisma.partnerCompany.createMany({
+      data: [...uniqueCompanies].map(([name, domain]) => ({ orgId: org.id, name, domain })),
+      skipDuplicates: true,
     });
-    result.companiesCreated = uniqueCompanies.size; // 当CSVで触れた会社数
 
-    // --- 2) メールで重複行を排除（同一メール=同一連絡先）。 ---
-    const byEmail = new Map<string, (typeof rows)[number]>();
+    // 会社名→id マップ（新規・既存ともに引く）。
+    const names = [...uniqueCompanies.keys()];
+    const companyIdByName = new Map<string, string>();
+    for (let i = 0; i < names.length; i += CHUNK) {
+      const found = await prisma.partnerCompany.findMany({
+        where: { orgId: org.id, name: { in: names.slice(i, i + CHUNK) } },
+        select: { id: true, name: true },
+      });
+      for (const c of found) companyIdByName.set(c.name, c.id);
+    }
+
+    // --- 2) 連絡先をメールで一意化。 ---
+    const byEmail = new Map<string, BlastmailRow>();
     for (const r of rows) if (!byEmail.has(r.email)) byEmail.set(r.email, r);
     const contactRows = [...byEmail.values()];
 
-    // 既存連絡先の状態を一括取得（UNSUBSCRIBED保護）。emailは数百〜千件なのでチャンク照会。
+    // 既存連絡先の状態を一括取得（新規/既存の振り分け・UNSUBSCRIBED保護）。
     const emails = contactRows.map((r) => r.email);
     const existingStatus = new Map<string, PartnerContactStatus>();
-    for (let i = 0; i < emails.length; i += 500) {
-      const chunk = emails.slice(i, i + 500);
+    for (let i = 0; i < emails.length; i += CHUNK) {
       const found = await prisma.partnerContact.findMany({
-        where: { orgId: org.id, email: { in: chunk } },
+        where: { orgId: org.id, email: { in: emails.slice(i, i + CHUNK) } },
         select: { email: true, status: true },
       });
       for (const f of found) existingStatus.set(f.email, f.status);
     }
 
-    // --- 3) 連絡先を並行upsert。 ---
-    await mapLimit(contactRows, CONCURRENCY, async (row) => {
-      const companyId = companyIdByName.get(row.company);
-      if (!companyId) return; // 会社upsertに失敗した場合のみ（通常起きない）
-      const wasNew = !existingStatus.has(row.email);
-      const keepUnsub = existingStatus.get(row.email) === "UNSUBSCRIBED";
-      const status: PartnerContactStatus = keepUnsub ? "UNSUBSCRIBED" : row.status;
+    // 表示用の最終ステータス（既存UNSUBSCRIBEDは保護）。
+    const finalStatus = (r: BlastmailRow): PartnerContactStatus =>
+      existingStatus.get(r.email) === "UNSUBSCRIBED" ? "UNSUBSCRIBED" : r.status;
 
-      await prisma.partnerContact.upsert({
-        where: { orgId_email: { orgId: org.id, email: row.email } },
-        create: {
+    // --- 3a) 新規連絡先を一括作成。 ---
+    const newRows = contactRows.filter(
+      (r) => !existingStatus.has(r.email) && companyIdByName.has(r.company),
+    );
+    let contactsCreated = 0;
+    for (let i = 0; i < newRows.length; i += CHUNK) {
+      const slice = newRows.slice(i, i + CHUNK);
+      const res = await prisma.partnerContact.createMany({
+        data: slice.map((r) => ({
           orgId: org.id,
-          companyId,
-          email: row.email,
-          name: row.name,
-          status,
-          bounceCount: row.errorCount,
-        },
-        update: {
-          companyId,
-          name: row.name ?? undefined,
-          status,
-          bounceCount: row.errorCount,
-        },
+          companyId: companyIdByName.get(r.company)!,
+          email: r.email,
+          name: r.name,
+          status: r.status,
+          bounceCount: r.errorCount,
+        })),
+        skipDuplicates: true,
       });
+      contactsCreated += res.count;
+    }
 
-      // カウンタ更新（同期処理なのでイベントループ上アトミック）。
-      if (wasNew) result.contactsCreated++;
-      else result.contactsUpdated++;
-      if (status === "ACTIVE") result.byStatus.active++;
-      else if (status === "BOUNCED") result.byStatus.bounced++;
-      else result.byStatus.unsubscribed++;
-    });
+    // --- 3b) 既存連絡先のステータスを一括更新（UNSUBSCRIBEDは触らない）。 ---
+    const byTarget: Record<PartnerContactStatus, string[]> = { ACTIVE: [], BOUNCED: [], UNSUBSCRIBED: [] };
+    let contactsUpdated = 0;
+    for (const r of contactRows) {
+      if (!existingStatus.has(r.email)) continue; // 新規はスキップ
+      if (existingStatus.get(r.email) === "UNSUBSCRIBED") continue; // 保護
+      byTarget[r.status].push(r.email);
+    }
+    for (const status of ["ACTIVE", "BOUNCED", "UNSUBSCRIBED"] as PartnerContactStatus[]) {
+      const list = byTarget[status];
+      for (let i = 0; i < list.length; i += CHUNK) {
+        const res = await prisma.partnerContact.updateMany({
+          where: { orgId: org.id, email: { in: list.slice(i, i + CHUNK) } },
+          data: { status },
+        });
+        contactsUpdated += res.count;
+      }
+    }
 
+    // --- 集計（表示用）。 ---
+    const byStatus = { active: 0, bounced: 0, unsubscribed: 0 };
+    for (const r of contactRows) {
+      const s = finalStatus(r);
+      if (s === "ACTIVE") byStatus.active++;
+      else if (s === "BOUNCED") byStatus.bounced++;
+      else byStatus.unsubscribed++;
+    }
+
+    const result: ImportResult = {
+      totalRows: rows.length,
+      companiesCreated: companyCreate.count,
+      contactsCreated,
+      contactsUpdated,
+      skippedInvalid: errors.length,
+      byStatus,
+      errors: errors.slice(0, 50),
+    };
     return NextResponse.json(result);
   } catch (err) {
     console.error("[POST /api/partners/import]", err);
