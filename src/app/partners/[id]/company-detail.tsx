@@ -17,6 +17,7 @@ export interface CompanyVM {
   note: string | null;
   domain: string | null;
   tags: string[];
+  createdAt: string;
 }
 export interface ContactVM {
   id: string;
@@ -171,6 +172,15 @@ export function CompanyDetail({ company, contacts }: { company: CompanyVM; conta
             <Row label="Webサイト" value={company.website} />
             <Row label="ドメイン" value={company.domain} />
             <Row label="タグ" value={company.tags.join("、") || null} />
+            <Row
+              label="登録日"
+              value={new Date(company.createdAt).toLocaleDateString("ja-JP", {
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                timeZone: "Asia/Tokyo",
+              })}
+            />
             <Row label="メモ" value={company.note} wide />
           </dl>
         )}

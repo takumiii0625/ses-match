@@ -6,6 +6,20 @@ import { PartnerList, type PartnerRow } from "./partner-list";
 export const metadata = { title: "提携先会社 — SES Match" };
 export const dynamic = "force-dynamic";
 
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+/** JSTの今日0時・当月1日0時（UTC Dateで返す）と、直近7日の起点。 */
+function jstBoundaries() {
+  const jstNow = new Date(Date.now() + JST_OFFSET_MS);
+  const todayStart = new Date(
+    Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) - JST_OFFSET_MS,
+  );
+  const monthStart = new Date(
+    Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), 1) - JST_OFFSET_MS,
+  );
+  const weekStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  return { todayStart, weekStart, monthStart };
+}
+
 export default async function PartnersPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
@@ -36,17 +50,22 @@ export default async function PartnersPage(props: {
       activeCount: active,
       bouncedCount: bounced,
       unsubCount: unsub,
+      createdAt: c.createdAt.toISOString(),
     };
   });
 
-  // 全体KPI（フィルタ前の総数）。
-  const [companyTotal, contactAgg] = await Promise.all([
+  // 全体KPI（フィルタ前の総数）＋新規追加の推移。
+  const { todayStart, weekStart, monthStart } = jstBoundaries();
+  const [companyTotal, contactAgg, newToday, newWeek, newMonth] = await Promise.all([
     prisma.partnerCompany.count({ where: { orgId: org.id } }),
     prisma.partnerContact.groupBy({
       by: ["status"],
       where: { orgId: org.id },
       _count: { _all: true },
     }),
+    prisma.partnerCompany.count({ where: { orgId: org.id, createdAt: { gte: todayStart } } }),
+    prisma.partnerCompany.count({ where: { orgId: org.id, createdAt: { gte: weekStart } } }),
+    prisma.partnerCompany.count({ where: { orgId: org.id, createdAt: { gte: monthStart } } }),
   ]);
   const statusCount = (s: string) =>
     contactAgg.find((g) => g.status === s)?._count._all ?? 0;
@@ -55,6 +74,9 @@ export default async function PartnersPage(props: {
     active: statusCount("ACTIVE"),
     bounced: statusCount("BOUNCED"),
     unsub: statusCount("UNSUBSCRIBED"),
+    newToday,
+    newWeek,
+    newMonth,
   };
 
   return (

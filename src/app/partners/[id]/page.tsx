@@ -25,6 +25,7 @@ export default async function PartnerDetailPage(props: { params: Promise<{ id: s
     note: company.note,
     domain: company.domain,
     tags: company.tags,
+    createdAt: company.createdAt.toISOString(),
   };
   const contacts: ContactVM[] = company.contacts.map((c) => ({
     id: c.id,

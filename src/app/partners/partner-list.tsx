@@ -19,6 +19,7 @@ export interface PartnerRow {
   activeCount: number;
   bouncedCount: number;
   unsubCount: number;
+  createdAt: string;
 }
 
 interface Stats {
@@ -26,6 +27,18 @@ interface Stats {
   active: number;
   bounced: number;
   unsub: number;
+  newToday: number;
+  newWeek: number;
+  newMonth: number;
+}
+
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Asia/Tokyo",
+  });
 }
 
 const STATUS_OPTIONS = [
@@ -80,6 +93,20 @@ export function PartnerList({
         <StatCard label="配信中" value={stats.active} tone="green" />
         <StatCard label="不達" value={stats.bounced} tone="amber" />
         <StatCard label="配信停止" value={stats.unsub} tone="slate" />
+      </div>
+
+      {/* 新規追加の推移 */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-lg border border-border bg-slate-50 px-4 py-2.5 text-sm">
+        <span className="font-medium text-slate-600">新規追加</span>
+        <span className="text-slate-700">
+          今日 <span className="font-bold text-emerald-600">{stats.newToday}</span> 社
+        </span>
+        <span className="text-slate-700">
+          直近7日 <span className="font-bold text-emerald-600">{stats.newWeek}</span> 社
+        </span>
+        <span className="text-slate-700">
+          今月 <span className="font-bold text-emerald-600">{stats.newMonth}</span> 社
+        </span>
       </div>
 
       {/* ツールバー */}
@@ -150,6 +177,7 @@ export function PartnerList({
                     {r.bouncedCount > 0 && <Badge tone="amber">不達 {r.bouncedCount}</Badge>}
                     {r.unsubCount > 0 && <Badge tone="slate">停止 {r.unsubCount}</Badge>}
                   </div>
+                  <div className="mt-1 text-xs text-muted">登録 {fmtDate(r.createdAt)}</div>
                 </Card>
               </Link>
             ))}
@@ -166,6 +194,7 @@ export function PartnerList({
                     <th className="px-4 py-3 font-medium">ドメイン</th>
                     <th className="px-4 py-3 font-medium">連絡先</th>
                     <th className="px-4 py-3 font-medium">配信中 / 不達 / 停止</th>
+                    <th className="px-4 py-3 font-medium">登録日</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -192,6 +221,9 @@ export function PartnerList({
                         <span className="text-amber-600">{r.bouncedCount}</span>
                         {" / "}
                         <span className="text-slate-500">{r.unsubCount}</span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-xs text-muted">
+                        {fmtDate(r.createdAt)}
                       </td>
                     </tr>
                   ))}
