@@ -96,7 +96,7 @@ describe("buildTalentIntroEmail（一斉案内）", () => {
     expect(text).toContain("OBFall営業部です。");
     expect(text).toContain("案件のご紹介ありがとうございます。");
     expect(text).toContain("本案件に下記要員はいかがでしょうか。");
-    expect(text).toContain("人材情報");
+    expect(text).not.toContain("人材情報"); // 目印行は本文に出さない
     expect(text).toContain("【氏名】T.A");
     expect(text).toContain("OBFall株式会社");
     // 配信停止リンクは含めない（本文・ヘッダとも無し）。
