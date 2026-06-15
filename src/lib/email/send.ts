@@ -252,23 +252,17 @@ export function buildTalentProposalEmail(input: TalentProposalEmailInput): {
 
 export interface TalentIntroEmailInput {
   talentsBlock: string; // 紹介する自社人材の一覧（joinTalentBlocksの結果）
-  unsubscribeUrl?: string; // 配信停止URL（受信者ごと。未指定ならプレースホルダ）
 }
-
-/** 配信停止URLの差し込みプレースホルダ（本文確定時はこれを残し、送信直前に各通へ置換）。 */
-export const UNSUBSCRIBE_PLACEHOLDER = "{{UNSUBSCRIBE_URL}}";
 
 /**
  * 自社人材→提携先への一斉紹介メール本文を組み立てる（ブラスト用）。
  * 雛形固定・LLM不使用。宛名は提携先個別が不明なので「ご担当者様」。
- * 末尾に配信停止リンク（特定電子メール法対応）。
  */
 export function buildTalentIntroEmail(input: TalentIntroEmailInput): {
   subject: string;
   text: string;
 } {
   const subject = `【ご案内】稼働可能な人材のご紹介`;
-  const unsub = input.unsubscribeUrl ?? UNSUBSCRIBE_PLACEHOLDER;
   const text = [
     `ご担当者様`,
     ``,
@@ -288,10 +282,6 @@ export function buildTalentIntroEmail(input: TalentIntroEmailInput): {
     ``,
     `何卒よろしくお願い致します。`,
     SIGNATURE,
-    ``,
-    `------------------------------------------`,
-    `※今後このご案内の配信を停止される場合は、下記よりお手続きください。`,
-    unsub,
   ].join("\n");
   return { subject, text };
 }

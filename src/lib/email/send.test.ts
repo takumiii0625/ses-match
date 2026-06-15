@@ -7,7 +7,6 @@ import {
   buildProjectEmail,
   buildTalentProposalEmail,
   buildTalentIntroEmail,
-  UNSUBSCRIBE_PLACEHOLDER,
 } from "./send";
 
 const SAMPLE = `お世話になっております。〇〇社の田中です。下記案件です。
@@ -100,16 +99,9 @@ describe("buildTalentIntroEmail（一斉案内）", () => {
     expect(text).toContain("人材情報");
     expect(text).toContain("【氏名】T.A");
     expect(text).toContain("OBFall株式会社");
-    expect(text).toContain("配信を停止");
-    expect(text).toContain(UNSUBSCRIBE_PLACEHOLDER);
-  });
-  it("unsubscribeUrl指定時はプレースホルダではなく実URL", () => {
-    const { text } = buildTalentIntroEmail({
-      talentsBlock: "X",
-      unsubscribeUrl: "https://app.example.com/unsubscribe/abc",
-    });
-    expect(text).toContain("https://app.example.com/unsubscribe/abc");
-    expect(text).not.toContain(UNSUBSCRIBE_PLACEHOLDER);
+    // 配信停止リンクは含めない（本文・ヘッダとも無し）。
+    expect(text).not.toContain("配信を停止");
+    expect(text).not.toContain("unsubscribe");
   });
 });
 

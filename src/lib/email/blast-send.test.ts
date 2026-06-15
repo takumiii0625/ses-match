@@ -11,7 +11,6 @@ const { sendBatch } = vi.hoisted(() => ({ sendBatch: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/email/send", () => ({
   sendBatchMail: sendBatch,
-  UNSUBSCRIBE_PLACEHOLDER: "{{UNSUBSCRIBE_URL}}",
 }));
 
 import { drainBlast } from "./blast-send";
@@ -48,8 +47,8 @@ describe("drainBlast", () => {
       ])
       .mockResolvedValueOnce([]);
     db.partnerContact.findMany.mockResolvedValue([
-      { id: "ct1", email: "a@a.com", status: "ACTIVE", unsubscribeToken: "tok1" },
-      { id: "ct2", email: "b@b.com", status: "UNSUBSCRIBED", unsubscribeToken: "tok2" },
+      { id: "ct1", email: "a@a.com", status: "ACTIVE" },
+      { id: "ct2", email: "b@b.com", status: "UNSUBSCRIBED" },
     ]);
     db.blastRecipient.count.mockResolvedValue(0);
     db.blastRecipient.groupBy.mockResolvedValue([{ status: "SENT", _count: { _all: 1 } }]);
@@ -61,8 +60,8 @@ describe("drainBlast", () => {
     const [items, idemKey] = sendBatch.mock.calls[0];
     expect(items).toHaveLength(1);
     expect(items[0].to).toBe("a@a.com");
-    expect(items[0].text).toContain("/unsubscribe/tok1"); // プレースホルダ置換
-    expect(items[0].headers["List-Unsubscribe"]).toContain("tok1");
+    expect(items[0].text).toBe("本文 {{UNSUBSCRIBE_URL}}"); // 本文はそのまま（置換なし）
+    expect(items[0].headers).toBeUndefined(); // List-Unsubscribeヘッダなし
     expect(idemKey).toBe("c1:r1");
     expect(r.sent).toBe(1);
     expect(r.skipped).toBe(1);
@@ -77,7 +76,7 @@ describe("drainBlast", () => {
       .mockResolvedValueOnce([{ id: "r1", contactId: "ct1", status: "PENDING" }])
       .mockResolvedValueOnce([]);
     db.partnerContact.findMany.mockResolvedValue([
-      { id: "ct1", email: "a@a.com", status: "ACTIVE", unsubscribeToken: "tok1" },
+      { id: "ct1", email: "a@a.com", status: "ACTIVE" },
     ]);
     sendBatch.mockRejectedValue(new Error("Resend down"));
     db.blastRecipient.groupBy.mockResolvedValue([{ status: "FAILED", _count: { _all: 1 } }]);
@@ -97,7 +96,7 @@ describe("drainBlast", () => {
     });
     db.blastRecipient.findMany.mockResolvedValue([{ id: "r1", contactId: "ct1", status: "PENDING" }]);
     db.partnerContact.findMany.mockResolvedValue([
-      { id: "ct1", email: "a@a.com", status: "ACTIVE", unsubscribeToken: "tok1" },
+      { id: "ct1", email: "a@a.com", status: "ACTIVE" },
     ]);
     db.blastRecipient.count.mockResolvedValue(5); // まだ残っている
     db.blastRecipient.groupBy.mockResolvedValue([{ status: "SENT", _count: { _all: 1 } }]);

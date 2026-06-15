@@ -1,7 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { sendBatchMail, UNSUBSCRIBE_PLACEHOLDER } from "@/lib/email/send";
-
-const APP_URL = (process.env.APP_URL ?? "https://sesmatch.encore-biz.com").replace(/\/$/, "");
+import { sendBatchMail } from "@/lib/email/send";
 
 export interface DrainResult {
   campaignId: string | null;
@@ -10,15 +8,6 @@ export interface DrainResult {
   skipped: number;
   remaining: number;
   done: boolean;
-}
-
-/** 人間が押す配信停止ページ（確認UI付き）。本文フッターに載せる。 */
-function unsubPageUrl(token: string): string {
-  return `${APP_URL}/unsubscribe/${token}`;
-}
-/** メールクライアントのワンクリック停止用エンドポイント（List-Unsubscribe-Post）。 */
-function unsubApiUrl(token: string): string {
-  return `${APP_URL}/api/unsubscribe/${token}`;
 }
 
 /**
@@ -60,22 +49,22 @@ export async function drainBlast(
     });
     if (batch.length === 0) break;
 
-    // 送信直前に連絡先の状態・トークンを確認。
+    // 送信直前に連絡先の状態を確認（途中の配信停止/削除を尊重）。
     const contactIds = batch.map((r) => r.contactId);
     const contacts = await prisma.partnerContact.findMany({
       where: { id: { in: contactIds } },
-      select: { id: true, email: true, status: true, unsubscribeToken: true },
+      select: { id: true, email: true, status: true },
     });
     const contactMap = new Map(contacts.map((c) => [c.id, c]));
 
-    const sendable: { recipientId: string; to: string; token: string }[] = [];
+    const sendable: { recipientId: string; to: string }[] = [];
     const skipIds: string[] = [];
     for (const r of batch) {
       const c = contactMap.get(r.contactId);
       if (!c || c.status !== "ACTIVE") {
         skipIds.push(r.id);
       } else {
-        sendable.push({ recipientId: r.id, to: c.email, token: c.unsubscribeToken });
+        sendable.push({ recipientId: r.id, to: c.email });
       }
     }
 
@@ -92,11 +81,7 @@ export async function drainBlast(
       const items = sendable.map((s) => ({
         to: s.to,
         subject: campaign.subject,
-        text: campaign.body.split(UNSUBSCRIBE_PLACEHOLDER).join(unsubPageUrl(s.token)),
-        headers: {
-          "List-Unsubscribe": `<${unsubApiUrl(s.token)}>`,
-          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
-        },
+        text: campaign.body,
       }));
       // idempotencyKey はバッチ先頭の recipientId で安定化（再実行で二重送信しない）。
       const idemKey = `${campaign.id}:${sendable[0].recipientId}`;
