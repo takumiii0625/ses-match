@@ -106,14 +106,14 @@ export async function POST(req: NextRequest) {
     try {
       const { id } = await sendMail({ to, subject, text });
       await prisma.sentEmail.create({
-        data: { orgId: org.id, talentId, projectId, kind: "TALENT_PROPOSAL", toAddr: to, subject, status: "SENT" },
+        data: { orgId: org.id, talentId, projectId, kind: "TALENT_PROPOSAL", toAddr: to, subject, body: text, status: "SENT" },
       });
       return NextResponse.json({ ok: true, id, to });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       await prisma.sentEmail
         .create({
-          data: { orgId: org.id, talentId, projectId, kind: "TALENT_PROPOSAL", toAddr: to, subject, status: "FAILED", error: message.slice(0, 500) },
+          data: { orgId: org.id, talentId, projectId, kind: "TALENT_PROPOSAL", toAddr: to, subject, body: text, status: "FAILED", error: message.slice(0, 500) },
         })
         .catch(() => {});
       return NextResponse.json({ error: `送信に失敗しました: ${message}` }, { status: 502 });

@@ -403,6 +403,7 @@ model SentEmail {
   kind      String   @default("PROJECT_INFO") // PROJECT_INFO=案件案内(人材へ) / TALENT_PROPOSAL=要員提案(案件元へ)
   toAddr    String // 送信先メール
   subject   String
+  body      String? // 送信した本文（履歴でそのまま確認できるよう保存）
   status    String // SENT / FAILED
   error     String? // 失敗時の理由
   createdAt DateTime @default(now())

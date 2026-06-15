@@ -45,6 +45,7 @@ export default async function SentEmailsPage() {
     status: s.status,
     toAddr: s.toAddr,
     subject: s.subject,
+    body: s.body,
     error: s.error,
     talentId: s.talentId,
     projectId: s.projectId,

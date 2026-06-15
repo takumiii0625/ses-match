@@ -112,7 +112,7 @@ export async function sendAndLogProjectInfo(opts: {
   try {
     const { id } = await sendMail({ to, subject, text });
     await prisma.sentEmail.create({
-      data: { orgId, talentId, projectId, kind: "PROJECT_INFO", toAddr: to, subject, status: "SENT" },
+      data: { orgId, talentId, projectId, kind: "PROJECT_INFO", toAddr: to, subject, body: text, status: "SENT" },
     });
     return { id };
   } catch (e) {
@@ -126,6 +126,7 @@ export async function sendAndLogProjectInfo(opts: {
           kind: "PROJECT_INFO",
           toAddr: to,
           subject,
+          body: text,
           status: "FAILED",
           error: message.slice(0, 500),
         },

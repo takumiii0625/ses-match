@@ -144,7 +144,7 @@ export async function POST(req: Request) {
     try {
       sent = await sendMail({ to: TEST_EMAIL, subject, text });
       await prisma.sentEmail.create({
-        data: { orgId: org.id, talentId: talent.id, projectId: project.id, toAddr: TEST_EMAIL, subject, status: "SENT" },
+        data: { orgId: org.id, talentId: talent.id, projectId: project.id, toAddr: TEST_EMAIL, subject, body: text, status: "SENT" },
       });
     } catch (e) {
       sendError = e instanceof Error ? e.message : String(e);
