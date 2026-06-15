@@ -7,6 +7,7 @@ import { UserButton } from "@clerk/nextjs";
 import {
   UserSearch,
   Building2,
+  Handshake,
   Briefcase,
   GitCompareArrows,
   ListChecks,
@@ -17,6 +18,7 @@ import {
   Mail,
   MailCheck,
   Send,
+  Megaphone,
   FileText,
   ScrollText,
   BarChart3,
@@ -42,6 +44,7 @@ const groups: { title: string; items: NavItem[] }[] = [
       { href: "/in-house-talent", label: "自社保有人材", icon: UserSearch },
       { href: "/partner-talent", label: "他社人材", icon: Building2 },
       { href: "/projects", label: "案件", icon: Briefcase },
+      { href: "/partners", label: "提携先会社", icon: Handshake },
     ],
   },
   {
@@ -56,6 +59,7 @@ const groups: { title: string; items: NavItem[] }[] = [
       { href: "/ingest", label: "メール取り込み", icon: Mail },
       { href: "/mail", label: "メール自動取込", icon: MailCheck },
       { href: "/proposals", label: "提案管理", icon: FileText },
+      { href: "/partners/blast", label: "一斉案内", icon: Megaphone },
       { href: "/sent-emails", label: "送信履歴", icon: Send },
     ],
   },

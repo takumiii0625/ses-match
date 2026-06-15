@@ -6,6 +6,8 @@ import {
   resolveContactName,
   buildProjectEmail,
   buildTalentProposalEmail,
+  buildTalentIntroEmail,
+  UNSUBSCRIBE_PLACEHOLDER,
 } from "./send";
 
 const SAMPLE = `お世話になっております。〇〇社の田中です。下記案件です。
@@ -82,6 +84,29 @@ describe("contactNameFromFrom", () => {
   it("名前が無ければ ご担当者", () => {
     expect(contactNameFromFrom("info@x.com")).toBe("ご担当者");
     expect(contactNameFromFrom(null)).toBe("ご担当者");
+  });
+});
+
+describe("buildTalentIntroEmail（一斉案内）", () => {
+  it("固定件名・人材一覧・署名・配信停止プレースホルダを含む", () => {
+    const { subject, text } = buildTalentIntroEmail({
+      talentsBlock: "【氏名】T.A\n【スキル】Java",
+    });
+    expect(subject).toBe("【ご案内】稼働可能な人材のご紹介");
+    expect(text).toContain("ご担当者様");
+    expect(text).toContain("OBFall営業部です。");
+    expect(text).toContain("【氏名】T.A");
+    expect(text).toContain("OBFall株式会社");
+    expect(text).toContain("配信を停止");
+    expect(text).toContain(UNSUBSCRIBE_PLACEHOLDER);
+  });
+  it("unsubscribeUrl指定時はプレースホルダではなく実URL", () => {
+    const { text } = buildTalentIntroEmail({
+      talentsBlock: "X",
+      unsubscribeUrl: "https://app.example.com/unsubscribe/abc",
+    });
+    expect(text).toContain("https://app.example.com/unsubscribe/abc");
+    expect(text).not.toContain(UNSUBSCRIBE_PLACEHOLDER);
   });
 });
 

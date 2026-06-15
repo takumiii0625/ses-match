@@ -1,0 +1,27 @@
+name: 提携先への一斉案内メール送信（5分間隔ドレイン）
+
+# 一斉案内キャンペーンの送信待ち(QUEUED/SENDING)を5分ごとに分割送信する。
+# 送信待ちが無ければ即return（何もしない）。送信はResend batch（100通/呼び出し）。
+# ON/OFFや上限は不要（キャンペーンが作られたときだけ動く。1日上限はキャンペーン作成時に判定）。
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {} # 手動実行も可
+
+concurrency:
+  group: blast-send
+  cancel-in-progress: false
+
+jobs:
+  blast-send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 送信待ちを分割ドレイン（完了までループ）
+        run: |
+          for i in $(seq 1 20); do
+            resp=$(curl -fsS --max-time 300 -X POST \
+              "https://sesmatch.encore-biz.com/api/cron/blast-send?maxToSend=500" \
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+            echo "$resp"
+            echo "$resp" | grep -q '"done":true' && { echo "完了/対象なし"; break; }
+          done

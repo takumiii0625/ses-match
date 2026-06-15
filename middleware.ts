@@ -12,6 +12,9 @@ const isPublic = createRouteMatcher([
   "/sign-up(.*)",
   "/share/(.*)",
   "/api/cron/(.*)",
+  // 配信停止は提携先（未ログインの社外）がアクセスするため公開。
+  "/unsubscribe/(.*)",
+  "/api/unsubscribe/(.*)",
 ]);
 
 // Auth is only enforced when Clerk keys are present (production). Locally,

@@ -70,6 +70,43 @@ export async function sendMail(input: SendMailInput): Promise<{ id: string | nul
   return { id: data?.id ?? null };
 }
 
+export interface BatchMailItem {
+  to: string;
+  subject: string;
+  text: string;
+  headers?: Record<string, string>; // List-Unsubscribe 等
+}
+
+/**
+ * Resend の batch.send で最大100通を1リクエストで送る（一斉送信用）。
+ * strict検証（既定）: 1通でも検証エラーなら全体が error になる。
+ * 戻り: 成功時 ids 配列（順序対応）、エラー時 throw。
+ */
+export async function sendBatchMail(
+  items: BatchMailItem[],
+  idempotencyKey?: string,
+): Promise<{ ids: string[] }> {
+  if (items.length === 0) return { ids: [] };
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) throw new Error("RESEND_API_KEY が未設定です");
+  const resend = new Resend(apiKey);
+  const payload = items.map((it) => ({
+    from: FROM,
+    to: sanitizeHeader(it.to),
+    replyTo: REPLY_TO,
+    subject: sanitizeHeader(it.subject),
+    text: it.text,
+    html: textToHtml(it.text),
+    headers: it.headers,
+  }));
+  const { data, error } = await resend.batch.send(
+    payload,
+    idempotencyKey ? { idempotencyKey } : undefined,
+  );
+  if (error) throw new Error(error.message ?? "一斉送信に失敗しました");
+  return { ids: (data?.data ?? []).map((d) => d.id) };
+}
+
 /** From ヘッダ等から担当者名（表示名）を取り出す。"山田太郎 <a@b>" → 山田太郎 */
 export function contactNameFromFrom(from?: string | null): string {
   if (!from) return "ご担当者";
@@ -209,6 +246,48 @@ export function buildTalentProposalEmail(input: TalentProposalEmailInput): {
     ``,
     `何卒よろしくお願い致します。`,
     SIGNATURE,
+  ].join("\n");
+  return { subject, text };
+}
+
+export interface TalentIntroEmailInput {
+  talentsBlock: string; // 紹介する自社人材の一覧（joinTalentBlocksの結果）
+  unsubscribeUrl?: string; // 配信停止URL（受信者ごと。未指定ならプレースホルダ）
+}
+
+/** 配信停止URLの差し込みプレースホルダ（本文確定時はこれを残し、送信直前に各通へ置換）。 */
+export const UNSUBSCRIBE_PLACEHOLDER = "{{UNSUBSCRIBE_URL}}";
+
+/**
+ * 自社人材→提携先への一斉紹介メール本文を組み立てる（ブラスト用）。
+ * 雛形固定・LLM不使用。宛名は提携先個別が不明なので「ご担当者様」。
+ * 末尾に配信停止リンク（特定電子メール法対応）。
+ */
+export function buildTalentIntroEmail(input: TalentIntroEmailInput): {
+  subject: string;
+  text: string;
+} {
+  const subject = `【ご案内】稼働可能な人材のご紹介`;
+  const unsub = input.unsubscribeUrl ?? UNSUBSCRIBE_PLACEHOLDER;
+  const text = [
+    `ご担当者様`,
+    ``,
+    `お世話になっております。`,
+    `OBFall営業部です。`,
+    ``,
+    `弊社にて稼働可能な人材をご案内いたします。`,
+    `ご興味のある人材がございましたら、お気軽にご返信ください。`,
+    ``,
+    `━━━━━━ 稼働可能な人材 ━━━━━━`,
+    input.talentsBlock.trim(),
+    `━━━━━━━━━━━━━━━━━━━━`,
+    ``,
+    `何卒よろしくお願い致します。`,
+    SIGNATURE,
+    ``,
+    `------------------------------------------`,
+    `※今後このご案内の配信を停止される場合は、下記よりお手続きください。`,
+    unsub,
   ].join("\n");
   return { subject, text };
 }
