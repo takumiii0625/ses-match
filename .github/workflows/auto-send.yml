@@ -21,11 +21,14 @@ jobs:
   auto-send:
     runs-on: ubuntu-latest
     steps:
-      - name: 自動送信を実行
+      - name: 自動送信を実行（完了までループ・1回最大40通）
         run: |
-          url="https://sesmatch.encore-biz.com/api/cron/auto-send"
+          base="https://sesmatch.encore-biz.com/api/cron/auto-send?maxPerRun=40"
           cap="${{ github.event.inputs.cap }}"
-          if [ -n "$cap" ]; then url="$url?cap=$cap"; fi
-          resp=$(curl -fsS --max-time 300 -X POST "$url" \
-            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
-          echo "$resp"
+          if [ -n "$cap" ]; then base="$base&cap=$cap"; fi
+          for i in $(seq 1 50); do
+            resp=$(curl -fsS --max-time 300 -X POST "$base" \
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+            echo "$resp"
+            echo "$resp" | grep -q '"done":true' && { echo "完了"; break; }
+          done

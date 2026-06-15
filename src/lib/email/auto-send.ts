@@ -19,6 +19,8 @@ export interface AutoSendResult {
   failed: number;
   skipped: number; // 送信先不明など
   capReached: boolean;
+  remaining: number; // この回で送り切れず残った未送信数
+  done: boolean; // 今回で対象を処理し切ったか（false ならループ継続）
 }
 
 /**
@@ -30,7 +32,7 @@ export interface AutoSendResult {
  */
 export async function runAutoSendProjectInfo(
   orgId: string,
-  opts: { capOverride?: number } = {},
+  opts: { capOverride?: number; maxPerRun?: number } = {},
 ): Promise<AutoSendResult> {
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
@@ -40,6 +42,8 @@ export async function runAutoSendProjectInfo(
   // 上限: capOverride 優先。0以下は「上限なし（無制限）」。
   const cap = opts.capOverride ?? org?.autoEmailDailyCap ?? 20;
   const unlimited = cap <= 0;
+  // 1回の呼び出しで送る最大数（タイムアウト回避。残りは次回ループで送る）。
+  const maxPerRun = Math.max(1, opts.maxPerRun ?? 40);
   const base: AutoSendResult = {
     enabled: !!org?.autoEmailEnabled,
     cap,
@@ -49,6 +53,8 @@ export async function runAutoSendProjectInfo(
     failed: 0,
     skipped: 0,
     capReached: false,
+    remaining: 0,
+    done: true,
   };
   if (!org?.autoEmailEnabled) return base;
 
@@ -104,11 +110,15 @@ export async function runAutoSendProjectInfo(
   }
   base.candidates = pending.length;
 
-  for (const m of pending) {
+  let i = 0;
+  for (; i < pending.length; i++) {
+    const m = pending[i];
     if (budget <= 0) {
       base.capReached = true;
       break;
     }
+    // 1回の呼び出しの上限（タイムアウト回避）。残りは done=false で次回へ。
+    if (base.sent >= maxPerRun) break;
     const prep = await prepareProjectInfoMail({
       orgId,
       projectEmailPrompt: org.projectEmailPrompt,
@@ -135,5 +145,8 @@ export async function runAutoSendProjectInfo(
     }
   }
 
+  // 処理し切れず残ったペア数。capReached（日次上限到達）か全件処理済みなら done。
+  base.remaining = pending.length - i;
+  base.done = base.capReached || base.remaining === 0;
   return base;
 }

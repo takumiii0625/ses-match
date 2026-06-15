@@ -15,11 +15,14 @@ async function handle(req: Request) {
     const url = new URL(req.url);
     const capRaw = url.searchParams.get("cap");
     const capOverride = capRaw !== null && capRaw !== "" ? Number(capRaw) : undefined;
+    const maxRaw = url.searchParams.get("maxPerRun");
+    const maxPerRun = maxRaw ? Number(maxRaw) : undefined;
     const result = await runAutoSendProjectInfo(org.id, {
       capOverride: Number.isFinite(capOverride) ? capOverride : undefined,
+      maxPerRun: Number.isFinite(maxPerRun) ? maxPerRun : undefined,
     });
     console.log(
-      `[auto-send] enabled=${result.enabled} cap=${result.cap} sentTodayBefore=${result.sentTodayBefore} candidates=${result.candidates} sent=${result.sent} failed=${result.failed} skipped=${result.skipped} capReached=${result.capReached}`,
+      `[auto-send] enabled=${result.enabled} cap=${result.cap} sentTodayBefore=${result.sentTodayBefore} candidates=${result.candidates} sent=${result.sent} failed=${result.failed} skipped=${result.skipped} remaining=${result.remaining} done=${result.done} capReached=${result.capReached}`,
     );
     return NextResponse.json(result);
   } catch (e) {
