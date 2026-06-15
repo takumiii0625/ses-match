@@ -26,6 +26,8 @@ model Organization {
   autoEmailDailyCap Int      @default(20) // 1日の自動送信上限（安全装置。手動送信も含めて計上）
   // 提携先への一斉送信（ブラスト）の1日上限（安全装置。本日のBlastRecipient.SENT件数で判定）。
   blastDailyCap     Int      @default(1000)
+  // 日次マッチを最後に実行した日（JST "YYYY-MM-DD"）。1日1回だけ実行する冪等ガードに使う。
+  lastRematchDate   String?
   // LLMシステムプロンプトの上書き（null=組み込みデフォルト）。編集はプロンプト管理画面から。
   matchPrompt       String? // マッチ判定
   classifyPrompt    String? // メール分類
