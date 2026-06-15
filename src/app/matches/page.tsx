@@ -10,13 +10,26 @@ import { toMatchVM, matchVmSelect, buildSentInfoMap } from "./serialize";
 export const metadata = { title: "マッチ一覧 — SES Match" };
 export const dynamic = "force-dynamic";
 
-export default async function MatchesPage() {
+const DAY = 24 * 60 * 60 * 1000;
+
+export default async function MatchesPage(props: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await props.searchParams;
+  const daysParam = (Array.isArray(sp.days) ? sp.days[0] : sp.days) ?? "1";
+  // 配信日の窓: 既定は直近1日。"all" は全期間。
+  const days = daysParam === "all" ? 0 : Number(daysParam) || 1;
   const org = await getCurrentOrg();
+
+  const projectWhere =
+    days > 0
+      ? { orgId: org.id, receivedDate: { gte: new Date(Date.now() - days * DAY) } }
+      : { orgId: org.id };
 
   const [matches, sentMap] = await Promise.all([
     prisma.match.findMany({
-      // 提案不可（商流オーバー等）はマッチ一覧に出さない。
-      where: { project: { orgId: org.id }, score: { gte: 80 }, proposable: true },
+      // 提案不可（商流オーバー等）はマッチ一覧に出さない。配信日で絞る。
+      where: { project: projectWhere, score: { gte: 80 }, proposable: true },
       select: matchVmSelect,
       orderBy: { score: "desc" },
     }),
@@ -36,7 +49,8 @@ export default async function MatchesPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">マッチ一覧</h1>
           <p className="mt-1 text-sm text-muted">
-            保存済みのマッチ結果（取込後の自動マッチ・「全件マッチ」で生成）を案件ごとに表示します。
+            案件ごとのマッチ結果。既定は<span className="font-medium">配信が直近1日</span>の案件のみ。
+            過去日は右の「配信日」で広げられます。
           </p>
         </div>
         <Link
@@ -72,7 +86,7 @@ export default async function MatchesPage() {
         </details>
       </Card>
 
-      <MatchesList matches={vm} />
+      <MatchesList matches={vm} days={daysParam} />
     </div>
   );
 }

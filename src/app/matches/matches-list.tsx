@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter, usePathname } from "next/navigation";
 import { Columns2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -99,18 +100,38 @@ function splitReasons(reasons: string[]): { strengths: string[]; concerns: strin
   return { strengths, concerns };
 }
 
+const DAYS_OPTIONS = [
+  { value: "1", label: "配信: 直近1日" },
+  { value: "3", label: "配信: 直近3日" },
+  { value: "7", label: "配信: 直近7日" },
+  { value: "30", label: "配信: 直近30日" },
+  { value: "all", label: "配信: 全期間" },
+];
+
 export function MatchesList({
   matches,
   scope = "all",
+  days = "1",
 }: {
   matches: MatchVM[];
   scope?: "all" | "inhouse";
+  days?: string;
 }) {
   const inhouseOnly = scope === "inhouse";
+  const router = useRouter();
+  const pathname = usePathname();
+  const [, startTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [minScore, setMinScore] = useState("80");
   // 自社専用ページでは区分フィルタは固定（データが既に自社のみ）。
   const [talentType, setTalentType] = useState("ALL");
+
+  // 配信日の窓はサーバ側で絞るため URL を更新して再取得する。
+  function changeDays(v: string) {
+    const params = new URLSearchParams();
+    if (v && v !== "1") params.set("days", v);
+    startTransition(() => router.replace(`${pathname}?${params.toString()}`));
+  }
 
   const isFiltered =
     !!query || minScore !== "80" || (!inhouseOnly && talentType !== "ALL");
@@ -241,6 +262,16 @@ export function MatchesList({
             onChange={(e) => setMinScore(e.target.value)}
           />
         </div>
+        {!inhouseOnly && (
+          <div className="w-40">
+            <label className="mb-1 block text-xs font-medium text-slate-500">配信日</label>
+            <Select
+              options={DAYS_OPTIONS}
+              value={days}
+              onChange={(e) => changeDays(e.target.value)}
+            />
+          </div>
+        )}
         {isFiltered && (
           <button
             type="button"
