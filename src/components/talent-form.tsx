@@ -137,7 +137,10 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
     file: File,
   ): Promise<{ text?: string; attachments?: { filename: string; mediaType: string; dataBase64: string }[] }> {
     const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
-    if (isPdf) {
+    // Excel/Word はバイナリ。テキストとして読むと文字化けするので、base64で送って
+    // サーバ側でテキスト抽出する（PDFはClaudeが直接読むので添付のまま）。
+    const isOffice = /\.(xlsx?|docx?)$/i.test(file.name);
+    if (isPdf || isOffice) {
       const dataBase64 = await new Promise<string>((resolve, reject) => {
         const r = new FileReader();
         r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
@@ -145,7 +148,13 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
         r.readAsDataURL(file);
       });
       return {
-        attachments: [{ filename: file.name, mediaType: "application/pdf", dataBase64 }],
+        attachments: [
+          {
+            filename: file.name,
+            mediaType: isPdf ? "application/pdf" : file.type || "application/octet-stream",
+            dataBase64,
+          },
+        ],
       };
     }
     const text = await file.text();
