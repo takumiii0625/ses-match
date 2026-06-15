@@ -11,7 +11,13 @@ async function handle(req: Request) {
   }
   try {
     const org = await getCurrentOrg();
-    const result = await runAutoSendProjectInfo(org.id);
+    // ?cap=N で当回だけ上限を上書き（cap=0 は無制限）。手動の一括送信用。
+    const url = new URL(req.url);
+    const capRaw = url.searchParams.get("cap");
+    const capOverride = capRaw !== null && capRaw !== "" ? Number(capRaw) : undefined;
+    const result = await runAutoSendProjectInfo(org.id, {
+      capOverride: Number.isFinite(capOverride) ? capOverride : undefined,
+    });
     console.log(
       `[auto-send] enabled=${result.enabled} cap=${result.cap} sentTodayBefore=${result.sentTodayBefore} candidates=${result.candidates} sent=${result.sent} failed=${result.failed} skipped=${result.skipped} capReached=${result.capReached}`,
     );

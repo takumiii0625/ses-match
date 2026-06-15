@@ -92,6 +92,30 @@ describe("runAutoSendProjectInfo", () => {
     expect(r.capReached).toBe(true);
   });
 
+  it("上限なし(cap=0)なら既送信数に関係なく全部送る", async () => {
+    db.organization.findUnique.mockResolvedValue({ autoEmailEnabled: true, autoEmailDailyCap: 0, projectEmailPrompt: null });
+    db.sentEmail.count.mockResolvedValue(100); // 本日100通送信済みでも…
+    db.match.findMany.mockResolvedValue([
+      { talentId: "t1", projectId: "p1" },
+      { talentId: "t2", projectId: "p2" },
+      { talentId: "t3", projectId: "p3" },
+    ]);
+    const r = await runAutoSendProjectInfo("org1");
+    expect(r.sent).toBe(3);
+    expect(r.capReached).toBe(false);
+  });
+
+  it("capOverride=0 で設定上限を無視して全部送る", async () => {
+    db.organization.findUnique.mockResolvedValue({ autoEmailEnabled: true, autoEmailDailyCap: 5, projectEmailPrompt: null });
+    db.sentEmail.count.mockResolvedValue(5); // 設定上限5に既達でも
+    db.match.findMany.mockResolvedValue([
+      { talentId: "t1", projectId: "p1" },
+      { talentId: "t2", projectId: "p2" },
+    ]);
+    const r = await runAutoSendProjectInfo("org1", { capOverride: 0 });
+    expect(r.sent).toBe(2);
+  });
+
   it("上限に既達なら1通も送らない", async () => {
     db.organization.findUnique.mockResolvedValue({ autoEmailEnabled: true, autoEmailDailyCap: 5, projectEmailPrompt: null });
     db.sentEmail.count.mockResolvedValue(5);

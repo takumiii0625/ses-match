@@ -28,13 +28,18 @@ export interface AutoSendResult {
  * 安全装置: org.autoEmailEnabled が false なら何もしない。1日の上限(autoEmailDailyCap)を超えたら停止
  *           （上限は手動送信も含めた本日の PROJECT_INFO 送信数で判定）。
  */
-export async function runAutoSendProjectInfo(orgId: string): Promise<AutoSendResult> {
+export async function runAutoSendProjectInfo(
+  orgId: string,
+  opts: { capOverride?: number } = {},
+): Promise<AutoSendResult> {
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
     select: { autoEmailEnabled: true, autoEmailDailyCap: true, projectEmailPrompt: true },
   });
 
-  const cap = org?.autoEmailDailyCap ?? 20;
+  // 上限: capOverride 優先。0以下は「上限なし（無制限）」。
+  const cap = opts.capOverride ?? org?.autoEmailDailyCap ?? 20;
+  const unlimited = cap <= 0;
   const base: AutoSendResult = {
     enabled: !!org?.autoEmailEnabled,
     cap,
@@ -54,18 +59,21 @@ export async function runAutoSendProjectInfo(orgId: string): Promise<AutoSendRes
     where: { orgId, kind: "PROJECT_INFO", status: "SENT", createdAt: { gte: todayStart } },
   });
   base.sentTodayBefore = sentTodayBefore;
-  let budget = cap - sentTodayBefore;
-  if (budget <= 0) {
+  let budget = unlimited ? Number.MAX_SAFE_INTEGER : cap - sentTodayBefore;
+  if (!unlimited && budget <= 0) {
     base.capReached = true;
     return base;
   }
 
-  // 対象マッチ: 商流OK・80点以上・その日配信の案件。点数の高い順に処理。
+  // 対象マッチ: 商流OK・80点以上・「今日(JST)配信の案件 または 今日来た人材」。点数の高い順。
   const matches = await prisma.match.findMany({
     where: {
       proposable: true,
       score: { gte: 80 },
-      project: { orgId, receivedDate: { gte: todayStart } },
+      OR: [
+        { project: { orgId, receivedDate: { gte: todayStart } } },
+        { talent: { orgId, receivedDate: { gte: todayStart } } },
+      ],
     },
     select: { talentId: true, projectId: true },
     orderBy: { score: "desc" },

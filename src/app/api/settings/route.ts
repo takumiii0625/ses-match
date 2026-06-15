@@ -45,10 +45,14 @@ export async function PATCH(req: NextRequest) {
       }
     }
 
-    // 自動送信の上限（1〜200にクランプ）。
+    // 自動送信の上限。0=無制限、それ以外は1〜10000にクランプ。
     const autoEmailDailyCap =
       body.autoEmailDailyCap !== undefined
-        ? Math.min(Math.max(Math.floor(Number(body.autoEmailDailyCap)) || 0, 1), 200)
+        ? (() => {
+            const n = Math.floor(Number(body.autoEmailDailyCap));
+            if (!Number.isFinite(n) || n <= 0) return 0; // 0 = 無制限
+            return Math.min(n, 10000);
+          })()
         : undefined;
 
     const updated = await prisma.organization.update({

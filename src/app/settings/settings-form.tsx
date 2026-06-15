@@ -68,7 +68,9 @@ export function SettingsForm({ org }: { org: Org }) {
           aiProvider,
           proposalSignature,
           autoEmailEnabled,
-          autoEmailDailyCap: Number(autoEmailDailyCap) || 20,
+          // 0以下は無制限。空欄は既定20。
+          autoEmailDailyCap:
+            autoEmailDailyCap.trim() === "" ? 20 : Math.max(0, Number(autoEmailDailyCap) || 0),
         }),
       });
 
@@ -206,18 +208,33 @@ export function SettingsForm({ org }: { org: Org }) {
 
         <div className="max-w-xs">
           <Label htmlFor="auto-cap">1日の送信上限（安全装置）</Label>
+          <label className="mb-2 mt-1 flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={Number(autoEmailDailyCap) <= 0}
+              onChange={(e) => setAutoEmailDailyCap(e.target.checked ? "0" : "50")}
+              disabled={!autoEmailEnabled}
+              className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+            />
+            上限なし（無制限に送信）
+          </label>
           <Input
             id="auto-cap"
             type="number"
             min={1}
-            max={200}
+            max={10000}
             value={autoEmailDailyCap}
             onChange={(e) => setAutoEmailDailyCap(e.target.value)}
-            disabled={!autoEmailEnabled}
-            className={autoEmailEnabled ? "" : "bg-slate-50 text-slate-400"}
+            disabled={!autoEmailEnabled || Number(autoEmailDailyCap) <= 0}
+            className={
+              !autoEmailEnabled || Number(autoEmailDailyCap) <= 0
+                ? "bg-slate-50 text-slate-400"
+                : ""
+            }
           />
           <p className="mt-1 text-xs text-slate-400">
-            手動送信も含めて、1日にこの通数を超えたら自動送信を停止します（1〜200）。
+            手動送信も含めて、1日にこの通数を超えたら自動送信を停止します。
+            「上限なし」にすると条件を満たすものを全部送ります。
           </p>
         </div>
 
