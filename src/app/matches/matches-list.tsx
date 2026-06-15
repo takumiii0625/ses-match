@@ -59,11 +59,6 @@ const TYPE_OPTIONS = [
   { value: "PARTNER", label: "他社人材" },
 ];
 
-const CHANNEL_OPTIONS = [
-  { value: "ALL", label: "商流：すべて" },
-  { value: "OK", label: "提案可のみ" },
-  { value: "NG", label: "提案不可のみ" },
-];
 
 function scoreBadgeTone(score: number): "green" | "amber" | "slate" {
   if (score >= 70) return "green";
@@ -116,13 +111,9 @@ export function MatchesList({
   const [minScore, setMinScore] = useState("80");
   // 自社専用ページでは区分フィルタは固定（データが既に自社のみ）。
   const [talentType, setTalentType] = useState("ALL");
-  const [channel, setChannel] = useState("ALL");
 
   const isFiltered =
-    !!query ||
-    minScore !== "80" ||
-    (!inhouseOnly && talentType !== "ALL") ||
-    channel !== "ALL";
+    !!query || minScore !== "80" || (!inhouseOnly && talentType !== "ALL");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -130,8 +121,6 @@ export function MatchesList({
     return matches.filter((m) => {
       if (m.score < min) return false;
       if (talentType !== "ALL" && m.talent.talentType !== talentType) return false;
-      if (channel === "OK" && !m.proposable) return false;
-      if (channel === "NG" && m.proposable) return false;
       if (!q) return true;
       const hay = [
         m.project.title,
@@ -145,7 +134,7 @@ export function MatchesList({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [matches, query, minScore, talentType, channel]);
+  }, [matches, query, minScore, talentType]);
 
   // 案件ごとにグループ化。重複（同名案件/同一人材）はまとめ、最新配信を代表にする。
   const groups = useMemo(() => {
@@ -244,14 +233,6 @@ export function MatchesList({
             />
           </div>
         )}
-        <div className="w-36">
-          <label className="mb-1 block text-xs font-medium text-slate-500">商流</label>
-          <Select
-            options={CHANNEL_OPTIONS}
-            value={channel}
-            onChange={(e) => setChannel(e.target.value)}
-          />
-        </div>
         <div className="w-32">
           <label className="mb-1 block text-xs font-medium text-slate-500">点数</label>
           <Select
@@ -267,7 +248,6 @@ export function MatchesList({
               setQuery("");
               setMinScore("80");
               setTalentType("ALL");
-              setChannel("ALL");
             }}
             className="h-10 text-sm text-slate-500 underline hover:text-slate-700"
           >

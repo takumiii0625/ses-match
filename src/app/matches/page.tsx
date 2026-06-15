@@ -15,7 +15,8 @@ export default async function MatchesPage() {
 
   const [matches, sentMap] = await Promise.all([
     prisma.match.findMany({
-      where: { project: { orgId: org.id }, score: { gte: 80 } },
+      // 提案不可（商流オーバー等）はマッチ一覧に出さない。
+      where: { project: { orgId: org.id }, score: { gte: 80 }, proposable: true },
       select: matchVmSelect,
       orderBy: { score: "desc" },
     }),
