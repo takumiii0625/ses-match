@@ -1,17 +1,23 @@
 name: 1日1回マッチ（15時台 JST・今日のみ）
 
-# 取込とマッチを分離したため、マッチは1日1回だけ実行する。
+# 取込とマッチを分離したため、定時マッチは1日1回だけ実行する。
 # GitHubの定時実行はスキップされることがあるので、取りこぼし対策で15時台に
 # 複数回発火させる。実際のマッチは &daily=1 の冪等ガードで「1日1回だけ」になる
 # （最初に発火した回がマッチし、以降の回はスキップ＝コストは1回分）。
 # 時刻(UTC→JST): 06:10→15:10, 07:00→16:00, 08:00→17:00, 09:30→18:30
+# 手動実行(workflow_dispatch)は daily ガードを使わず、days で対象期間を広げて再マッチできる。
 on:
   schedule:
     - cron: "10 6 * * *"
     - cron: "0 7 * * *"
     - cron: "0 8 * * *"
     - cron: "30 9 * * *"
-  workflow_dispatch: {} # 手動実行も可
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "対象とする配信日の幅（1=今日のみ。手動で再マッチ範囲を広げる時に3や7）"
+        required: false
+        default: "1"
 
 concurrency:
   group: rematch-daily
@@ -21,12 +27,18 @@ jobs:
   rematch:
     runs-on: ubuntu-latest
     steps:
-      - name: 今日のマッチを実行（1日1回ガード・完了までページループ）
+      - name: マッチを実行（完了までページループ）
         run: |
+          # 定時(schedule)は1日1回ガード付き・今日のみ。手動はガード無し・days指定可。
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            days=1; guard="&daily=1"
+          else
+            days="${{ github.event.inputs.days }}"; guard=""
+          fi
           offset=0
           for i in $(seq 1 500); do
             resp=$(curl -fsS --max-time 300 -X POST \
-              "https://sesmatch.encore-biz.com/api/cron/rematch?offset=$offset&limit=3&scope=all&days=1&daily=1" \
+              "https://sesmatch.encore-biz.com/api/cron/rematch?offset=$offset&limit=3&scope=all&days=$days$guard" \
               -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
             echo "$resp"
             echo "$resp" | grep -q '"done":true' && { echo "完了/本日処理済み"; break; }
