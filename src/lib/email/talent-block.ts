@@ -30,6 +30,25 @@ export function buildTalentBlock(t: TalentBlockInput): string {
   ].join("\n");
 }
 
+/**
+ * 一斉案内（複数人を1通で紹介）用の、人材1名ぶんのブロック。
+ * 必ず氏名見出しを先頭に置き、本人固有の情報だけで構成する。
+ * emailBody（元メール本文）は使わない＝複数人をまとめた1通から登録された人材でも
+ * 「別の人の内容」が混ざらないようにする。summaryText（スキルシート要約）があれば使う。
+ */
+export function buildTalentIntroBlock(t: TalentBlockInput): string {
+  const skills = (t.mainSkills?.length ? t.mainSkills : t.skills) ?? [];
+  const head = `■ ${t.name}`;
+  const summary = t.summaryText?.trim();
+  if (summary) return `${head}\n${summary}`;
+  return [
+    head,
+    `スキル：${skills.join(" / ") || "-"}`,
+    `希望単価：${t.desiredRateMin ?? "-"}〜${t.desiredRateMax ?? "-"}万`,
+    `稼働開始：${t.availabilityText ?? "-"}`,
+  ].join("\n");
+}
+
 /** 複数人材を区切り線で連結（一斉案内の人材一覧用）。 */
 export function joinTalentBlocks(blocks: string[]): string {
   const sep = "\n────────────────────\n";

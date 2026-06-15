@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { buildTalentIntroEmail } from "@/lib/email/send";
-import { buildTalentBlock, joinTalentBlocks } from "@/lib/email/talent-block";
+import { buildTalentIntroBlock, joinTalentBlocks } from "@/lib/email/talent-block";
 
 export const maxDuration = 60;
 
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     const talents = await prisma.talent.findMany({
       where: { id: { in: talentIds }, orgId: org.id },
       select: {
-        id: true, name: true, emailBody: true, summaryText: true,
+        id: true, name: true, summaryText: true,
         mainSkills: true, skills: true, desiredRateMin: true, desiredRateMax: true, availabilityText: true,
       },
     });
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "人材が見つかりません" }, { status: 404 });
     }
 
-    const talentsBlock = joinTalentBlocks(talents.map((t) => buildTalentBlock(t)));
+    const talentsBlock = joinTalentBlocks(talents.map((t) => buildTalentIntroBlock(t)));
     const { subject, body } = (() => {
       const m = buildTalentIntroEmail({ talentsBlock });
       return { subject: m.subject, body: m.text };
