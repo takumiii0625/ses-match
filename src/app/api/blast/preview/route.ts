@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { buildTalentIntroEmail } from "@/lib/email/send";
-import { buildTalentIntroBlock, joinTalentBlocks } from "@/lib/email/talent-block";
+import { buildTalentIntroBlock } from "@/lib/email/talent-block";
 
 export const maxDuration = 30;
 
 /**
- * 一斉案内のプレビュー: 選択人材から本文を生成し、配信中の宛先件数を返す（送信なし）。
+ * 一斉案内のプレビュー: 選択人材ごとに本文を生成（人材ごとに別メール・別件名）。
+ * 配信中の宛先件数も返す（送信なし）。総送信数 = 人材数 × 宛先数。
  */
 export async function POST(req: NextRequest) {
   try {
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
       select: {
         id: true,
         name: true,
+        distributionSubject: true,
         summaryText: true,
         mainSkills: true,
         skills: true,
@@ -37,8 +39,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "人材が見つかりません" }, { status: 404 });
     }
 
-    const talentsBlock = joinTalentBlocks(talents.map((t) => buildTalentIntroBlock(t)));
-    const { subject, text } = buildTalentIntroEmail({ talentsBlock });
+    // 人材ごとに1通（その人だけ・その人の件名）。
+    const emails = talents.map((t) => {
+      const { subject, text } = buildTalentIntroEmail({
+        subject: t.distributionSubject,
+        talentsBlock: buildTalentIntroBlock(t),
+      });
+      return { talentId: t.id, talentName: t.name, subject, text };
+    });
 
     // 配信中の宛先（除外を差し引く）。
     const exclude = new Set(excludeContactIds ?? []);
@@ -50,10 +58,10 @@ export async function POST(req: NextRequest) {
     const recipients = contacts.filter((c) => !exclude.has(c.id));
 
     return NextResponse.json({
-      subject,
-      text,
+      emails,
       talentCount: talents.length,
       recipientCount: recipients.length,
+      totalEmails: talents.length * recipients.length,
       sampleRecipients: recipients.slice(0, 5).map((c) => ({
         id: c.id,
         email: c.email,

@@ -11,6 +11,7 @@ import { fetchJson } from "@/lib/http";
 export interface BlastTalent {
   id: string;
   name: string;
+  distributionSubject: string | null;
   skills: string[];
   rate: string | null;
   availability: string | null;
@@ -25,11 +26,17 @@ export interface CampaignRow {
   createdAt: string;
 }
 
-interface Preview {
+interface PreviewEmail {
+  talentId: string;
+  talentName: string;
   subject: string;
   text: string;
+}
+interface Preview {
+  emails: PreviewEmail[];
   talentCount: number;
   recipientCount: number;
+  totalEmails: number;
   sampleRecipients: { id: string; email: string; company: string }[];
 }
 
@@ -113,12 +120,14 @@ export function BlastView({
     setSending(true);
     setError(null);
     try {
-      const data = await fetchJson<{ campaignId: string; recipientCount: number }>("/api/blast", {
+      const data = await fetchJson<{ campaignCount: number; totalEmails: number }>("/api/blast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ talentIds: [...selected], confirm: true }),
       });
-      setDone(`送信キューに登録しました（${data.recipientCount}件）。数分以内に順次送信されます。`);
+      setDone(
+        `送信キューに登録しました（人材${data.campaignCount}名・計${data.totalEmails}通）。数分以内に順次送信されます。`,
+      );
       setPreview(null);
       setSelected(new Set());
       setConfirmChecked(false);
@@ -177,6 +186,13 @@ export function BlastView({
                       {t.rate && <>単価 {t.rate}　</>}
                       {t.availability && <>稼働 {t.availability}</>}
                     </span>
+                    <span className="mt-0.5 block text-xs">
+                      {t.distributionSubject ? (
+                        <span className="text-slate-500">件名: {t.distributionSubject}</span>
+                      ) : (
+                        <span className="text-amber-600">配信件名 未設定（共通件名で送信）</span>
+                      )}
+                    </span>
                   </span>
                 </label>
               ))
@@ -201,21 +217,29 @@ export function BlastView({
           ) : (
             <div className="flex flex-1 flex-col">
               <div className="border-b border-border bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                ⚠️ <span className="font-bold">{preview.recipientCount}件</span>の配信中の提携先へ送信します。
-                外部の取引先に実際にメールが届きます。
+                ⚠️ <span className="font-bold">計{preview.totalEmails}通</span>
+                （人材{preview.talentCount}名 × 配信中{preview.recipientCount}社）を送信します。
+                人材ごとに別件名・別メールで、外部の取引先に実際に届きます。
               </div>
-              <div className="space-y-1 border-b border-border bg-slate-50 px-4 py-3 text-sm">
-                <div>
-                  <span className="text-slate-400">件名: </span>
-                  {preview.subject}
-                </div>
-                <div className="text-xs text-muted">
-                  宛先例: {preview.sampleRecipients.map((r) => r.company).join("、")}
-                  {preview.recipientCount > preview.sampleRecipients.length && " ほか"}
-                </div>
+              <div className="border-b border-border bg-slate-50 px-4 py-2 text-xs text-muted">
+                宛先例: {preview.sampleRecipients.map((r) => r.company).join("、")}
+                {preview.recipientCount > preview.sampleRecipients.length && " ほか"}
               </div>
-              <div className="max-h-[320px] flex-1 overflow-y-auto whitespace-pre-wrap break-words p-4 text-sm leading-relaxed text-slate-700">
-                {preview.text}
+              {/* 人材ごとのメール（件名＋本文） */}
+              <div className="max-h-[360px] flex-1 overflow-y-auto">
+                {preview.emails.map((m, i) => (
+                  <div key={m.talentId} className="border-b border-border last:border-0">
+                    <div className="bg-slate-50 px-4 py-2 text-sm">
+                      <span className="text-xs text-muted">
+                        {i + 1}/{preview.emails.length}・{m.talentName}
+                      </span>
+                      <div className="font-medium text-slate-800">件名: {m.subject}</div>
+                    </div>
+                    <div className="whitespace-pre-wrap break-words px-4 py-3 text-sm leading-relaxed text-slate-700">
+                      {m.text}
+                    </div>
+                  </div>
+                ))}
               </div>
               <div className="border-t border-border p-4">
                 <label className="mb-3 flex items-start gap-2 text-sm text-slate-700">
@@ -226,11 +250,11 @@ export function BlastView({
                     className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
                   />
                   <span>
-                    内容と宛先件数（{preview.recipientCount}件）を確認しました。送信します。
+                    内容・件名・総送信数（計{preview.totalEmails}通）を確認しました。送信します。
                   </span>
                 </label>
                 <Button onClick={send} disabled={!confirmChecked || sending} className="w-full">
-                  {sending ? "登録中…" : `${preview.recipientCount}件へ一斉送信`}
+                  {sending ? "登録中…" : `計${preview.totalEmails}通を一斉送信`}
                 </Button>
               </div>
             </div>

@@ -103,6 +103,17 @@ describe("buildTalentIntroEmail（一斉案内）", () => {
     expect(text).not.toContain("配信を停止");
     expect(text).not.toContain("unsubscribe");
   });
+  it("配信件名を指定すると件名に使う／未指定は既定件名", () => {
+    expect(buildTalentIntroEmail({ talentsBlock: "x", subject: "【即日】SAPコンサル" }).subject).toBe(
+      "【即日】SAPコンサル",
+    );
+    expect(buildTalentIntroEmail({ talentsBlock: "x", subject: "  " }).subject).toBe(
+      "【ご案内】稼働可能な人材のご紹介",
+    );
+    expect(buildTalentIntroEmail({ talentsBlock: "x" }).subject).toBe(
+      "【ご案内】稼働可能な人材のご紹介",
+    );
+  });
 });
 
 describe("contactNameFromBody", () => {

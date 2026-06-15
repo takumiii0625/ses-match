@@ -250,8 +250,12 @@ export function buildTalentProposalEmail(input: TalentProposalEmailInput): {
   return { subject, text };
 }
 
+/** 配信件名が未設定のときの既定件名。 */
+export const DEFAULT_INTRO_SUBJECT = "【ご案内】稼働可能な人材のご紹介";
+
 export interface TalentIntroEmailInput {
   talentsBlock: string; // 紹介する自社人材の一覧（joinTalentBlocksの結果）
+  subject?: string | null; // 配信件名（人材ごと。未設定なら既定）
 }
 
 /**
@@ -262,7 +266,7 @@ export function buildTalentIntroEmail(input: TalentIntroEmailInput): {
   subject: string;
   text: string;
 } {
-  const subject = `【ご案内】稼働可能な人材のご紹介`;
+  const subject = input.subject?.trim() || DEFAULT_INTRO_SUBJECT;
   const text = [
     `ご担当者様`,
     ``,

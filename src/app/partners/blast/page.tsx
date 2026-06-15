@@ -16,6 +16,7 @@ export default async function BlastPage() {
       select: {
         id: true,
         name: true,
+        distributionSubject: true,
         mainSkills: true,
         skills: true,
         desiredRateMin: true,
@@ -44,6 +45,7 @@ export default async function BlastPage() {
   const talentVMs: BlastTalent[] = talents.map((t) => ({
     id: t.id,
     name: t.name,
+    distributionSubject: t.distributionSubject,
     skills: (t.mainSkills.length ? t.mainSkills : t.skills).slice(0, 6),
     rate:
       t.desiredRateMin || t.desiredRateMax

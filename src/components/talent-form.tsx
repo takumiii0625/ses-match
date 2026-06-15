@@ -45,6 +45,7 @@ interface TalentInitial {
   qualifications: string[];
   tags: string[];
   emailSubject?: string | null;
+  distributionSubject?: string | null;
   note?: string | null;
   summaryText?: string | null;
 }
@@ -98,6 +99,9 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
   const [qualifications, setQualifications] = useState(arrToStr(initial?.qualifications ?? []));
   const [tags, setTags] = useState(arrToStr(initial?.tags ?? []));
   const [emailSubject, setEmailSubject] = useState(initial?.emailSubject ?? "");
+  const [distributionSubject, setDistributionSubject] = useState(
+    initial?.distributionSubject ?? "",
+  );
   const [note, setNote] = useState(initial?.note ?? "");
   const [summaryText, setSummaryText] = useState(initial?.summaryText ?? "");
 
@@ -218,6 +222,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
       qualifications: strToArr(qualifications),
       tags: strToArr(tags),
       emailSubject: emailSubject || null,
+      distributionSubject: distributionSubject || null,
       note: note || null,
       summaryText: summaryText || null,
     };
@@ -459,6 +464,18 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
             />
           </div>
         )}
+        <div className="col-span-2">
+          <Label htmlFor="distributionSubject">配信件名（一斉案内メール用）</Label>
+          <Input
+            id="distributionSubject"
+            placeholder="例：【即日・フルリモート可】SAPコンサル 40代"
+            value={distributionSubject}
+            onChange={(e) => setDistributionSubject(e.target.value)}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            提携先への一斉案内で、この人材を送るときのメール件名。未設定なら共通件名になります。
+          </p>
+        </div>
       </div>
 
       {/* Availability & Rate */}
