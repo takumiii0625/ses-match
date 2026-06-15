@@ -105,6 +105,7 @@ export interface RankedCandidate {
   reason: string;
   channelOk: boolean; // 商流的に提案可能か（弊社が入ると+1。支援費があれば飛ばせる）
   channelNote: string; // 商流判定の理由（提案不可ならその根拠）
+  locationOk?: boolean; // 勤務地/リモート条件が両立するか（false=不一致でマッチ除外）
 }
 
 export interface AIService {

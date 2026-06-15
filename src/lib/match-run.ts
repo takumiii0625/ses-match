@@ -174,6 +174,8 @@ async function rankAndSave(
   let saved = 0;
   for (const r of ranked) {
     if (r.score < MIN_SCORE) continue;
+    // 勤務地/リモート条件が両立しない場合はマッチを作らない（除外）。
+    if (r.locationOk === false) continue;
     const reasons = [
       ...r.strengths,
       ...r.concerns.map((c) => `懸念: ${c}`),

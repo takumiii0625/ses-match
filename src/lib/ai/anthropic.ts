@@ -251,6 +251,11 @@ const MATCH_SCHEMA = {
           reason: { type: "string" },
           channelOk: { type: "boolean" },
           channelNote: { type: "string" },
+          locationOk: {
+            type: "boolean",
+            description:
+              "勤務地/リモート条件が両立するか。明らかに両立しない（案件が常駐必須で人材がリモート希望・遠方で出社不可など）場合のみ false。リモート可・通勤圏・出社応相談など対応可能性があれば true。不明も true。",
+          },
         },
         required: [
           "talentId",
@@ -261,6 +266,7 @@ const MATCH_SCHEMA = {
           "reason",
           "channelOk",
           "channelNote",
+          "locationOk",
         ],
       },
     },

@@ -241,6 +241,7 @@ export class MockAIService implements AIService {
           : "必須スキルの一致が見られない",
         channelOk,
         channelNote,
+        locationOk: true, // モックは勤務地判定をしない（除外しない）
       };
     });
     return ranked.sort((a, b) => b.score - a.score);
