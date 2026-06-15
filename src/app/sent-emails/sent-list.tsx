@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 
 export interface SentRow {
   id: string;
@@ -120,17 +121,22 @@ function SentDetail({ r }: { r: SentRow }) {
 export function SentList({ rows, stats }: { rows: SentRow[]; stats: Stats }) {
   const [status, setStatus] = useState("ALL");
   const [kind, setKind] = useState("ALL");
+  const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const toggle = (id: string) => setOpenId((cur) => (cur === id ? null : id));
 
-  const filtered = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          (status === "ALL" || r.status === status) && (kind === "ALL" || r.kind === kind),
-      ),
-    [rows, status, kind],
-  );
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (status !== "ALL" && r.status !== status) return false;
+      if (kind !== "ALL" && r.kind !== kind) return false;
+      if (!q) return true;
+      // 宛先・件名・人材名・案件名・本文で部分一致検索。
+      return [r.toAddr, r.subject, r.talentName, r.projectTitle, r.body]
+        .filter(Boolean)
+        .some((v) => (v as string).toLowerCase().includes(q));
+    });
+  }, [rows, status, kind, query]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -142,8 +148,15 @@ export function SentList({ rows, stats }: { rows: SentRow[]; stats: Stats }) {
         <StatCard label="記録総数" value={stats.total} />
       </div>
 
-      {/* フィルタ */}
+      {/* 検索・フィルタ */}
       <div className="flex flex-wrap gap-3">
+        <div className="min-w-[200px] flex-1">
+          <Input
+            placeholder="宛先・件名・人材名・案件名・本文で検索"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
         <div className="w-full sm:w-44">
           <Select options={STATUS_OPTIONS} value={status} onChange={(e) => setStatus(e.target.value)} />
         </div>
@@ -151,6 +164,7 @@ export function SentList({ rows, stats }: { rows: SentRow[]; stats: Stats }) {
           <Select options={KIND_OPTIONS} value={kind} onChange={(e) => setKind(e.target.value)} />
         </div>
       </div>
+      <p className="-mt-2 text-xs text-muted">{filtered.length}件 / 全{rows.length}件</p>
 
       {filtered.length === 0 ? (
         <Card className="p-12 text-center text-sm text-muted">
