@@ -262,6 +262,7 @@ model Match {
   reasons     String[] @default([])
   proposable  Boolean  @default(true) // 商流的に提案可能か（false=商流オーバー等で提案不可）
   channelNote String? // 商流判定の理由（提案不可の根拠など）
+  locationOk  Boolean? // 勤務地・勤務形態が両立するか（null=未評価。falseは保存せず除外）
   createdAt   DateTime @default(now())
 
   talent  Talent  @relation(fields: [talentId], references: [id], onDelete: Cascade)

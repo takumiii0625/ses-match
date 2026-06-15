@@ -73,6 +73,7 @@ export interface ProjectCardVM extends ProjectVM {
   reasons: string[];
   proposable: boolean;
   channelNote: string | null;
+  locationOk: boolean | null;
 }
 
 /** 右ペインの人材カード（案件起点）。 */
@@ -82,6 +83,7 @@ export interface TalentCardVM extends TalentVM {
   reasons: string[];
   proposable: boolean;
   channelNote: string | null;
+  locationOk: boolean | null;
 }
 
 function fmtDate(iso: string | null): string {
@@ -626,6 +628,7 @@ function projectHeader(p: ProjectCardVM, top: boolean, dupes = 1) {
             const cs = channelStatus(p.proposable, p.channelNote);
             return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
           })()}
+          {p.locationOk === true && <Badge tone="green">勤務地・勤務形態OK</Badge>}
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">
@@ -689,6 +692,7 @@ function talentHeader(t: TalentCardVM, top: boolean, dupes = 1) {
             const cs = channelStatus(t.proposable, t.channelNote);
             return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
           })()}
+          {t.locationOk === true && <Badge tone="green">勤務地・勤務形態OK</Badge>}
         </div>
       </div>
       <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-500 sm:grid-cols-4">

@@ -211,6 +211,7 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                             {Math.round(m.score)}点
                           </Badge>
                           {cs && <Badge tone={cs.tone}>{cs.label}</Badge>}
+                          {m.locationOk === true && <Badge tone="green">勤務地・勤務形態OK</Badge>}
                           {m.sentInfoAt && (
                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                               ✉ 送信済み {fmtSentDate(m.sentInfoAt)}

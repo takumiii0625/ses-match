@@ -25,6 +25,7 @@ export const matchVmSelect = {
   reasons: true,
   proposable: true,
   channelNote: true,
+  locationOk: true,
   talent: {
     select: {
       id: true,
@@ -67,6 +68,7 @@ export function toMatchVM(m: MatchVmRow, sentInfoAt: string | null = null): Matc
     reasons: m.reasons,
     proposable: m.proposable,
     channelNote: m.channelNote,
+    locationOk: m.locationOk,
     sentInfoAt,
     talent: {
       id: m.talent.id,

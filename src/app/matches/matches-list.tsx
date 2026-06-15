@@ -21,6 +21,7 @@ export interface MatchVM {
   reasons: string[];
   proposable: boolean;
   channelNote: string | null;
+  locationOk: boolean | null; // 勤務地・勤務形態OKか（true=OKラベル表示、null=未評価）
   sentInfoAt: string | null; // 案件案内メールを送信済みの日時（未送信なら null）
   talent: {
     id: string;
@@ -379,6 +380,7 @@ export function MatchesList({
                             const cs = channelStatus(m.proposable, m.channelNote);
                             return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
                           })()}
+                          {m.locationOk === true && <Badge tone="green">勤務地・勤務形態OK</Badge>}
                           {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
                           {(t.desiredRateMin != null || t.desiredRateMax != null) && (
                             <span className="text-xs text-muted">

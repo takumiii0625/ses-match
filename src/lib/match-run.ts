@@ -174,7 +174,7 @@ async function rankAndSave(
   let saved = 0;
   for (const r of ranked) {
     if (r.score < MIN_SCORE) continue;
-    // 勤務地/リモート条件が両立しない場合はマッチを作らない（除外）。
+    // 勤務地・勤務形態（常駐/リモート/出社頻度）が両立しない場合はマッチを作らない（除外）。
     if (r.locationOk === false) continue;
     const reasons = [
       ...r.strengths,
@@ -183,6 +183,8 @@ async function rankAndSave(
     if (reasons.length === 0 && r.reason) reasons.push(r.reason);
     const proposable = r.channelOk !== false; // 既定は提案可
     const channelNote = r.channelNote || null;
+    // ここに到達＝勤務地・勤務形態は不一致でない（true か 不明）。OKラベル用に保存。
+    const locationOk = r.locationOk ?? null;
     await prisma.match.upsert({
       where: {
         talentId_projectId: { talentId: r.talentId, projectId: project.id },
@@ -194,8 +196,9 @@ async function rankAndSave(
         reasons,
         proposable,
         channelNote,
+        locationOk,
       },
-      update: { score: r.score, reasons, proposable, channelNote },
+      update: { score: r.score, reasons, proposable, channelNote, locationOk },
     });
     saved++;
   }
