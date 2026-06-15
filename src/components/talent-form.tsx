@@ -195,6 +195,13 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    // 自社保有人材は一斉案内の対象なので配信件名を必須にする。
+    if (talentType === "INHOUSE" && !distributionSubject.trim()) {
+      setError("自社保有人材は配信件名（一斉案内メール用）が必須です。");
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
@@ -465,15 +472,24 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
           </div>
         )}
         <div className="col-span-2">
-          <Label htmlFor="distributionSubject">配信件名（一斉案内メール用）</Label>
+          <Label htmlFor="distributionSubject">
+            配信件名（一斉案内メール用）
+            {talentType === "INHOUSE" && <span className="ml-1 text-red-500">必須</span>}
+          </Label>
           <Input
             id="distributionSubject"
             placeholder="例：【即日・フルリモート可】SAPコンサル 40代"
             value={distributionSubject}
             onChange={(e) => setDistributionSubject(e.target.value)}
+            className={
+              talentType === "INHOUSE" && !distributionSubject.trim() ? "border-red-300" : ""
+            }
           />
           <p className="mt-1 text-xs text-slate-400">
-            提携先への一斉案内で、この人材を送るときのメール件名。未設定なら共通件名になります。
+            提携先への一斉案内で、この人材を送るときのメール件名。
+            {talentType === "INHOUSE"
+              ? "自社保有人材は必須です。"
+              : "未設定なら共通件名になります。"}
           </p>
         </div>
       </div>

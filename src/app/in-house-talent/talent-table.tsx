@@ -42,6 +42,7 @@ interface Talent {
   nearestStation?: string | null;
   note?: string | null;
   emailSubject?: string | null;
+  distributionSubject?: string | null;
   emailBody?: string | null;
   sourceEmail?: string | null;
   summaryText?: string | null;

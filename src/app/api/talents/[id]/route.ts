@@ -100,6 +100,36 @@ export async function PUT(
   }
 }
 
+/** 部分更新（ドロワーのクイック編集用）。送られたフィールドだけ更新する。 */
+export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await ctx.params;
+    const org = await getCurrentOrg();
+    const existing = await prisma.talent.findFirst({ where: { id, orgId: org.id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const body = (await req.json()) as Record<string, unknown>;
+    const data: Record<string, unknown> = {};
+    // 現状サポートする部分更新項目（必要に応じて追加）。
+    if ("distributionSubject" in body) {
+      const v = body.distributionSubject;
+      data.distributionSubject = typeof v === "string" && v.trim() ? v.trim() : null;
+    }
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: "更新する項目がありません" }, { status: 400 });
+    }
+    const talent = await prisma.talent.update({ where: { id }, data });
+    return NextResponse.json(talent);
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Internal server error" },
+      { status: 500 },
+    );
+  }
+}
+
 export async function DELETE(
   _req: Request,
   ctx: { params: Promise<{ id: string }> }

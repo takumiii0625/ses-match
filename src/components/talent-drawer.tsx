@@ -5,6 +5,8 @@ import Link from "next/link";
 import { X, Pencil } from "lucide-react";
 import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { fetchJson } from "@/lib/http";
 import {
   TALENT_STATUS_LABELS,
   GENDER_LABELS,
@@ -40,6 +42,7 @@ export interface TalentDrawerData {
   nearestStation?: string | null;
   note?: string | null;
   emailSubject?: string | null;
+  distributionSubject?: string | null;
   emailBody?: string | null;
   emailFrom?: string | null;
   emailTo?: string | null;
@@ -109,6 +112,34 @@ export function TalentDrawer({
   const hasEmail = !!(talent.emailBody || talent.emailFrom || talent.emailSubject);
   const [tab, setTab] = useState<"mail" | "detail">(hasEmail ? "mail" : "detail");
 
+  // 配信件名のクイック編集（一斉案内メールの件名。必須）。
+  const [distSubject, setDistSubject] = useState(talent.distributionSubject ?? "");
+  const [savingSubj, setSavingSubj] = useState(false);
+  const [subjMsg, setSubjMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const dirty = distSubject.trim() !== (talent.distributionSubject ?? "").trim();
+
+  async function saveSubject() {
+    if (savingSubj) return;
+    if (!distSubject.trim()) {
+      setSubjMsg({ ok: false, text: "配信件名は必須です" });
+      return;
+    }
+    setSavingSubj(true);
+    setSubjMsg(null);
+    try {
+      await fetchJson(`/api/talents/${talent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ distributionSubject: distSubject.trim() }),
+      });
+      setSubjMsg({ ok: true, text: "保存しました" });
+    } catch (e) {
+      setSubjMsg({ ok: false, text: e instanceof Error ? e.message : "保存に失敗しました" });
+    } finally {
+      setSavingSubj(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-40" role="dialog">
       <div className="absolute inset-0 bg-slate-900/20" onClick={onClose} />
@@ -127,6 +158,38 @@ export function TalentDrawer({
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
             <X className="h-5 w-5" />
           </button>
+        </div>
+
+        {/* 配信件名のクイック編集（一斉案内メールの件名・必須） */}
+        <div className="border-b border-border bg-slate-50 px-5 py-3">
+          <label className="mb-1 block text-xs font-medium text-slate-600">
+            配信件名（一斉案内メール用）<span className="ml-1 text-red-500">必須</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <Input
+              value={distSubject}
+              onChange={(e) => {
+                setDistSubject(e.target.value);
+                setSubjMsg(null);
+              }}
+              placeholder="例：【即日・フルリモート可】SAPコンサル 40代"
+              className={!distSubject.trim() ? "border-red-300" : ""}
+            />
+            <Button size="sm" onClick={saveSubject} disabled={savingSubj || !dirty}>
+              {savingSubj ? "保存中…" : "保存"}
+            </Button>
+          </div>
+          {subjMsg ? (
+            <p className={`mt-1 text-xs ${subjMsg.ok ? "text-emerald-600" : "text-red-600"}`}>
+              {subjMsg.text}
+            </p>
+          ) : (
+            !distSubject.trim() && (
+              <p className="mt-1 text-xs text-amber-600">
+                未設定です。一斉案内で送るには件名を入力してください。
+              </p>
+            )
+          )}
         </div>
 
         {/* tabs */}
