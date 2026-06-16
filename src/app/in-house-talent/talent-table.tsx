@@ -43,6 +43,7 @@ interface Talent {
   note?: string | null;
   emailSubject?: string | null;
   distributionSubject?: string | null;
+  kishaOk?: boolean | null;
   emailBody?: string | null;
   sourceEmail?: string | null;
   summaryText?: string | null;

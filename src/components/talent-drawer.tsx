@@ -43,6 +43,7 @@ export interface TalentDrawerData {
   note?: string | null;
   emailSubject?: string | null;
   distributionSubject?: string | null;
+  kishaOk?: boolean | null;
   emailBody?: string | null;
   emailFrom?: string | null;
   emailTo?: string | null;
@@ -140,6 +141,26 @@ export function TalentDrawer({
     }
   }
 
+  // 貴社チェックのクイック編集（「貴社まで」案件のマッチ対象にするか）。
+  const isInhouse = talent.talentType === "INHOUSE";
+  const [kishaOk, setKishaOk] = useState(talent.kishaOk ?? false);
+  const [kishaSaving, setKishaSaving] = useState(false);
+  async function toggleKisha(next: boolean) {
+    setKishaOk(next);
+    setKishaSaving(true);
+    try {
+      await fetchJson(`/api/talents/${talent.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kishaOk: next }),
+      });
+    } catch {
+      setKishaOk(!next); // 失敗したら戻す
+    } finally {
+      setKishaSaving(false);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-40" role="dialog">
       <div className="absolute inset-0 bg-slate-900/20" onClick={onClose} />
@@ -189,6 +210,23 @@ export function TalentDrawer({
                 未設定です。一斉案内で送るには件名を入力してください。
               </p>
             )
+          )}
+          {isInhouse && (
+            <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={kishaOk}
+                disabled={kishaSaving}
+                onChange={(e) => toggleKisha(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+              />
+              <span>
+                貴社チェック
+                <span className="ml-1 text-xs text-slate-400">
+                  （ONで「貴社まで」案件のマッチ対象に含める）
+                </span>
+              </span>
+            </label>
           )}
         </div>
 

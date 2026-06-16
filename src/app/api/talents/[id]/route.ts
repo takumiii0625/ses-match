@@ -85,6 +85,7 @@ export async function PUT(
         tags: coerceArr(body.tags),
         emailSubject: body.emailSubject ?? null,
         distributionSubject: body.distributionSubject ?? null,
+        kishaOk: body.kishaOk === true,
         note: body.note ?? null,
         summaryText: body.summaryText ?? null,
       },
@@ -115,6 +116,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if ("distributionSubject" in body) {
       const v = body.distributionSubject;
       data.distributionSubject = typeof v === "string" && v.trim() ? v.trim() : null;
+    }
+    if ("kishaOk" in body) {
+      data.kishaOk = body.kishaOk === true;
     }
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "更新する項目がありません" }, { status: 400 });

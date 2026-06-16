@@ -79,6 +79,7 @@ export async function POST(req: Request) {
         tags: coerceArr(body.tags),
         emailSubject: body.emailSubject ?? null,
         distributionSubject: body.distributionSubject ?? null,
+        kishaOk: body.kishaOk === true,
         note: body.note ?? null,
         summaryText: body.summaryText ?? null,
       },

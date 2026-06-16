@@ -176,6 +176,7 @@ model Talent {
   note         String?
   summaryText  String? // スキルシートのサマリ文（提案用テンプレ形式）
   distributionSubject String? // 一斉案内メールの配信件名（人材ごと。未設定なら既定件名）
+  kishaOk      Boolean @default(false) // 貴社チェック。trueの自社人材だけ「貴社まで」案件のマッチ対象にする
   receivedDate DateTime @default(now()) // 配信日
 
   createdAt DateTime @default(now())

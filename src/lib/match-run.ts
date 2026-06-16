@@ -19,6 +19,7 @@ const TALENT_MATCH_SELECT = {
   name: true,
   age: true,
   talentType: true,
+  kishaOk: true,
   affiliation: true,
   mainSkills: true,
   skills: true,
@@ -88,14 +89,18 @@ function isOwnOnlyChannel(channelText: string | null): boolean {
 
 /**
  * 商流による候補の事前足切り。
- * - 「貴社社員/貴社まで」案件 → 自社保有人材のみ（他社は不可）。
+ * - 「貴社社員/貴社まで」案件 → 自社保有人材のうち「貴社チェック(kishaOk)」が付いた人材のみ。
+ *   （貴社まで案件は貴社レベルの人材しか提案できないため、対象人材を明示的に絞る）
  * - 「エンド直/プロパー/直のみ」案件で支援費の記載なし → 弊社が挟まると提案不可なので
  *   他社人材を除外し自社保有人材のみ（支援費ありなら商流を飛ばせるので全員残す）。
  */
 function restrictCandidatesByChannel(candidates: Talent[], project: Project): Talent[] {
   const ownOnly = isOwnOnlyChannel(project.channelText);
+  if (ownOnly) {
+    return candidates.filter((t) => t.talentType === "INHOUSE" && t.kishaOk === true);
+  }
   const strictDirect = isStrictDirectChannel(project.channelText) && !project.supportFee;
-  if (ownOnly || strictDirect) {
+  if (strictDirect) {
     return candidates.filter((t) => t.talentType === "INHOUSE");
   }
   return candidates;
