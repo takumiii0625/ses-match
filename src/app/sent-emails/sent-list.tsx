@@ -82,12 +82,6 @@ function SentDetail({ r }: { r: SentRow }) {
     <div className="space-y-3 bg-slate-50 px-4 py-3">
       <div className="flex flex-wrap gap-2 text-xs">
         <Link
-          href={`/compare?mode=talent&talentId=${r.talentId}`}
-          className="rounded border border-border bg-white px-2 py-1 text-slate-600 hover:text-primary"
-        >
-          見比べで開く
-        </Link>
-        <Link
           href={`/talent/${r.talentId}`}
           className="rounded border border-border bg-white px-2 py-1 text-slate-600 hover:text-primary"
         >

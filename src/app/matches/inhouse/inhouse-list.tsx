@@ -266,12 +266,6 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                       {REMOTE_LABELS[talent.remotePreference] ?? talent.remotePreference}
                     </span>
                   )}
-                  <Link
-                    href={`/compare?mode=talent&talentId=${talent.id}`}
-                    className="ml-auto rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-border hover:bg-slate-50 hover:text-primary"
-                  >
-                    見比べる
-                  </Link>
                 </div>
                 {(talent.mainSkills.length > 0 || talent.skills.length > 0) && (
                   <div className="mt-2 flex flex-wrap gap-1">
