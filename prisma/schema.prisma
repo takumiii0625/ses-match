@@ -47,6 +47,7 @@ model Organization {
   partnerCompanies PartnerCompany[]
   partnerContacts  PartnerContact[]
   blastCampaigns   BlastCampaign[]
+  ngCompanies      NgCompany[]
 }
 
 enum Role {
@@ -464,6 +465,22 @@ model PartnerContact {
   @@unique([orgId, email]) // CSV取込の冪等性（email一意）
   @@index([orgId, status]) // 配信中の一括抽出
   @@index([companyId])
+}
+
+// 取引NG企業。ドメインで識別し、マッチング時に他社人材/案件を除外する
+// （自社保有人材INHOUSEの提案は除外しない＝NG企業の案件にも自社人材は提案可）。
+model NgCompany {
+  id        String   @id @default(cuid())
+  orgId     String
+  domain    String // 正規化済みドメイン（小文字）。マッチング除外キー。
+  name      String? // 表示用の会社名（任意）
+  note      String?
+  createdAt DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, domain]) // 同一ドメインの重複登録防止
+  @@index([orgId])
 }
 
 // ---------- 一斉送信（ブラスト）キャンペーン ----------

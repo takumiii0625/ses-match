@@ -25,6 +25,7 @@ import {
   LineChart,
   FlaskConical,
   UsersRound,
+  Ban,
   Settings,
   Droplet,
   ChevronRight,
@@ -47,6 +48,7 @@ const groups: { title: string; items: NavItem[] }[] = [
       { href: "/partner-talent", label: "他社人材", icon: Building2 },
       { href: "/projects", label: "案件", icon: Briefcase },
       { href: "/partners", label: "提携先会社", icon: Handshake },
+      { href: "/ng-companies", label: "NG企業", icon: Ban },
     ],
   },
   {

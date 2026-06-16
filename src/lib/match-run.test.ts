@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   talent: { findMany: vi.fn() },
   organization: { findUnique: vi.fn() },
   match: { deleteMany: vi.fn(), upsert: vi.fn() },
+  ngCompany: { findMany: vi.fn() },
 }));
 const { rankMock } = vi.hoisted(() => ({ rankMock: vi.fn() }));
 
@@ -62,6 +63,7 @@ beforeEach(() => {
   db.organization.findUnique.mockResolvedValue({ matchPrompt: null });
   db.match.deleteMany.mockResolvedValue({ count: 0 });
   db.match.upsert.mockResolvedValue({});
+  db.ngCompany.findMany.mockResolvedValue([]); // 既定はNG企業なし
   // 全候補を80点（>=MIN_SCORE）で提案可に。
   rankMock.mockImplementation(async (_proj: unknown, candidates: { talentId: string }[]) =>
     candidates.map((c) => ({
@@ -152,6 +154,29 @@ describe("runMatchingForOrg（ページング）", () => {
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(rankMock).toHaveBeenCalledTimes(1);
     expect(res.saved).toBe(2); // t1,t2 とも候補
+  });
+
+  it("NG企業の他社人材は除外し、自社人材とNG以外の他社人材は残す", async () => {
+    db.ngCompany.findMany.mockResolvedValue([{ domain: "ng.co.jp" }]);
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), sourceEmail: "x@client.co.jp" }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), sourceEmail: "a@ng.co.jp" }, // 他社・NG → 除外
+      { ...talent("t2"), sourceEmail: "b@ok.co.jp" }, // 他社・OK → 残す
+      { ...talent("t3"), talentType: "INHOUSE", sourceEmail: "c@ng.co.jp" }, // 自社・NGでも残す
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(2); // t2, t3
+  });
+
+  it("NG企業の案件は他社人材を除外し、自社人材は残す", async () => {
+    db.ngCompany.findMany.mockResolvedValue([{ domain: "ng.co.jp" }]);
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), sourceEmail: "x@ng.co.jp" }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), sourceEmail: "a@ok.co.jp" }, // 他社 → 案件NGで除外
+      { ...talent("t2"), talentType: "INHOUSE", sourceEmail: null }, // 自社 → 残す
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(1); // 自社 t2 のみ
   });
 
   it("貴社まで案件は貴社チェック付きの自社人材のみ候補", async () => {

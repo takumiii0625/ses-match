@@ -9,6 +9,7 @@ import {
 import { getAI } from "@/lib/ai";
 import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
 import { pregenerateProjectBodies } from "@/lib/email/project-mail";
+import { loadNgDomains, isNgDomain } from "@/lib/ng-company";
 
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
 export const MIN_SCORE = 80;
@@ -111,6 +112,26 @@ function restrictCandidatesByChannel(candidates: Talent[], project: Project): Ta
     return candidates.filter((t) => t.talentType === "INHOUSE");
   }
   return candidates;
+}
+
+/**
+ * 取引NG企業による候補の除外。
+ * - 自社保有人材(INHOUSE)はNG企業でも提案対象に含める（NG企業の案件にも自社人材は出す）。
+ * - 案件の会社がNG → 他社人材は提案しない（除外）。
+ * - 人材の会社がNG → その他社人材は除外。
+ */
+function restrictCandidatesByNg(
+  candidates: Talent[],
+  project: Project,
+  ng: Set<string>,
+): Talent[] {
+  if (ng.size === 0) return candidates;
+  const projectIsNg = isNgDomain(project.sourceEmail, ng);
+  return candidates.filter((t) => {
+    if (t.talentType === "INHOUSE") return true;
+    if (projectIsNg) return false;
+    return !isNgDomain(t.sourceEmail, ng);
+  });
 }
 
 export interface MatchRunResult {
@@ -269,7 +290,7 @@ export async function runMatchingForOrg(
     ? { orgId, talentType: "INHOUSE" as const }
     : talentWindowWhere(orgId, since);
 
-  const [projectsRaw, talents, prompts] = await Promise.all([
+  const [projectsRaw, talents, prompts, ngDomains] = await Promise.all([
     // ページングを安定させるため作成日昇順で固定。必要列のみ取得（転送量削減）。
     prisma.project.findMany({
       where: { orgId, receivedDate: { gte: since } },
@@ -281,6 +302,7 @@ export async function runMatchingForOrg(
       select: TALENT_MATCH_SELECT,
     }) as unknown as Promise<Talent[]>,
     resolveOrgPrompts(orgId),
+    loadNgDomains(orgId),
   ]);
   const systemPrompt = prompts.matchPrompt;
 
@@ -307,9 +329,13 @@ export async function runMatchingForOrg(
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
     slice.map(async (project) => {
-      const candidates = restrictCandidatesByChannel(
-        talents.filter((t) => !isSameCompany(t, project)),
+      const candidates = restrictCandidatesByNg(
+        restrictCandidatesByChannel(
+          talents.filter((t) => !isSameCompany(t, project)),
+          project,
+        ),
         project,
+        ngDomains,
       );
       const r = await rankAndSave(project, candidates, systemPrompt);
       return { projectId: project.id, ...r };
@@ -374,7 +400,7 @@ export async function runMatchingForNew(
   }
 
   const since = windowStart();
-  const [projectsRaw, talents, prompts] = await Promise.all([
+  const [projectsRaw, talents, prompts, ngDomains] = await Promise.all([
     prisma.project.findMany({
       where: { orgId, receivedDate: { gte: since } },
       select: PROJECT_MATCH_SELECT,
@@ -384,6 +410,7 @@ export async function runMatchingForNew(
       select: TALENT_MATCH_SELECT,
     }) as unknown as Promise<Talent[]>,
     resolveOrgPrompts(orgId),
+    loadNgDomains(orgId),
   ]);
   const systemPrompt = prompts.matchPrompt;
 
@@ -406,9 +433,13 @@ export async function runMatchingForNew(
 
   const settled = await Promise.allSettled(
     targets.map(async ({ project, pool }) => {
-      const candidates = restrictCandidatesByChannel(
-        pool.filter((t) => !isSameCompany(t, project)),
+      const candidates = restrictCandidatesByNg(
+        restrictCandidatesByChannel(
+          pool.filter((t) => !isSameCompany(t, project)),
+          project,
+        ),
         project,
+        ngDomains,
       );
       const r = await rankAndSave(project, candidates, systemPrompt);
       return { projectId: project.id, ...r };
