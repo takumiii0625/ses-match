@@ -474,10 +474,39 @@ function MatchDetailPanel({
   controller: ReturnType<typeof useSendController>;
   sent: boolean;
 }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const t = m.talent;
   const p = m.project;
   const { strengths, concerns } = splitReasons(m.reasons);
   const pair = { talentId: t.id, projectId: p.id };
+
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [rejectBusy, setRejectBusy] = useState(false);
+  const [rejectErr, setRejectErr] = useState<string | null>(null);
+
+  async function doReject() {
+    if (!reason.trim() || rejectBusy) return;
+    setRejectBusy(true);
+    setRejectErr(null);
+    try {
+      const res = await fetch(`/api/matches/${m.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reject: true, reason }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "差し戻しに失敗しました");
+      setRejecting(false);
+      setReason("");
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setRejectErr(e instanceof Error ? e.message : "差し戻しに失敗しました");
+    } finally {
+      setRejectBusy(false);
+    }
+  }
 
   return (
     <Card className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden p-0">
@@ -499,8 +528,56 @@ function MatchDetailPanel({
             案件: {p.title}
           </Link>
         </div>
-        <ProposalButton talentId={t.id} projectId={p.id} />
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setRejecting((v) => !v)}
+            className="rounded-lg border border-border px-2.5 py-1 text-xs text-slate-500 hover:bg-red-50 hover:text-red-600"
+            title="このマッチを送らずに差し戻す（一覧から隠す）"
+          >
+            差し戻し
+          </button>
+          <ProposalButton talentId={t.id} projectId={p.id} />
+        </div>
       </div>
+
+      {/* 差し戻しの理由入力 */}
+      {rejecting && (
+        <div className="space-y-2 border-b border-red-200 bg-red-50/60 px-5 py-3">
+          <label className="block text-xs font-medium text-red-700">
+            差し戻し理由（記録に残ります。送信対象・一覧から除外されます）
+          </label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder="例: 単価が合わない / 既に充足 / 商流が深すぎる など"
+            className="w-full resize-y rounded-lg border border-red-200 px-3 py-2 text-sm focus:border-red-400 focus:outline-none"
+          />
+          {rejectErr && <p className="text-xs text-red-600">{rejectErr}</p>}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setRejecting(false);
+                setReason("");
+              }}
+              disabled={rejectBusy}
+              className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-600 hover:bg-white disabled:opacity-50"
+            >
+              キャンセル
+            </button>
+            <button
+              type="button"
+              onClick={doReject}
+              disabled={rejectBusy || !reason.trim()}
+              className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+            >
+              {rejectBusy ? "処理中…" : "差し戻す"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
         {/* 案件・人材サマリ */}

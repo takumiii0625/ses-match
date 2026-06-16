@@ -28,8 +28,8 @@ export default async function MatchesPage(props: {
 
   const [matches, sentMap] = await Promise.all([
     prisma.match.findMany({
-      // 提案不可（商流オーバー等）はマッチ一覧に出さない。配信日で絞る。
-      where: { project: projectWhere, score: { gte: 80 }, proposable: true },
+      // 提案不可（商流オーバー等）・差し戻し済みはマッチ一覧に出さない。配信日で絞る。
+      where: { project: projectWhere, score: { gte: 80 }, proposable: true, rejectedAt: null },
       select: matchVmSelect,
       orderBy: { score: "desc" },
     }),

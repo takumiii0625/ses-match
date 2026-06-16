@@ -48,6 +48,7 @@ model Organization {
   partnerContacts  PartnerContact[]
   blastCampaigns   BlastCampaign[]
   ngCompanies      NgCompany[]
+  matchRejections  MatchRejection[]
 }
 
 enum Role {
@@ -267,10 +268,41 @@ model Match {
   locationOk  Boolean? // 勤務地・勤務形態が両立するか（null=未評価。falseは保存せず除外）
   createdAt   DateTime @default(now())
 
+  // 営業パイプラインの段階（各チェックの達成日時。null=未達。提案管理画面で手動チェック）。
+  stTalent    DateTime? // 人材提案
+  stAccept    DateTime? // 承諾
+  stClient    DateTime? // 案件側提案
+  stInterview DateTime? // 面談
+  stClosed    DateTime? // 成約
+
+  // 差し戻し（このマッチは送らない）。設定中は一覧・見比べ・送信対象から除外。
+  rejectedAt   DateTime?
+  rejectReason String?
+
   talent  Talent  @relation(fields: [talentId], references: [id], onDelete: Cascade)
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([talentId, projectId])
+  @@index([rejectedAt])
+}
+
+// 差し戻しの履歴（理由を記録に残す。後でマッチ判定プロンプトへの反映にも使える）。
+// マッチを戻して再度送っても履歴は消えない（監査・学習用）。
+model MatchRejection {
+  id           String   @id @default(cuid())
+  orgId        String
+  talentId     String
+  projectId    String
+  reason       String
+  projectTitle String? // 当時の案件名（スナップショット）
+  talentName   String? // 当時の人材名（スナップショット）
+  score        Float?
+  createdById  String?
+  createdAt    DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt])
 }
 
 // ---------- Favorites (お気に入り) ----------

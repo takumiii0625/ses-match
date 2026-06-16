@@ -19,6 +19,7 @@ export default async function InhouseMatchesPage() {
         project: { orgId: org.id },
         talent: { orgId: org.id, talentType: "INHOUSE" },
         score: { gte: 80 },
+        rejectedAt: null,
       },
       select: matchVmSelect,
       orderBy: { score: "desc" },

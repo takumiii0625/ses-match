@@ -76,6 +76,7 @@ export async function runAutoSendProjectInfo(
     where: {
       proposable: true,
       score: { gte: 80 },
+      rejectedAt: null, // 差し戻し済みは自動送信しない
       OR: [
         { project: { orgId, receivedDate: { gte: todayStart } } },
         { talent: { orgId, receivedDate: { gte: todayStart } } },
