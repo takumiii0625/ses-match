@@ -13,6 +13,7 @@ import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { useSendController, SendPanel, pairKey } from "@/components/send-mail";
+import { SkillSheetView } from "./skillsheet-view";
 import { ProposalButton } from "../matching/proposal-button";
 
 // サーバから渡る軽量ビューモデル（Prisma型から必要分だけ抜き出して直列化）。
@@ -631,6 +632,13 @@ function MatchDetailPanel({
             提案不可の理由: {m.channelNote}
           </div>
         )}
+
+        {/* スキルシート（添付PDF=テキスト化／スプレッドシート等はリンク／無ければ「なし」） */}
+        <div className="border-t border-border pt-3">
+          <div className="mb-2 text-xs font-semibold text-slate-500">スキルシート</div>
+          {/* key=talentId で人材切替時に作り直して再取得する。 */}
+          <SkillSheetView key={t.id} talentId={t.id} />
+        </div>
 
         {/* メール（編集して送信） */}
         <div className="border-t border-border pt-3">
