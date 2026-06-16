@@ -1,14 +1,12 @@
-name: 1日1回マッチ（15時台 JST・今日のみ）
+name: 定時マッチ（11/15/17時 JST・今日のみ）
 
-# 定時マッチは1日1回だけ（取りこぼし対策で15時台に複数回発火・1日1回ガード付き）。
-# 手動(workflow_dispatch)は daily ガード無しで、days(対象期間) と startOffset(再開位置)を指定可。
-# 時刻(UTC→JST): 06:10→15:10, 07:00→16:00, 08:00→17:00, 09:30→18:30
+# 定時マッチは取込（11/15/17時）の直後に毎回実行（取込で増えた当日分を反映するため）。
+# 取込は数分かかるので15分ずらす。各回 offset=0 でクリーン再生成（当日分を作り直す）。
+# 手動(workflow_dispatch)は days(対象期間) と startOffset(再開位置)を指定可。
+# 時刻(UTC→JST): 02:15→11:15, 06:15→15:15, 08:15→17:15
 on:
   schedule:
-    - cron: "10 6 * * *"
-    - cron: "0 7 * * *"
-    - cron: "0 8 * * *"
-    - cron: "30 9 * * *"
+    - cron: "15 2,6,8 * * *" # JST 11:15 / 15:15 / 17:15（取込の直後）
   workflow_dispatch:
     inputs:
       days:
@@ -30,8 +28,10 @@ jobs:
     steps:
       - name: マッチを実行（完了までページループ・遅いページはスキップして継続）
         run: |
+          # 定時は1日3回（11/15/17時）とも実行する＝daily ガードは付けない。
+          # 各回 offset=0・days=1 で「当日分」をクリーン再生成する。
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            days=1; guard="&daily=1"; offset=0
+            days=1; guard=""; offset=0
           else
             days="${{ github.event.inputs.days }}"; guard=""; offset="${{ github.event.inputs.startOffset }}"
           fi
