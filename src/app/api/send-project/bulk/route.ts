@@ -30,13 +30,16 @@ export async function POST(req: NextRequest) {
       });
       if (!prep.ok) return { ...pair, status: "skipped", reason: prep.error };
       if (prep.mail.lastSentAt) return { ...pair, status: "skipped", reason: "送信済み" };
+      // 画面で編集した内容があればそれを送る（無ければサーバ生成）。
+      const subject = pair.subject?.trim() || prep.mail.subject;
+      const text = pair.text?.trim() || prep.mail.text;
       await sendAndLogProjectInfo({
         orgId: org.id,
         talentId: pair.talentId,
         projectId: pair.projectId,
         to: prep.mail.to,
-        subject: prep.mail.subject,
-        text: prep.mail.text,
+        subject,
+        text,
         inReplyTo: prep.mail.inReplyTo,
       });
       return { ...pair, status: "sent", to: prep.mail.to };

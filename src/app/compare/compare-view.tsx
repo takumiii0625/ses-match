@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Send } from "lucide-react";
 import { dedupeLatest, talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { Badge, statusTone } from "@/components/ui/badge";
@@ -74,6 +74,7 @@ export interface ProjectCardVM extends ProjectVM {
   proposable: boolean;
   channelNote: string | null;
   locationOk: boolean | null;
+  sentInfoAt: string | null; // 案件案内メール送信済み日時（未送信なら null）
 }
 
 /** 右ペインの人材カード（案件起点）。 */
@@ -84,6 +85,7 @@ export interface TalentCardVM extends TalentVM {
   proposable: boolean;
   channelNote: string | null;
   locationOk: boolean | null;
+  sentInfoAt: string | null; // 案件案内メール送信済み日時（未送信なら null）
 }
 
 function fmtDate(iso: string | null): string {
@@ -226,32 +228,61 @@ interface EmailInfo {
   fallback: string | null;
 }
 
-// ---------- メール送信タブ（案件→人材の案内メールを確認して送る） ----------
-// メール本文はマッチ時に整形・キャッシュ済み（Project.formattedBody）なので、
-// タブを開いたら自動で読み込み即表示する（その場でLLM生成＝待ち時間を出さない）。
-// 未キャッシュ（古い案件等）の場合のみ初回にLLM整形が走る。
+// ---------- メール送信の状態管理（一覧で編集・選択・一斉送信を統括） ----------
+// メール本文はマッチ時に整形・キャッシュ済み（Project.formattedBody）なので即表示できる。
+// 各メールは件名・本文を画面で編集でき、編集内容のまま単体/一斉送信できる。
 type SendPair = { talentId: string; projectId: string };
 
-function SendTab({ pair }: { pair: SendPair }) {
-  const [loading, setLoading] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mail, setMail] = useState<{ to: string; subject: string; text: string } | null>(null);
-  const [lastSentAt, setLastSentAt] = useState<string | null>(null);
-  const [sentTo, setSentTo] = useState<string | null>(null);
-  const autoLoaded = useRef(false);
+function pairKey(p: SendPair): string {
+  return `${p.talentId}:${p.projectId}`;
+}
 
-  // タブを開いた時に一度だけ自動で内容を読み込む。
-  useEffect(() => {
-    if (autoLoaded.current) return;
-    autoLoaded.current = true;
-    loadPreview();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+interface MailState {
+  to: string;
+  subject: string;
+  text: string;
+  origSubject: string; // 再生成・リセット用の元値
+  origText: string;
+  lastSentAt: string | null;
+  loading: boolean;
+  error: string | null;
+  sentTo: string | null;
+}
 
-  async function loadPreview(regenerate = false) {
-    setLoading(true);
-    setError(null);
+interface SendController {
+  get: (key: string) => MailState | undefined;
+  selected: Set<string>;
+  bulkSending: boolean;
+  loadOne: (pair: SendPair, regenerate?: boolean) => void;
+  update: (key: string, patch: Partial<Pick<MailState, "subject" | "text">>) => void;
+  reset: (key: string) => void;
+  sendOne: (pair: SendPair) => Promise<void>;
+  toggleSelect: (key: string) => void;
+}
+
+function useSendController(): SendController & {
+  loadMany: (pairs: SendPair[]) => Promise<void>;
+  selectMany: (keys: string[], on: boolean) => void;
+  clearSelection: () => void;
+  sendSelected: (pairs: SendPair[]) => Promise<void>;
+  bulkMsg: { tone: "ok" | "err"; text: string } | null;
+} {
+  const [mails, setMails] = useState<Map<string, MailState>>(new Map());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  const patchMail = (key: string, patch: Partial<MailState>) =>
+    setMails((cur) => {
+      const next = new Map(cur);
+      const prev = next.get(key) ?? EMPTY_MAIL;
+      next.set(key, { ...prev, ...patch });
+      return next;
+    });
+
+  async function loadOne(pair: SendPair, regenerate = false) {
+    const key = pairKey(pair);
+    patchMail(key, { loading: true, error: null });
     try {
       const res = await fetch("/api/send-project", {
         method: "POST",
@@ -260,93 +291,297 @@ function SendTab({ pair }: { pair: SendPair }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "プレビューの取得に失敗しました");
-      setMail({ to: data.to, subject: data.subject, text: data.text });
-      setLastSentAt(data.lastSentAt ?? null);
+      patchMail(key, {
+        to: data.to,
+        subject: data.subject,
+        text: data.text,
+        origSubject: data.subject,
+        origText: data.text,
+        lastSentAt: data.lastSentAt ?? null,
+        loading: false,
+        error: null,
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
+      patchMail(key, { loading: false, error: e instanceof Error ? e.message : String(e) });
     }
   }
 
-  async function send() {
-    if (!mail || lastSentAt) return; // 送信済みは再送不可
-    if (!window.confirm(`${mail.to} 宛に案件案内メールを送信します。よろしいですか？`)) return;
-    setSending(true);
-    setError(null);
+  async function loadMany(pairs: SendPair[]) {
+    const targets = pairs.filter((p) => {
+      const m = mails.get(pairKey(p));
+      return !m || (!m.to && !m.loading);
+    });
+    if (targets.length === 0) return;
+    for (const p of targets) patchMail(pairKey(p), { loading: true, error: null });
+    try {
+      const res = await fetch("/api/send-project/preview-batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairs: targets }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "一括読込に失敗しました");
+      for (const it of data.items as Array<{
+        talentId: string;
+        projectId: string;
+        ok: boolean;
+        to?: string;
+        subject?: string;
+        text?: string;
+        lastSentAt?: string | null;
+        error?: string;
+      }>) {
+        const key = `${it.talentId}:${it.projectId}`;
+        if (it.ok) {
+          patchMail(key, {
+            to: it.to ?? "",
+            subject: it.subject ?? "",
+            text: it.text ?? "",
+            origSubject: it.subject ?? "",
+            origText: it.text ?? "",
+            lastSentAt: it.lastSentAt ?? null,
+            loading: false,
+            error: null,
+          });
+        } else {
+          patchMail(key, { loading: false, error: it.error ?? "読込に失敗しました" });
+        }
+      }
+    } catch (e) {
+      for (const p of targets)
+        patchMail(pairKey(p), { loading: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+
+  function update(key: string, patch: Partial<Pick<MailState, "subject" | "text">>) {
+    patchMail(key, patch);
+  }
+  function reset(key: string) {
+    setMails((cur) => {
+      const next = new Map(cur);
+      const prev = next.get(key);
+      if (prev) next.set(key, { ...prev, subject: prev.origSubject, text: prev.origText });
+      return next;
+    });
+  }
+
+  async function sendOne(pair: SendPair) {
+    const key = pairKey(pair);
+    const m = mails.get(key);
+    if (!m || m.lastSentAt || m.sentTo) return;
+    if (!window.confirm(`${m.to} 宛に案件案内メールを送信します。よろしいですか？`)) return;
+    patchMail(key, { loading: true, error: null });
     try {
       const res = await fetch("/api/send-project", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pair),
+        body: JSON.stringify({ ...pair, subject: m.subject, text: m.text }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "送信に失敗しました");
-      setSentTo(mail.to);
+      patchMail(key, { loading: false, sentTo: m.to });
+      setSelected((cur) => {
+        const next = new Set(cur);
+        next.delete(key);
+        return next;
+      });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setSending(false);
+      patchMail(key, { loading: false, error: e instanceof Error ? e.message : String(e) });
     }
   }
 
-  if (sentTo) {
+  function toggleSelect(key: string) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+  function selectMany(keys: string[], on: boolean) {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      for (const k of keys) {
+        if (on) next.add(k);
+        else next.delete(k);
+      }
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelected(new Set());
+  }
+
+  async function sendSelected(allPairs: SendPair[]) {
+    if (bulkSending || selected.size === 0) return;
+    const pairs = allPairs.filter((p) => selected.has(pairKey(p)));
+    if (pairs.length === 0) return;
+    if (!window.confirm(`選択した ${pairs.length} 件の案件案内メールを送信します。よろしいですか？`)) return;
+    setBulkSending(true);
+    setBulkMsg(null);
+    // 編集済み内容があれば一緒に送る。
+    const payloadPairs = pairs.map((p) => {
+      const m = mails.get(pairKey(p));
+      return m ? { ...p, subject: m.subject, text: m.text } : p;
+    });
+    try {
+      const res = await fetch("/api/send-project/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairs: payloadPairs }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "一斉送信に失敗しました");
+      // 結果を各メールに反映（sent→送信済みに）。
+      for (const r of (data.results ?? []) as Array<{
+        talentId: string;
+        projectId: string;
+        status: string;
+        to?: string;
+      }>) {
+        if (r.status === "sent") {
+          patchMail(`${r.talentId}:${r.projectId}`, { sentTo: r.to ?? "" });
+        }
+      }
+      const parts = [`送信 ${data.sent}件`];
+      if (data.skipped) parts.push(`スキップ ${data.skipped}件`);
+      if (data.failed) parts.push(`失敗 ${data.failed}件`);
+      setBulkMsg({ tone: data.failed ? "err" : "ok", text: parts.join(" / ") });
+      clearSelection();
+    } catch (e) {
+      setBulkMsg({ tone: "err", text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setBulkSending(false);
+    }
+  }
+
+  return {
+    get: (key) => mails.get(key),
+    selected,
+    bulkSending,
+    bulkMsg,
+    loadOne,
+    loadMany,
+    update,
+    reset,
+    sendOne,
+    toggleSelect,
+    selectMany,
+    clearSelection,
+    sendSelected,
+  };
+}
+
+const EMPTY_MAIL: MailState = {
+  to: "",
+  subject: "",
+  text: "",
+  origSubject: "",
+  origText: "",
+  lastSentAt: null,
+  loading: false,
+  error: null,
+  sentTo: null,
+};
+
+/** 編集可能なメール送信パネル（一覧の各アイテム内に表示）。controller で状態を共有。 */
+function SendPanel({ pair, controller }: { pair: SendPair; controller: SendController }) {
+  const key = pairKey(pair);
+  const m = controller.get(key);
+  const autoLoaded = useRef(false);
+
+  // タブを開いた時に一度だけ自動で内容を読み込む（編集や一括読込で既にあれば再取得しない）。
+  useEffect(() => {
+    if (autoLoaded.current) return;
+    autoLoaded.current = true;
+    if (!m || (!m.to && !m.loading)) controller.loadOne(pair);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (m?.sentTo) {
     return (
       <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-        ✅ {sentTo} 宛に送信しました。
+        ✅ {m.sentTo} 宛に送信しました。
       </div>
     );
   }
 
+  const dirty = !!m && (m.subject !== m.origSubject || m.text !== m.origText);
+  const loading = m?.loading ?? false;
+
   return (
     <div className="space-y-3">
-      {error && (
+      {m?.error && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
+          {m.error}
         </div>
       )}
-      {!mail ? (
+      {!m || (!m.to && loading) ? (
+        <p className="py-6 text-center text-sm text-slate-500">メール内容を読み込み中…</p>
+      ) : !m.to ? (
         <div className="py-6 text-center">
-          {loading ? (
-            <p className="text-sm text-slate-500">メール内容を読み込み中…</p>
-          ) : (
-            <button
-              onClick={() => loadPreview()}
-              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
-            >
-              メール内容を表示
-            </button>
-          )}
+          <button
+            onClick={() => controller.loadOne(pair)}
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+          >
+            メール内容を表示
+          </button>
         </div>
       ) : (
         <>
-          {lastSentAt && (
+          {m.lastSentAt && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-              ⚠️ {fmtDate(lastSentAt)} に送信済みです。再送信はできません。
+              ⚠️ {fmtDate(m.lastSentAt)} に送信済みです。再送信はできません。
             </div>
           )}
-          <div className="space-y-1 rounded-lg bg-slate-50 p-3 text-sm">
-            <MetaRow label="To:" value={mail.to} />
-            <MetaRow label="件名:" value={mail.subject} />
+          <div className="rounded-lg bg-slate-50 p-3 text-sm">
+            <MetaRow label="To:" value={m.to} />
           </div>
-          <div className="whitespace-pre-wrap break-words rounded-lg border border-border p-3 text-sm leading-relaxed text-slate-700">
-            {mail.text}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-500">件名</label>
+            <input
+              value={m.subject}
+              onChange={(e) => controller.update(key, { subject: e.target.value })}
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
           </div>
-          <div className="flex items-center justify-end gap-2">
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <label className="text-xs font-medium text-slate-500">本文</label>
+              {dirty && <span className="text-xs text-amber-600">編集済み</span>}
+            </div>
+            <textarea
+              value={m.text}
+              onChange={(e) => controller.update(key, { text: e.target.value })}
+              rows={12}
+              className="w-full resize-y rounded-lg border border-border px-3 py-2 font-mono text-[13px] leading-relaxed text-slate-700 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {dirty && (
+              <button
+                onClick={() => controller.reset(key)}
+                disabled={loading}
+                className="rounded-lg border border-border px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                編集を戻す
+              </button>
+            )}
             <button
-              onClick={() => loadPreview(true)}
+              onClick={() => controller.loadOne(pair, true)}
               disabled={loading}
               className="rounded-lg border border-border px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              title="AIで本文を作り直します（編集内容は破棄）"
             >
-              {loading ? "再生成中…" : "再生成"}
+              {loading ? "処理中…" : "AIで再生成"}
             </button>
-            {!lastSentAt && (
+            {!m.lastSentAt && (
               <button
-                onClick={send}
-                disabled={sending}
+                onClick={() => controller.sendOne(pair)}
+                disabled={loading}
                 className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
               >
-                {sending ? "送信中…" : "このメールを送信"}
+                {loading ? "送信中…" : "このメールを送信"}
               </button>
             )}
           </div>
@@ -363,6 +598,7 @@ function DetailTabsBody({
   detail,
   match,
   sendPair,
+  sendController,
   skillSheet,
   scrollAll = false,
 }: {
@@ -371,6 +607,7 @@ function DetailTabsBody({
   detail: React.ReactNode;
   match?: { score: number; reasons: string[] }; // 指定時「マッチング項目」タブを表示
   sendPair?: SendPair; // 指定時「メール送信」タブを表示（案件→人材の案内メール）
+  sendController?: SendController; // メール送信の共有状態（編集・一斉送信用）
   // 指定時「スキルシート」タブを表示（人材のみ）。null/空文字は「スキルシートなし」表示。
   skillSheet?: string | null;
   // true: サマリ+タブ+本文を1つのスクロール領域にまとめる（左ペイン用＝本文を広く読める）。
@@ -378,8 +615,10 @@ function DetailTabsBody({
   scrollAll?: boolean;
 }) {
   const hasEmail = !!(email.body || email.from || email.subject);
+  const canSend = !!(sendPair && sendController);
+  // メール送信できる場合は最初から「メール送信」タブを開く（編集→送信の動線を最短に）。
   const [tab, setTab] = useState<"mail" | "detail" | "match" | "send" | "sheet">(
-    hasEmail ? "mail" : "detail",
+    canSend ? "send" : hasEmail ? "mail" : "detail",
   );
 
   const tabBtn = (key: "mail" | "detail" | "match" | "send" | "sheet", label: string) => (
@@ -405,7 +644,7 @@ function DetailTabsBody({
         {tabBtn("mail", "メール本文")}
         {tabBtn("detail", "詳細情報")}
         {match && tabBtn("match", "マッチング項目")}
-        {sendPair && tabBtn("send", "メール送信")}
+        {canSend && tabBtn("send", "メール送信")}
         {skillSheet !== undefined && tabBtn("sheet", "スキルシート")}
       </div>
 
@@ -435,7 +674,9 @@ function DetailTabsBody({
         ) : tab === "detail" ? (
           detail
         ) : tab === "send" ? (
-          sendPair && <SendTab pair={sendPair} />
+          sendPair && sendController ? (
+            <SendPanel pair={sendPair} controller={sendController} />
+          ) : null
         ) : tab === "sheet" ? (
           skillSheet?.trim() ? (
             <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">
@@ -567,36 +808,68 @@ function AccordionItem({
   onToggle,
   header,
   detail,
+  sendController,
+  selectable,
+  selected,
+  sentInfoAt,
+  onToggleSelect,
 }: {
   top: boolean;
   open: boolean;
   onToggle: () => void;
   header: React.ReactNode;
   detail: { summary: React.ReactNode; email: EmailInfo; detailNode: React.ReactNode; match: { score: number; reasons: string[] }; editHref: string; sendPair?: SendPair; skillSheet?: string | null };
+  sendController?: SendController;
+  selectable?: boolean; // 一斉送信のチェック対象に出来るか（送信済みは不可）
+  selected?: boolean;
+  sentInfoAt?: string | null;
+  onToggleSelect?: () => void;
 }) {
+  // 送信済み（サーバ既知 or この画面で送信済み）か。
+  const sentInPanel = detail.sendPair && sendController?.get(pairKey(detail.sendPair))?.sentTo;
+  const isSent = !!sentInfoAt || !!sentInPanel;
   return (
     <div
-      className={`overflow-hidden rounded-xl border ${
+      className={`overflow-hidden rounded-xl border transition-colors ${
         open
           ? "border-primary/40 ring-1 ring-primary/20"
-          : top
-            ? "border-amber-300"
-            : "border-border"
-      } ${top && !open ? "bg-amber-50/60" : "bg-white"}`}
+          : selected
+            ? "border-primary/50 bg-primary/5"
+            : top
+              ? "border-amber-300"
+              : "border-border"
+      } ${top && !open && !selected ? "bg-amber-50/60" : selected ? "" : "bg-white"}`}
     >
-      <button
-        onClick={onToggle}
-        className="block w-full p-4 text-left transition-colors hover:bg-slate-50"
-      >
-        <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2 p-4">
+        {/* 一斉送信チェック（送信済みは✓表示） */}
+        {detail.sendPair && (
+          <div className="flex w-5 shrink-0 justify-center pt-1" onClick={(e) => e.stopPropagation()}>
+            {isSent ? (
+              <span className="text-emerald-500" title="送信済み">✓</span>
+            ) : (
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={!!selected}
+                disabled={!selectable}
+                onChange={onToggleSelect}
+                title="一斉送信に選択"
+              />
+            )}
+          </div>
+        )}
+        <button
+          onClick={onToggle}
+          className="-m-1 flex min-w-0 flex-1 items-start gap-2 rounded-lg p-1 text-left transition-colors hover:bg-slate-50"
+        >
           <div className="min-w-0 flex-1">{header}</div>
           <ChevronDown
             className={`mt-1 h-4 w-4 shrink-0 text-slate-400 transition-transform ${
               open ? "rotate-180" : ""
             }`}
           />
-        </div>
-      </button>
+        </button>
+      </div>
       {open && (
         <div className="border-t border-border">
           <DetailTabsBody
@@ -605,6 +878,7 @@ function AccordionItem({
             detail={detail.detailNode}
             match={detail.match}
             sendPair={detail.sendPair}
+            sendController={sendController}
             skillSheet={detail.skillSheet}
           />
           <div className="border-t border-border px-5 py-2 text-right">
@@ -782,16 +1056,118 @@ function RightPane({
     [talents],
   );
 
-  const count = mode === "talent" ? dedupProjects.length : dedupTalents.length;
+  const controller = useSendController();
+
+  // mode 非依存の統一行配列（ツールバー・一斉送信を共通で扱う）。
+  const rows = useMemo(() => {
+    if (mode === "talent") {
+      return dedupProjects.map(({ item: p, dupes }, i) => {
+        const pair: SendPair = { talentId: selfId, projectId: p.id };
+        return {
+          key: pairKey(pair),
+          id: p.id,
+          matchId: p.matchId,
+          top: i === 0,
+          dupes,
+          pair,
+          sentInfoAt: p.sentInfoAt,
+          header: projectHeader(p, i === 0, dupes),
+          detail: {
+            summary: projectSummary(p),
+            email: projectEmail(p),
+            detailNode: noteDetail(p.description, "概要"),
+            match: { score: p.score, reasons: p.reasons },
+            editHref: `/projects/${p.id}`,
+            sendPair: pair,
+          },
+        };
+      });
+    }
+    return dedupTalents.map(({ item: t, dupes }, i) => {
+      const pair: SendPair = { talentId: t.id, projectId: selfId };
+      return {
+        key: pairKey(pair),
+        id: t.id,
+        matchId: t.matchId,
+        top: i === 0,
+        dupes,
+        pair,
+        sentInfoAt: t.sentInfoAt,
+        header: talentHeader(t, i === 0, dupes),
+        detail: {
+          summary: talentSummary(t),
+          email: talentEmail(t),
+          detailNode: noteDetail(t.note, "備考情報"),
+          match: { score: t.score, reasons: t.reasons },
+          editHref: `/talent/${t.id}`,
+          sendPair: pair,
+          skillSheet: t.summaryText,
+        },
+      };
+    });
+  }, [mode, dedupProjects, dedupTalents, selfId]);
+
+  const count = rows.length;
   const title = mode === "talent" ? "対象案件リスト" : "対象人材リスト";
+
+  // 送信済みでない＝一斉送信に選べる行。
+  const isRowSent = (r: (typeof rows)[number]) =>
+    !!r.sentInfoAt || !!controller.get(r.key)?.sentTo;
+  const eligible = rows.filter((r) => !isRowSent(r));
+  const eligibleKeys = eligible.map((r) => r.key);
+  const allSelected =
+    eligibleKeys.length > 0 && eligibleKeys.every((k) => controller.selected.has(k));
+  const allPairs = rows.map((r) => r.pair);
 
   return (
     <Card className="flex min-h-0 flex-col overflow-hidden p-0">
       <div className="border-b border-border px-5 py-3">
-        <span className="text-base font-bold text-slate-800">{title}</span>
-        <span className="ml-2 text-sm text-muted">{count}件</span>
-        <span className="ml-2 text-xs text-slate-400">クリックで本文・詳細を開閉</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-base font-bold text-slate-800">{title}</span>
+          <span className="text-sm text-muted">{count}件</span>
+          {eligible.length > 0 && (
+            <span className="text-xs text-slate-400">／ 未送信 {eligible.length}件</span>
+          )}
+        </div>
+        {/* メール一括ツールバー */}
+        {eligible.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300"
+                checked={allSelected}
+                onChange={() => controller.selectMany(eligibleKeys, !allSelected)}
+              />
+              すべて選択
+            </label>
+            <button
+              onClick={() => controller.loadMany(eligible.map((r) => r.pair))}
+              className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50"
+              title="未送信メールの内容をまとめて読み込み、編集・確認できます"
+            >
+              メールを一括読込
+            </button>
+            {controller.selected.size > 0 && (
+              <span className="text-xs font-medium text-primary">
+                {controller.selected.size}件選択中
+              </span>
+            )}
+          </div>
+        )}
+        {controller.bulkMsg && (
+          <div
+            className={`mt-2 rounded-lg px-3 py-1.5 text-xs ${
+              controller.bulkMsg.tone === "err"
+                ? "bg-red-50 text-red-700"
+                : "bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            一括送信の結果: {controller.bulkMsg.text}
+          </div>
+        )}
       </div>
+
       <div className="flex-1 space-y-3 overflow-y-auto p-4">
         {count === 0 ? (
           <div className="py-16 text-center text-sm text-muted">
@@ -801,45 +1177,47 @@ function RightPane({
             </Link>
             してください。
           </div>
-        ) : mode === "talent" ? (
-          dedupProjects.map(({ item: p, dupes }, i) => (
-            <AccordionItem
-              key={p.matchId}
-              top={i === 0}
-              open={openIds.has(p.id)}
-              onToggle={() => toggle(p.id)}
-              header={projectHeader(p, i === 0, dupes)}
-              detail={{
-                summary: projectSummary(p),
-                email: projectEmail(p),
-                detailNode: noteDetail(p.description, "概要"),
-                match: { score: p.score, reasons: p.reasons },
-                editHref: `/projects/${p.id}`,
-                sendPair: { talentId: selfId, projectId: p.id },
-              }}
-            />
-          ))
         ) : (
-          dedupTalents.map(({ item: t, dupes }, i) => (
+          rows.map((r) => (
             <AccordionItem
-              key={t.matchId}
-              top={i === 0}
-              open={openIds.has(t.id)}
-              onToggle={() => toggle(t.id)}
-              header={talentHeader(t, i === 0, dupes)}
-              detail={{
-                summary: talentSummary(t),
-                email: talentEmail(t),
-                detailNode: noteDetail(t.note, "備考情報"),
-                match: { score: t.score, reasons: t.reasons },
-                editHref: `/talent/${t.id}`,
-                sendPair: { talentId: t.id, projectId: selfId },
-                skillSheet: t.summaryText,
-              }}
+              key={r.key}
+              top={r.top}
+              open={openIds.has(r.id)}
+              onToggle={() => toggle(r.id)}
+              header={r.header}
+              detail={r.detail}
+              sendController={controller}
+              selectable={!isRowSent(r)}
+              selected={controller.selected.has(r.key)}
+              sentInfoAt={r.sentInfoAt}
+              onToggleSelect={() => controller.toggleSelect(r.key)}
             />
           ))
         )}
       </div>
+
+      {/* 一斉送信バー（選択中のみ表示） */}
+      {controller.selected.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-white px-5 py-3">
+          <button
+            onClick={controller.clearSelection}
+            disabled={controller.bulkSending}
+            className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
+          >
+            選択解除
+          </button>
+          <button
+            onClick={() => controller.sendSelected(allPairs)}
+            disabled={controller.bulkSending}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            {controller.bulkSending
+              ? "送信中…"
+              : `選択した ${controller.selected.size} 件を送信`}
+          </button>
+        </div>
+      )}
     </Card>
   );
 }

@@ -7,11 +7,20 @@ export const maxDuration = 60;
 export async function POST(req: NextRequest) {
   try {
     const org = await getCurrentOrg();
-    const { talentId, projectId, preview, regenerate } = (await req.json()) as {
+    const {
+      talentId,
+      projectId,
+      preview,
+      regenerate,
+      subject: subjectOverride,
+      text: textOverride,
+    } = (await req.json()) as {
       talentId?: string;
       projectId?: string;
       preview?: boolean;
       regenerate?: boolean; // true: 整形キャッシュを使わずLLMで再整形してキャッシュ更新
+      subject?: string; // 画面で編集した件名（送信時に優先）
+      text?: string; // 画面で編集した本文（送信時に優先）
     };
     if (!talentId || !projectId) {
       return NextResponse.json(
@@ -46,8 +55,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 画面で編集した内容があればそれを送る（無ければサーバ生成）。
+    const finalSubject = subjectOverride?.trim() || subject;
+    const finalText = textOverride?.trim() || text;
     try {
-      const { id } = await sendAndLogProjectInfo({ orgId: org.id, talentId, projectId, to, subject, text, inReplyTo });
+      const { id } = await sendAndLogProjectInfo({
+        orgId: org.id,
+        talentId,
+        projectId,
+        to,
+        subject: finalSubject,
+        text: finalText,
+        inReplyTo,
+      });
       return NextResponse.json({ ok: true, id, to });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

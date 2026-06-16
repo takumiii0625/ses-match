@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
+import { buildSentInfoMap } from "../matches/serialize";
 import {
   CompareView,
   type CompareMode,
@@ -20,6 +21,8 @@ export default async function ComparePage({ searchParams }: PageProps) {
   const { mode: modeParam, talentId, projectId } = await searchParams;
   const mode: CompareMode = modeParam === "project" ? "project" : "talent";
   const org = await getCurrentOrg();
+  // 案件案内メールの送信済み状態（talentId#projectId → 送信日時ISO）。
+  const sentMap = await buildSentInfoMap(org.id);
 
   let options: { value: string; label: string }[] = [];
   let talentVM: TalentVM | null = null;
@@ -74,6 +77,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
           proposable: m.proposable,
           channelNote: m.channelNote,
           locationOk: m.locationOk,
+          sentInfoAt: sentMap.get(`${t.id}#${m.project.id}`) ?? null,
           id: m.project.id,
           title: m.project.title,
           clientName: m.project.clientName,
@@ -140,6 +144,7 @@ export default async function ComparePage({ searchParams }: PageProps) {
           proposable: m.proposable,
           channelNote: m.channelNote,
           locationOk: m.locationOk,
+          sentInfoAt: sentMap.get(`${m.talent.id}#${p.id}`) ?? null,
           id: m.talent.id,
           name: m.talent.name,
           talentType: m.talent.talentType,

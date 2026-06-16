@@ -8,6 +8,9 @@ const BULK_CONCURRENCY = 3;
 export interface Pair {
   talentId: string;
   projectId: string;
+  // 任意: 画面で編集した送信内容（指定時はサーバ生成より優先して送る）。
+  subject?: string;
+  text?: string;
 }
 export type BulkStatus = "sent" | "skipped" | "failed";
 export interface PairResult extends Pair {
@@ -32,7 +35,10 @@ export function normalizePairs(raw: unknown): Pair[] {
     const key = `${p.talentId}:${p.projectId}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    pairs.push({ talentId: p.talentId, projectId: p.projectId });
+    const pair: Pair = { talentId: p.talentId, projectId: p.projectId };
+    if (typeof p.subject === "string" && p.subject.trim()) pair.subject = p.subject;
+    if (typeof p.text === "string" && p.text.trim()) pair.text = p.text;
+    pairs.push(pair);
   }
   return pairs;
 }
