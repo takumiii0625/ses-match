@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Kerykeion（ヘルメスの翼ある杖）を象ったロゴマーク。 */
+/** カドゥケウス（杖＋絡み合う2匹の蛇＋翼）の定番ロゴ。 */
 function CaduceusMark({ className }: { className?: string }) {
   return (
     <svg
@@ -38,20 +38,26 @@ function CaduceusMark({ className }: { className?: string }) {
       className={className}
       fill="none"
       stroke="currentColor"
-      strokeWidth={1.5}
+      strokeWidth={1.2}
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
     >
-      <circle cx="12" cy="5.2" r="1.55" fill="currentColor" stroke="none" />
-      <path d="M12 7v12" />
-      <path d="M10.6 8.4C8.3 7.1 5.7 7 3.9 8.3" />
-      <path d="M10.7 10.6C8.5 9.5 6.2 9.6 4.6 10.9" />
-      <path d="M10.9 12.8C8.9 11.9 7 12.1 5.6 13.3" />
-      <path d="M13.4 8.4C15.7 7.1 18.3 7 20.1 8.3" />
-      <path d="M13.3 10.6C15.5 9.5 17.8 9.6 19.4 10.9" />
-      <path d="M13.1 12.8C15.1 11.9 17 12.1 18.4 13.3" />
-      <path d="M10.5 19h3" />
+      {/* 杖 */}
+      <path d="M12 4.6V20" />
+      {/* 頂部の球 */}
+      <circle cx="12" cy="3.6" r="1.05" fill="currentColor" stroke="none" />
+      {/* 翼（左右） */}
+      <path d="M11.4 5C9 4 6.4 4 4.6 4.8" />
+      <path d="M11.5 6.1C9.3 5.4 7 5.5 5.3 6.2" />
+      <path d="M12.6 5C15 4 17.6 4 19.4 4.8" />
+      <path d="M12.5 6.1C14.7 5.4 17 5.5 18.7 6.2" />
+      {/* 絡み合う2匹の蛇 */}
+      <path d="M11 6.8C8.8 7.8 8.8 9 12 9.8C15.2 10.6 15.2 12 12 12.8C8.8 13.6 8.8 15 12 15.8C15.2 16.6 14.8 18 12 18.8" />
+      <path d="M13 6.8C15.2 7.8 15.2 9 12 9.8C8.8 10.6 8.8 12 12 12.8C15.2 13.6 15.2 15 12 15.8C8.8 16.6 9.2 18 12 18.8" />
+      {/* 蛇の頭 */}
+      <circle cx="11" cy="6.4" r="0.85" fill="currentColor" stroke="none" />
+      <circle cx="13" cy="6.4" r="0.85" fill="currentColor" stroke="none" />
     </svg>
   );
 }
@@ -154,7 +160,7 @@ export function Sidebar({
         )}
         title="Kerykeion"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 text-white shadow-sm ring-1 ring-black/5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-yellow-800 text-white shadow-sm ring-1 ring-black/5">
           <CaduceusMark className="h-[22px] w-[22px]" />
         </span>
         {expanded && (
@@ -218,7 +224,7 @@ export function Sidebar({
             expanded ? "px-2" : "justify-center px-0",
           )}
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500 text-sm font-medium text-white">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-600 text-sm font-medium text-white">
             {userName.slice(0, 1)}
           </span>
           {expanded && (
