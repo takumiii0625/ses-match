@@ -109,6 +109,7 @@ export interface RankedCandidate {
   locationOk?: boolean; // 勤務地/リモート条件が両立するか（false=不一致でマッチ除外）
   ageOk?: boolean; // 年齢制限を満たすか（false=制限オーバーでマッチ除外）
   nationalityOk?: boolean; // 国籍要件を満たすか（false=外国籍不可なのに外国籍でマッチ除外）
+  rateOk?: boolean; // 単価が成立するか（false=人材希望が案件上限を明確に超過でマッチ除外）
 }
 
 export interface AIService {

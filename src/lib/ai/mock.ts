@@ -244,6 +244,7 @@ export class MockAIService implements AIService {
         locationOk: true, // モックは勤務地判定をしない（除外しない）
         ageOk: true, // モックは年齢制限判定をしない（除外しない）
         nationalityOk: true, // モックは国籍判定をしない（除外しない）
+        rateOk: true, // モックは単価判定をしない（除外しない）
       };
     });
     return ranked.sort((a, b) => b.score - a.score);

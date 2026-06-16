@@ -194,9 +194,10 @@ async function rankAndSave(
     if (r.score < MIN_SCORE) continue;
     // 勤務地・勤務形態（常駐/リモート/出社頻度）が両立しない場合はマッチを作らない（除外）。
     if (r.locationOk === false) continue;
-    // 年齢制限オーバー／国籍要件（外国籍不可）に該当する場合もマッチを作らない（除外）。
+    // 年齢制限オーバー／国籍要件（外国籍不可）／単価が明確不成立の場合もマッチを作らない（除外）。
     if (r.ageOk === false) continue;
     if (r.nationalityOk === false) continue;
+    if (r.rateOk === false) continue;
     const reasons = [
       ...r.strengths,
       ...r.concerns.map((c) => `懸念: ${c}`),
