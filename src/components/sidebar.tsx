@@ -126,7 +126,7 @@ export function Sidebar({
           "flex items-center gap-3 rounded-xl px-2.5 transition-colors",
           expanded ? "h-10 w-full" : "h-11 w-11 justify-center",
           active
-            ? "bg-blue-50 text-primary"
+            ? "bg-amber-50 text-primary"
             : "text-slate-400 hover:bg-slate-100 hover:text-slate-600",
         )}
       >
@@ -154,7 +154,7 @@ export function Sidebar({
         )}
         title="Kerykeion"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-500 text-white shadow-sm ring-1 ring-black/5">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 text-white shadow-sm ring-1 ring-black/5">
           <CaduceusMark className="h-[22px] w-[22px]" />
         </span>
         {expanded && (
@@ -218,7 +218,7 @@ export function Sidebar({
             expanded ? "px-2" : "justify-center px-0",
           )}
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-500 text-sm font-medium text-white">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-500 text-sm font-medium text-white">
             {userName.slice(0, 1)}
           </span>
           {expanded && (

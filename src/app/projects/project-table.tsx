@@ -35,7 +35,7 @@ export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }
         </span>
         <Link
           href="/projects/new"
-          className="inline-flex items-center justify-center h-8 px-3 text-xs font-medium rounded-lg bg-primary text-white hover:bg-blue-600 transition-colors"
+          className="inline-flex items-center justify-center h-8 px-3 text-xs font-medium rounded-lg bg-primary text-white hover:bg-primary/90 transition-colors"
         >
           ＋ 新規案件登録
         </Link>

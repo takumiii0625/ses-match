@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f4f6fb;
-  --foreground: #1f2433;
+  --background: #faf9f4; /* 温かみのある白 */
+  --foreground: #2a2620;
   --card: #ffffff;
-  --border: #e6e9f2;
-  --primary: #2f6df6;
-  --muted: #6b7280;
+  --border: #ece6d6; /* 金寄りの淡いボーダー */
+  --primary: #bd9a1c; /* 金 */
+  --muted: #6f6b60;
 }
 
 @theme inline {
