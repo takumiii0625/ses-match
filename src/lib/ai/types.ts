@@ -85,6 +85,7 @@ export interface MatchCandidateInput {
   talentId: string;
   name: string;
   age?: number | null;
+  nationality?: string | null; // 国籍（外国籍不可の案件の足切りに使用）
   talentType?: string | null;
   affiliation?: string | null; // 所属（商流上の立場。例: "1社先正社員"）
   skills: string[];
@@ -106,6 +107,8 @@ export interface RankedCandidate {
   channelOk: boolean; // 商流的に提案可能か（弊社が入ると+1。支援費があれば飛ばせる）
   channelNote: string; // 商流判定の理由（提案不可ならその根拠）
   locationOk?: boolean; // 勤務地/リモート条件が両立するか（false=不一致でマッチ除外）
+  ageOk?: boolean; // 年齢制限を満たすか（false=制限オーバーでマッチ除外）
+  nationalityOk?: boolean; // 国籍要件を満たすか（false=外国籍不可なのに外国籍でマッチ除外）
 }
 
 export interface AIService {

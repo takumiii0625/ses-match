@@ -256,6 +256,16 @@ const MATCH_SCHEMA = {
             description:
               "勤務地と勤務形態（常駐/リモート/出社頻度）の両方が両立するか。明らかに両立しない（案件が常駐必須で人材がリモート希望・遠方で出社不可／案件の出社頻度に人材が応じられない等）場合のみ false。リモート可・通勤圏・出社応相談など対応可能性があれば true。不明も true。",
           },
+          ageOk: {
+            type: "boolean",
+            description:
+              "案件の年齢制限を満たすか。案件に年齢の上限/下限（例「〜40歳」「45歳まで」「40代以下」「20〜35歳」等）が明記されていて、人材の年齢がその範囲を外れる場合のみ false（厳しく判定する）。年齢制限の記載がない、または人材の年齢が不明な場合は true。",
+          },
+          nationalityOk: {
+            type: "boolean",
+            description:
+              "案件の国籍要件を満たすか。案件に「日本国籍のみ」「外国籍不可」「国籍不問だが日本語ネイティブ必須」等の国籍制限が明記されていて、人材が外国籍（国籍が日本以外）の場合のみ false。国籍制限の記載がない、または人材の国籍が日本/不明の場合は true。",
+          },
         },
         required: [
           "talentId",
@@ -267,6 +277,8 @@ const MATCH_SCHEMA = {
           "channelOk",
           "channelNote",
           "locationOk",
+          "ageOk",
+          "nationalityOk",
         ],
       },
     },
@@ -579,7 +591,7 @@ export class AnthropicAIService implements AIService {
       .map((c) =>
         [
           `- talentId: ${c.talentId}`,
-          `  氏名: ${c.name} / 年齢: ${c.age ?? "?"} / 区分: ${c.talentType ?? "?"} / 所属: ${c.affiliation ?? "?"}`,
+          `  氏名: ${c.name} / 年齢: ${c.age ?? "?"} / 国籍: ${c.nationality ?? "?"} / 区分: ${c.talentType ?? "?"} / 所属: ${c.affiliation ?? "?"}`,
           `  スキル: ${c.skills.join(", ") || "(不明)"}`,
           `  希望単価: ${c.desiredRateMin ?? "?"}〜${c.desiredRateMax ?? "?"}万`,
           `  リモート希望: ${c.remotePreference ?? "?"}`,

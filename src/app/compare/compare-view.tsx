@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown } from "lucide-react";
@@ -227,7 +227,9 @@ interface EmailInfo {
 }
 
 // ---------- メール送信タブ（案件→人材の案内メールを確認して送る） ----------
-// プレビューはオンデマンド生成（LLM整形のため、展開のたびに自動生成しない＝コスト対策）。
+// メール本文はマッチ時に整形・キャッシュ済み（Project.formattedBody）なので、
+// タブを開いたら自動で読み込み即表示する（その場でLLM生成＝待ち時間を出さない）。
+// 未キャッシュ（古い案件等）の場合のみ初回にLLM整形が走る。
 type SendPair = { talentId: string; projectId: string };
 
 function SendTab({ pair }: { pair: SendPair }) {
@@ -237,6 +239,15 @@ function SendTab({ pair }: { pair: SendPair }) {
   const [mail, setMail] = useState<{ to: string; subject: string; text: string } | null>(null);
   const [lastSentAt, setLastSentAt] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const autoLoaded = useRef(false);
+
+  // タブを開いた時に一度だけ自動で内容を読み込む。
+  useEffect(() => {
+    if (autoLoaded.current) return;
+    autoLoaded.current = true;
+    loadPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loadPreview(regenerate = false) {
     setLoading(true);
@@ -296,16 +307,16 @@ function SendTab({ pair }: { pair: SendPair }) {
       )}
       {!mail ? (
         <div className="py-6 text-center">
-          <p className="mb-3 text-sm text-slate-500">
-            送信するメールの内容（件名・本文）を生成して確認できます。
-          </p>
-          <button
-            onClick={() => loadPreview()}
-            disabled={loading}
-            className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
-          >
-            {loading ? "生成中…" : "メール内容を表示"}
-          </button>
+          {loading ? (
+            <p className="text-sm text-slate-500">メール内容を読み込み中…</p>
+          ) : (
+            <button
+              onClick={() => loadPreview()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+            >
+              メール内容を表示
+            </button>
+          )}
         </div>
       ) : (
         <>

@@ -8,6 +8,7 @@ import {
 } from "@/lib/matching";
 import { getAI } from "@/lib/ai";
 import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
+import { pregenerateProjectBodies } from "@/lib/email/project-mail";
 
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
 export const MIN_SCORE = 80;
@@ -18,6 +19,7 @@ const TALENT_MATCH_SELECT = {
   id: true,
   name: true,
   age: true,
+  nationality: true,
   talentType: true,
   kishaOk: true,
   affiliation: true,
@@ -136,6 +138,7 @@ function toCandidateInput(t: Talent): MatchCandidateInput {
     talentId: t.id,
     name: t.name,
     age: t.age,
+    nationality: t.nationality,
     talentType: t.talentType,
     affiliation: t.affiliation,
     skills: [...new Set([...t.mainSkills, ...t.skills])],
@@ -148,13 +151,18 @@ function toCandidateInput(t: Talent): MatchCandidateInput {
   };
 }
 
-/** 組織のマッチ判定プロンプト（未設定なら null＝AI実装側の組み込みデフォルト）。 */
-async function resolveMatchPrompt(orgId: string): Promise<string | undefined> {
+/** 組織のマッチ判定プロンプト＋案件メール整形プロンプト（未設定なら null）。 */
+async function resolveOrgPrompts(
+  orgId: string,
+): Promise<{ matchPrompt: string | undefined; projectEmailPrompt: string | null }> {
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
-    select: { matchPrompt: true },
+    select: { matchPrompt: true, projectEmailPrompt: true },
   });
-  return org?.matchPrompt ?? undefined;
+  return {
+    matchPrompt: org?.matchPrompt ?? undefined,
+    projectEmailPrompt: org?.projectEmailPrompt ?? null,
+  };
 }
 
 /**
@@ -181,6 +189,9 @@ async function rankAndSave(
     if (r.score < MIN_SCORE) continue;
     // 勤務地・勤務形態（常駐/リモート/出社頻度）が両立しない場合はマッチを作らない（除外）。
     if (r.locationOk === false) continue;
+    // 年齢制限オーバー／国籍要件（外国籍不可）に該当する場合もマッチを作らない（除外）。
+    if (r.ageOk === false) continue;
+    if (r.nationalityOk === false) continue;
     const reasons = [
       ...r.strengths,
       ...r.concerns.map((c) => `懸念: ${c}`),
@@ -252,7 +263,7 @@ export async function runMatchingForOrg(
     ? { orgId, talentType: "INHOUSE" as const }
     : talentWindowWhere(orgId, since);
 
-  const [projectsRaw, talents, systemPrompt] = await Promise.all([
+  const [projectsRaw, talents, prompts] = await Promise.all([
     // ページングを安定させるため作成日昇順で固定。必要列のみ取得（転送量削減）。
     prisma.project.findMany({
       where: { orgId, receivedDate: { gte: since } },
@@ -263,8 +274,9 @@ export async function runMatchingForOrg(
       where: talentWhere,
       select: TALENT_MATCH_SELECT,
     }) as unknown as Promise<Talent[]>,
-    resolveMatchPrompt(orgId),
+    resolveOrgPrompts(orgId),
   ]);
+  const systemPrompt = prompts.matchPrompt;
 
   // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
   // 「貴社社員/貴社まで」案件は除外せず残し、候補を自社人材だけに絞る（下で対応）。
@@ -288,27 +300,37 @@ export async function runMatchingForOrg(
 
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
-    slice.map((project) => {
+    slice.map(async (project) => {
       const candidates = restrictCandidatesByChannel(
         talents.filter((t) => !isSameCompany(t, project)),
         project,
       );
-      return rankAndSave(project, candidates, systemPrompt);
+      const r = await rankAndSave(project, candidates, systemPrompt);
+      return { projectId: project.id, ...r };
     }),
   );
 
   let saved = 0;
   let pairs = 0;
   let errors = 0;
+  const matchedProjectIds: string[] = [];
   for (const s of settled) {
     if (s.status === "fulfilled") {
       pairs += s.value.pairs;
       saved += s.value.saved;
+      if (s.value.saved > 0) matchedProjectIds.push(s.value.projectId);
     } else {
       errors++;
       console.error("[match] 案件のLLM判定に失敗:", s.reason);
     }
   }
+
+  // マッチした案件の案内メール本文を先に整形してキャッシュ（見比べ「メール送信」タブを即表示にする）。
+  await pregenerateProjectBodies({
+    orgId,
+    projectIds: matchedProjectIds,
+    projectEmailPrompt: prompts.projectEmailPrompt,
+  }).catch((e) => console.error("[match] メール本文の事前生成に失敗:", e));
 
   const processed = Math.min(offset + slice.length, projectsAll.length);
   return {
@@ -346,7 +368,7 @@ export async function runMatchingForNew(
   }
 
   const since = windowStart();
-  const [projectsRaw, talents, systemPrompt] = await Promise.all([
+  const [projectsRaw, talents, prompts] = await Promise.all([
     prisma.project.findMany({
       where: { orgId, receivedDate: { gte: since } },
       select: PROJECT_MATCH_SELECT,
@@ -355,8 +377,9 @@ export async function runMatchingForNew(
       where: talentWindowWhere(orgId, since),
       select: TALENT_MATCH_SELECT,
     }) as unknown as Promise<Talent[]>,
-    resolveMatchPrompt(orgId),
+    resolveOrgPrompts(orgId),
   ]);
+  const systemPrompt = prompts.matchPrompt;
 
   // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
   const projects = dedupeProjectsForMatch(projectsRaw);
@@ -376,27 +399,37 @@ export async function runMatchingForNew(
     .filter(({ pool }) => pool.length > 0);
 
   const settled = await Promise.allSettled(
-    targets.map(({ project, pool }) => {
+    targets.map(async ({ project, pool }) => {
       const candidates = restrictCandidatesByChannel(
         pool.filter((t) => !isSameCompany(t, project)),
         project,
       );
-      return rankAndSave(project, candidates, systemPrompt);
+      const r = await rankAndSave(project, candidates, systemPrompt);
+      return { projectId: project.id, ...r };
     }),
   );
 
   let saved = 0;
   let pairs = 0;
   let errors = 0;
+  const matchedProjectIds: string[] = [];
   for (const s of settled) {
     if (s.status === "fulfilled") {
       pairs += s.value.pairs;
       saved += s.value.saved;
+      if (s.value.saved > 0) matchedProjectIds.push(s.value.projectId);
     } else {
       errors++;
       console.error("[match] 案件のLLM判定に失敗:", s.reason);
     }
   }
+
+  // マッチした案件の案内メール本文を先に整形してキャッシュ（見比べ「メール送信」タブを即表示にする）。
+  await pregenerateProjectBodies({
+    orgId,
+    projectIds: matchedProjectIds,
+    projectEmailPrompt: prompts.projectEmailPrompt,
+  }).catch((e) => console.error("[match] メール本文の事前生成に失敗:", e));
 
   return {
     projects: projects.length,
