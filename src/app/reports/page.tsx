@@ -1,6 +1,7 @@
 import { getCurrentOrg } from "@/lib/current-org";
 import { prisma } from "@/lib/prisma";
 import { Card } from "@/components/ui/card";
+import { companyDomain } from "@/lib/matching";
 import {
   TALENT_STATUS_LABELS,
   PROJECT_STATUS_LABELS,
@@ -173,8 +174,18 @@ export default async function ReportsPage() {
   const { todayStart, monthStart } = jstBoundaries();
 
   // Run all independent queries in parallel
-  const [talents, projectGroups, matchCount, proposalGroups, aiToday, aiMonth] =
-    await Promise.all([
+  const [
+    talents,
+    projectGroups,
+    matchCount,
+    proposalGroups,
+    aiToday,
+    aiMonth,
+    sendersAll,
+    sendersToday,
+    partnerCompanies,
+    ngCompanies,
+  ] = await Promise.all([
       // All talent lightweight fields
       prisma.talent.findMany({
         where: { orgId },
@@ -214,6 +225,25 @@ export default async function ReportsPage() {
         where: { createdAt: { gte: monthStart } },
         _sum: { cost: true },
       }),
+      // うち宛にメールを送ってきた送信元（全期間・差出人別の件数）。
+      prisma.ingestedEmail.groupBy({
+        by: ["fromAddr"],
+        where: { orgId },
+        _count: { _all: true },
+      }),
+      // 今日の送信元（差出人別）。
+      prisma.ingestedEmail.groupBy({
+        by: ["fromAddr"],
+        where: { orgId, createdAt: { gte: todayStart } },
+        _count: { _all: true },
+      }),
+      // 表示名引き当て用（提携先会社のドメイン→会社名）。
+      prisma.partnerCompany.findMany({
+        where: { orgId, domain: { not: null } },
+        select: { name: true, domain: true },
+      }),
+      // NG企業ドメイン（送信元一覧でのNG表示用）。
+      prisma.ngCompany.findMany({ where: { orgId }, select: { domain: true } }),
     ]);
 
   // -- AI cost aggregates --
@@ -226,6 +256,48 @@ export default async function ReportsPage() {
       calls: g._count._all,
     }))
     .sort((a, b) => b.cost - a.cost);
+
+  // -- メール送信元の会社集計（差出人ドメイン＝会社で名寄せ） --
+  const domainNameMap = new Map<string, string>();
+  for (const c of partnerCompanies) {
+    const d = (c.domain ?? "").toLowerCase();
+    if (d && !domainNameMap.has(d)) domainNameMap.set(d, c.name);
+  }
+  const ngDomainSet = new Set(ngCompanies.map((n) => n.domain));
+
+  /** 差出人別件数 → 会社ドメイン別件数に集約（フリーメール/不明は会社として数えない）。 */
+  function aggregateCompanies(
+    rows: { fromAddr: string | null; _count: { _all: number } }[],
+  ): { domains: Map<string, number>; nonCompanyEmails: number } {
+    const domains = new Map<string, number>();
+    let nonCompanyEmails = 0;
+    for (const r of rows) {
+      const d = companyDomain(r.fromAddr);
+      if (!d) {
+        nonCompanyEmails += r._count._all;
+        continue;
+      }
+      domains.set(d, (domains.get(d) ?? 0) + r._count._all);
+    }
+    return { domains, nonCompanyEmails };
+  }
+
+  const allAgg = aggregateCompanies(sendersAll);
+  const todayAgg = aggregateCompanies(sendersToday);
+  const distinctCompanies = allAgg.domains.size;
+  const totalCompanyEmails = [...allAgg.domains.values()].reduce((s, n) => s + n, 0);
+  const todayCompanies = todayAgg.domains.size;
+  const todayCompanyEmails = [...todayAgg.domains.values()].reduce((s, n) => s + n, 0);
+
+  const topSenders = [...allAgg.domains.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([domain, count]) => ({
+      domain,
+      name: domainNameMap.get(domain) ?? null,
+      count,
+      isNg: ngDomainSet.has(domain),
+    }));
 
   // -- KPI aggregates --
 
@@ -386,6 +458,46 @@ export default async function ReportsPage() {
           </div>
         </Section>
       )}
+
+      {/* メール送信元の会社 */}
+      <Section title="メール送信元の会社">
+        <div className="flex flex-wrap gap-x-8 gap-y-2">
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">{distinctCompanies}</div>
+            <div className="mt-1 text-xs text-muted">送信元の会社数（全期間・累計 {totalCompanyEmails}通）</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">{todayCompanies}</div>
+            <div className="mt-1 text-xs text-muted">今日メールがあった会社数（{todayCompanyEmails}通）</div>
+          </div>
+        </div>
+        <div className="mt-2">
+          <div className="mb-2 text-xs font-medium text-slate-500">メールが多い送信元 Top15（ドメイン＝会社で名寄せ）</div>
+          {topSenders.length === 0 ? (
+            <p className="py-2 text-sm text-muted">データなし</p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {topSenders.map((s) => (
+                <li key={s.domain} className="flex items-center gap-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium text-slate-800">{s.name || s.domain}</span>
+                    {s.name && <span className="ml-2 font-mono text-xs text-slate-500">{s.domain}</span>}
+                    {s.isNg && (
+                      <span className="ml-2 inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-700">
+                        NG
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 tabular-nums font-semibold text-slate-700">{s.count}通</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-xs text-muted">
+            ※ 差出人メールのドメインで会社を識別（フリーメールは会社数に含めません）。
+          </p>
+        </div>
+      </Section>
 
       {/* Status breakdowns */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
