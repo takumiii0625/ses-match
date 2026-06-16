@@ -7,6 +7,7 @@ import type { ProposalStatus } from "@prisma/client";
 import { STAGE_KEYS, type StageKey } from "@/lib/pipeline";
 import { ProposalPipeline, type PipelineVM } from "./pipeline-table";
 import { RejectedTable, type RejectedVM } from "./rejected-table";
+import { ProposalSearch } from "./proposal-search";
 
 export const metadata = { title: "提案管理 — SES Match" };
 export const dynamic = "force-dynamic";
@@ -32,6 +33,9 @@ export default async function ProposalsPage(props: {
   const sp = await props.searchParams;
   const tabParam = (typeof sp.tab === "string" ? sp.tab : "") as Tab;
   const tab: Tab = ["pipeline", "rejected", "proposals"].includes(tabParam) ? tabParam : "pipeline";
+  const q = (typeof sp.q === "string" ? sp.q : "").trim().toLowerCase();
+  const matchQ = (...parts: (string | null | undefined)[]) =>
+    !q || parts.filter(Boolean).join(" ").toLowerCase().includes(q);
   const org = await getCurrentOrg();
 
   // --- メール送信したマッチ（パイプライン） ---
@@ -92,7 +96,8 @@ export default async function ProposalsPage(props: {
       };
     })
     .sort((a, b) => b.sortMs - a.sortMs)
-    .map((x) => x.row);
+    .map((x) => x.row)
+    .filter((r) => matchQ(r.projectTitle, r.clientName, r.talentName));
 
   // --- 差し戻し済み ---
   const rejectedMatches = await prisma.match.findMany({
@@ -103,20 +108,22 @@ export default async function ProposalsPage(props: {
     },
     orderBy: { rejectedAt: "desc" },
   });
-  const rejectedRows: RejectedVM[] = rejectedMatches.map((m) => ({
-    id: m.id,
-    score: m.score,
-    talentId: m.talent.id,
-    talentName: m.talent.name,
-    projectId: m.project.id,
-    projectTitle: m.project.title,
-    clientName: m.project.clientName,
-    rejectedAt: m.rejectedAt ? m.rejectedAt.toISOString() : null,
-    rejectReason: m.rejectReason,
-  }));
+  const rejectedRows: RejectedVM[] = rejectedMatches
+    .map((m) => ({
+      id: m.id,
+      score: m.score,
+      talentId: m.talent.id,
+      talentName: m.talent.name,
+      projectId: m.project.id,
+      projectTitle: m.project.title,
+      clientName: m.project.clientName,
+      rejectedAt: m.rejectedAt ? m.rejectedAt.toISOString() : null,
+      rejectReason: m.rejectReason,
+    }))
+    .filter((r) => matchQ(r.projectTitle, r.clientName, r.talentName));
 
   // --- 提案文（既存 Proposal） ---
-  const proposals = await prisma.proposal.findMany({
+  const proposalsAll = await prisma.proposal.findMany({
     where: { orgId: org.id },
     include: {
       talent: { select: { id: true, name: true } },
@@ -124,6 +131,9 @@ export default async function ProposalsPage(props: {
     },
     orderBy: { createdAt: "desc" },
   });
+  const proposals = proposalsAll.filter((p) =>
+    matchQ(p.project.title, p.project.clientName, p.talent.name),
+  );
 
   const tabs: { value: Tab; label: string; count: number }[] = [
     { value: "pipeline", label: "パイプライン", count: pipelineRows.length },
@@ -133,21 +143,28 @@ export default async function ProposalsPage(props: {
 
   return (
     <div className="flex min-h-full flex-col gap-5 p-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-slate-800">提案管理</h1>
         <Link href="/matches" className="text-sm text-primary hover:underline">
           マッチ一覧へ →
         </Link>
       </div>
 
+      {/* 検索 */}
+      <ProposalSearch initial={typeof sp.q === "string" ? sp.q : ""} />
+
       {/* タブ */}
       <div className="flex flex-wrap gap-1 border-b border-border">
         {tabs.map((t) => {
           const active = tab === t.value;
+          const params = new URLSearchParams();
+          if (t.value !== "pipeline") params.set("tab", t.value);
+          if (q) params.set("q", typeof sp.q === "string" ? sp.q : "");
+          const qs = params.toString();
           return (
             <Link
               key={t.value}
-              href={t.value === "pipeline" ? "/proposals" : `/proposals?tab=${t.value}`}
+              href={qs ? `/proposals?${qs}` : "/proposals"}
               className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
                 active ? "border-b-2 border-primary text-primary" : "text-slate-500 hover:text-slate-700"
               }`}

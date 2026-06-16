@@ -91,7 +91,6 @@ export function TalentTable({ talents, total, favoriteTalentIds = new Set() }: T
           <Link href="/talent/new">
             <Button variant="primary" size="sm">新規人材登録</Button>
           </Link>
-          <Button variant="outline" size="sm">公開リンク</Button>
           <Button variant="danger" size="sm" disabled={selected.size === 0}>一括削除</Button>
           <Button variant="outline" size="sm">表示項目</Button>
         </div>
