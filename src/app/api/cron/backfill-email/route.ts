@@ -11,7 +11,13 @@ async function handle(req: Request) {
   try {
     const url = new URL(req.url);
     const limit = Number(url.searchParams.get("limit") ?? "200");
-    const result = await backfillEmailBodies(Number.isFinite(limit) ? limit : 200);
+    const offset = Number(url.searchParams.get("offset") ?? "0");
+    // overwrite=1 で既存 emailBody も再取得・上書き（HTML抽出改善の反映）。
+    const overwrite = ["1", "true"].includes(url.searchParams.get("overwrite") ?? "");
+    const result = await backfillEmailBodies(Number.isFinite(limit) ? limit : 200, {
+      overwrite,
+      offset: Number.isFinite(offset) ? offset : 0,
+    });
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

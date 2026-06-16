@@ -3,6 +3,7 @@ import type { gmail_v1 } from "googleapis";
 import { extractText, getDocumentProxy } from "unpdf";
 import { prisma } from "@/lib/prisma";
 import type { EmailAttachment } from "@/lib/ai/types";
+import { htmlToText, pickRicherBody } from "./html-text";
 
 /**
  * PDFバイト列からテキストを抽出する。テキストPDFなら成功し、LLMには
@@ -137,16 +138,6 @@ function walkParts(
   for (const p of part.parts ?? []) walkParts(p, out);
 }
 
-function stripHtml(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/\s+\n/g, "\n")
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
-}
 
 /** 今日(JST)の日付を Gmail 用 YYYY/MM/DD で返す。 */
 function jstTodayStr(): string {
@@ -250,11 +241,10 @@ async function parseMessage(
     } catch {}
   }
 
-  const text =
-    acc.text.join("\n").trim() ||
-    stripHtml(acc.html.join("\n")) ||
-    msg.data.snippet ||
-    "";
+  // 本文は「プレーン」と「HTML由来」から情報量の多い方を採用（リッチHTMLの取りこぼし対策）。
+  const plain = acc.text.join("\n").trim();
+  const htmlText = htmlToText(acc.html.join("\n"));
+  const text = pickRicherBody(plain, htmlText) || msg.data.snippet || "";
   const dateStr = header(headers, "Date");
   return {
     gmailId: id,

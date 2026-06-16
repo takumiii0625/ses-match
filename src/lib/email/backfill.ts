@@ -13,9 +13,15 @@ export interface BackfillResult {
 /**
  * 既存の取り込み済みレコード（IngestedEmail）について、Gmailから本文/From/To を
  * 取り直し、対応する Talent / Project の emailBody 等を補完する。
- * 既に emailBody が入っているものはスキップ。
+ * - 既定: emailBody が空のものだけ補完（既存はスキップ）。
+ * - overwrite=true: 既存の emailBody も再取得して上書き（HTML抽出の改善などを反映）。
+ *   案件は整形キャッシュ(formattedBody)もクリアし、案内メールが新本文で作り直される。
  */
-export async function backfillEmailBodies(limit = 200): Promise<BackfillResult> {
+export async function backfillEmailBodies(
+  limit = 200,
+  opts: { overwrite?: boolean; offset?: number } = {},
+): Promise<BackfillResult> {
+  const overwrite = opts.overwrite === true;
   const org = await getCurrentOrg();
   const result: BackfillResult = {
     scanned: 0,
@@ -33,26 +39,29 @@ export async function backfillEmailBodies(limit = 200): Promise<BackfillResult> 
     },
     orderBy: { createdAt: "desc" },
     take: limit,
+    skip: Math.max(0, opts.offset ?? 0),
   });
 
   for (const rec of records) {
     result.scanned++;
 
-    // 既に本文が入っていればスキップ
-    if (rec.talentId) {
-      const t = await prisma.talent.findUnique({
-        where: { id: rec.talentId },
-        select: { emailBody: true },
-      });
-      if (!t) { result.skipped++; continue; }
-      if (t.emailBody) { result.skipped++; continue; }
-    } else if (rec.projectId) {
-      const p = await prisma.project.findUnique({
-        where: { id: rec.projectId },
-        select: { emailBody: true },
-      });
-      if (!p) { result.skipped++; continue; }
-      if (p.emailBody) { result.skipped++; continue; }
+    // overwrite でなければ、既に本文が入っているものはスキップ。
+    if (!overwrite) {
+      if (rec.talentId) {
+        const t = await prisma.talent.findUnique({
+          where: { id: rec.talentId },
+          select: { emailBody: true },
+        });
+        if (!t) { result.skipped++; continue; }
+        if (t.emailBody) { result.skipped++; continue; }
+      } else if (rec.projectId) {
+        const p = await prisma.project.findUnique({
+          where: { id: rec.projectId },
+          select: { emailBody: true },
+        });
+        if (!p) { result.skipped++; continue; }
+        if (p.emailBody) { result.skipped++; continue; }
+      }
     }
 
     try {
@@ -70,7 +79,11 @@ export async function backfillEmailBodies(limit = 200): Promise<BackfillResult> 
         await prisma.talent.update({ where: { id: rec.talentId }, data });
         result.updatedTalents++;
       } else if (rec.projectId) {
-        await prisma.project.update({ where: { id: rec.projectId }, data });
+        // 本文が変わるので整形キャッシュをクリア（案内メールが新本文で作り直される）。
+        await prisma.project.update({
+          where: { id: rec.projectId },
+          data: overwrite ? { ...data, formattedBody: null } : data,
+        });
         result.updatedProjects++;
       }
     } catch {
