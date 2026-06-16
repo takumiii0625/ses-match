@@ -10,7 +10,7 @@ import {
   SegmentBar,
 } from "./charts";
 
-export const metadata = { title: "分析 — SES Match" };
+export const metadata = { title: "分析 — Hermes" };
 export const dynamic = "force-dynamic";
 
 const DAY = 24 * 60 * 60 * 1000;

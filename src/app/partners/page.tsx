@@ -3,7 +3,7 @@ import { getCurrentOrg } from "@/lib/current-org";
 import { parsePartnerFilters, buildPartnerWhere, buildPartnerOrderBy } from "@/lib/data/partner";
 import { PartnerList, type PartnerRow } from "./partner-list";
 
-export const metadata = { title: "提携先会社 — SES Match" };
+export const metadata = { title: "提携先会社 — Hermes" };
 export const dynamic = "force-dynamic";
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;

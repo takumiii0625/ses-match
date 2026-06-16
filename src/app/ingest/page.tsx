@@ -1,7 +1,7 @@
 import { IngestForm } from "./ingest-form";
 
 export const metadata = {
-  title: "メール取り込み | SES Match",
+  title: "メール取り込み | Hermes",
 };
 
 export default function IngestPage() {

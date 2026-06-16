@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { MatchesList } from "./matches-list";
 import { toMatchVM, matchVmSelect, buildSentInfoMap } from "./serialize";
 
-export const metadata = { title: "マッチ一覧 — SES Match" };
+export const metadata = { title: "マッチ一覧 — Hermes" };
 export const dynamic = "force-dynamic";
 
 const DAY = 24 * 60 * 60 * 1000;

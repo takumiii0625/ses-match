@@ -24,12 +24,37 @@ import {
   UsersRound,
   Ban,
   Settings,
-  Droplet,
   ChevronRight,
   ChevronLeft,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** Hermes（ヘルメス）の翼ある杖＝カドゥケウスを象ったロゴマーク。 */
+function HermesMark({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="12" cy="5.2" r="1.55" fill="currentColor" stroke="none" />
+      <path d="M12 7v12" />
+      <path d="M10.6 8.4C8.3 7.1 5.7 7 3.9 8.3" />
+      <path d="M10.7 10.6C8.5 9.5 6.2 9.6 4.6 10.9" />
+      <path d="M10.9 12.8C8.9 11.9 7 12.1 5.6 13.3" />
+      <path d="M13.4 8.4C15.7 7.1 18.3 7 20.1 8.3" />
+      <path d="M13.3 10.6C15.5 9.5 17.8 9.6 19.4 10.9" />
+      <path d="M13.1 12.8C15.1 11.9 17 12.1 18.4 13.3" />
+      <path d="M10.5 19h3" />
+    </svg>
+  );
+}
 
 interface NavItem {
   href: string;
@@ -124,16 +149,19 @@ export function Sidebar({
       <Link
         href="/in-house-talent"
         className={cn(
-          "mb-4 flex items-center gap-2",
+          "mb-4 flex items-center gap-2.5",
           expanded ? "px-1" : "justify-center",
         )}
-        title="SES Match"
+        title="Hermes"
       >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-white">
-          <Droplet className="h-5 w-5" />
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-500 text-white shadow-sm ring-1 ring-black/5">
+          <HermesMark className="h-[22px] w-[22px]" />
         </span>
         {expanded && (
-          <span className="text-sm font-bold text-slate-800">SES Match</span>
+          <span className="flex flex-col leading-none">
+            <span className="text-[15px] font-bold tracking-tight text-slate-800">Hermes</span>
+            <span className="mt-0.5 text-[10px] font-medium text-slate-400">人材・案件マッチング</span>
+          </span>
         )}
       </Link>
 
