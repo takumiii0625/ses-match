@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     if (!prep.ok) {
       return NextResponse.json({ error: prep.error }, { status: prep.status });
     }
-    const { to, subject, text, lastSentAt } = prep.mail;
+    const { to, subject, text, lastSentAt, inReplyTo } = prep.mail;
 
     // プレビュー: 送信もログもせず、件名・本文・宛先＋送信済み情報を返す（見比べ画面の確認用）。
     if (preview) {
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-      const { id } = await sendAndLogProjectInfo({ orgId: org.id, talentId, projectId, to, subject, text });
+      const { id } = await sendAndLogProjectInfo({ orgId: org.id, talentId, projectId, to, subject, text, inReplyTo });
       return NextResponse.json({ ok: true, id, to });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

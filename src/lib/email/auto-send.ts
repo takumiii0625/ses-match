@@ -137,6 +137,7 @@ export async function runAutoSendProjectInfo(
         to: prep.mail.to,
         subject: prep.mail.subject,
         text: prep.mail.text,
+        inReplyTo: prep.mail.inReplyTo,
       });
       base.sent++;
       budget--;

@@ -18,6 +18,7 @@ export interface SendMailInput {
   to: string;
   subject: string;
   text: string;
+  headers?: Record<string, string>; // In-Reply-To / References 等（返信スレッド化用）
 }
 
 /**
@@ -65,6 +66,7 @@ export async function sendMail(input: SendMailInput): Promise<{ id: string | nul
     subject: sanitizeHeader(input.subject),
     text: input.text,
     html: textToHtml(input.text),
+    headers: input.headers,
   });
   if (error) throw new Error(error.message ?? "メール送信に失敗しました");
   return { id: data?.id ?? null };

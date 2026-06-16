@@ -15,6 +15,28 @@ export interface PreparedProjectMail {
   subject: string;
   text: string;
   lastSentAt: Date | null; // この人材×案件に過去送信した最新日時（未送信なら null）
+  // 元の人材メール(IngestedEmail)のRFC Message-ID。あれば返信スレッドに繋げる（null=新規メール）。
+  inReplyTo: string | null;
+}
+
+/** RFC Message-ID を In-Reply-To/References 用に山括弧で包む（未包なら包む）。 */
+function asMessageId(id: string): string {
+  const t = id.trim();
+  if (!t) return t;
+  return t.startsWith("<") ? t : `<${t}>`;
+}
+
+/** 返信スレッド化のメールヘッダ（In-Reply-To/References）を作る。 */
+export function buildReplyHeaders(inReplyTo: string | null): Record<string, string> | undefined {
+  if (!inReplyTo) return undefined;
+  const mid = asMessageId(inReplyTo);
+  return { "In-Reply-To": mid, References: mid };
+}
+
+/** 既存の件名を返信件名（Re: 〜）にする。既に Re: が付いていれば二重に付けない。 */
+function toReplySubject(original: string): string {
+  const s = original.trim();
+  return /^re:/i.test(s) ? s : `Re: ${s}`;
 }
 
 export type PrepareResult =
@@ -89,7 +111,7 @@ export async function prepareProjectInfoMail(opts: {
 }): Promise<PrepareResult> {
   const { orgId, projectEmailPrompt, talentId, projectId, regenerate } = opts;
 
-  const [talent, project, lastSent] = await Promise.all([
+  const [talent, project, lastSent, sourceMail] = await Promise.all([
     prisma.talent.findFirst({
       where: { id: talentId, orgId },
       select: {
@@ -99,6 +121,7 @@ export async function prepareProjectInfoMail(opts: {
         emailFrom: true,
         contactName: true,
         emailBody: true,
+        emailSubject: true,
       },
     }),
     prisma.project.findFirst({
@@ -109,6 +132,12 @@ export async function prepareProjectInfoMail(opts: {
       where: { orgId, talentId, projectId, kind: "PROJECT_INFO", status: "SENT" },
       orderBy: { createdAt: "desc" },
       select: { createdAt: true },
+    }),
+    // 元の人材メール（取込元）。あれば返信スレッドに繋げる（In-Reply-To/References）。
+    prisma.ingestedEmail.findFirst({
+      where: { orgId, talentId },
+      orderBy: { createdAt: "desc" },
+      select: { messageId: true, subject: true },
     }),
   ]);
 
@@ -138,7 +167,7 @@ export async function prepareProjectInfoMail(opts: {
     }
   }
 
-  const { subject, text } = buildProjectEmail({
+  const { subject: defaultSubject, text } = buildProjectEmail({
     talentName: talent.name,
     contactFrom: talent.emailFrom,
     contactName: talent.contactName,
@@ -147,7 +176,17 @@ export async function prepareProjectInfoMail(opts: {
     projectBlock: block,
   });
 
-  return { ok: true, mail: { to, subject, text, lastSentAt: lastSent?.createdAt ?? null } };
+  // 元の人材メールがあれば「返信」として送る: 件名を Re:（元の件名）に、In-Reply-To を付与。
+  // Gmail等は References ヘッダ＋件名一致でスレッド表示するため、件名も元メール基準にする。
+  // 取込元が無い（手動登録など）場合は従来どおり新規メール（【案件のご案内】…）で送る。
+  const inReplyTo = sourceMail?.messageId ?? null;
+  const origSubject = (sourceMail?.subject ?? talent.emailSubject ?? "").trim();
+  const subject = inReplyTo && origSubject ? toReplySubject(origSubject) : defaultSubject;
+
+  return {
+    ok: true,
+    mail: { to, subject, text, lastSentAt: lastSent?.createdAt ?? null, inReplyTo },
+  };
 }
 
 /** 案件案内メールを送信し、SentEmail に記録する。失敗時は FAILED を記録して throw。 */
@@ -158,10 +197,11 @@ export async function sendAndLogProjectInfo(opts: {
   to: string;
   subject: string;
   text: string;
+  inReplyTo?: string | null; // 指定時は元メールへの返信としてスレッド化して送る
 }): Promise<{ id: string | null }> {
-  const { orgId, talentId, projectId, to, subject, text } = opts;
+  const { orgId, talentId, projectId, to, subject, text, inReplyTo } = opts;
   try {
-    const { id } = await sendMail({ to, subject, text });
+    const { id } = await sendMail({ to, subject, text, headers: buildReplyHeaders(inReplyTo ?? null) });
     await prisma.sentEmail.create({
       data: { orgId, talentId, projectId, kind: "PROJECT_INFO", toAddr: to, subject, body: text, status: "SENT" },
     });
