@@ -11,6 +11,7 @@ import {
   type SendPair,
   type SendController,
 } from "@/components/send-mail";
+import { formatSkillSheetText } from "@/lib/skillsheet-format";
 import { dedupeLatest, talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { Badge, statusTone } from "@/components/ui/badge";
@@ -325,7 +326,7 @@ function DetailTabsBody({
         ) : tab === "sheet" ? (
           skillSheet?.trim() ? (
             <div className="whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">
-              {skillSheet}
+              {formatSkillSheetText(skillSheet)}
             </div>
           ) : (
             <p className="py-8 text-center text-sm text-slate-400">スキルシートなし</p>

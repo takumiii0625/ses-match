@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileText, ExternalLink } from "lucide-react";
 import { extractSheetLinks } from "@/lib/sheet-links";
+import { formatSkillSheetText } from "@/lib/skillsheet-format";
 
 interface SkillSheetData {
   summaryText: string;
@@ -95,7 +96,7 @@ export function SkillSheetView({ talentId }: { talentId: string }) {
       {/* 抽出テキスト（PDF/Officeをテキスト化したもの） */}
       {hasText && (
         <div className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-slate-50 p-3 text-[13px] leading-relaxed text-slate-700">
-          {data.summaryText}
+          {formatSkillSheetText(data.summaryText)}
         </div>
       )}
     </div>

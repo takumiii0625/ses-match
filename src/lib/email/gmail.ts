@@ -1,6 +1,6 @@
 import { google } from "googleapis";
 import type { gmail_v1 } from "googleapis";
-import { extractText, getDocumentProxy } from "unpdf";
+import { extractTextItems, getDocumentProxy } from "unpdf";
 import { prisma } from "@/lib/prisma";
 import type { EmailAttachment } from "@/lib/ai/types";
 import { htmlToText, pickRicherBody } from "./html-text";
@@ -14,9 +14,28 @@ import { htmlToText, pickRicherBody } from "./html-text";
 async function extractPdfText(bytes: Buffer): Promise<string | undefined> {
   try {
     const pdf = await getDocumentProxy(new Uint8Array(bytes));
-    const { text } = await extractText(pdf, { mergePages: true });
-    const t = (Array.isArray(text) ? text.join("\n") : text)?.trim();
-    return t && t.length > 0 ? t : undefined;
+    // テキスト項目を hasEOL（行末フラグ）付きで取得し、行構造を保持して結合する。
+    // 高レベルの extractText は項目を空白連結し改行が失われ「塊」になるため使わない。
+    const { items } = await extractTextItems(pdf);
+    const pages = items.map((pageItems) => {
+      const lines: string[] = [];
+      let line = "";
+      for (const it of pageItems) {
+        line += it.str ?? "";
+        if (it.hasEOL) {
+          lines.push(line);
+          line = "";
+        }
+      }
+      if (line) lines.push(line);
+      return lines.join("\n");
+    });
+    const t = pages
+      .join("\n\n")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+    return t.length > 0 ? t : undefined;
   } catch {
     return undefined;
   }
