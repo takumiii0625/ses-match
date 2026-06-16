@@ -23,6 +23,7 @@ import {
   ScrollText,
   BarChart3,
   LineChart,
+  FlaskConical,
   UsersRound,
   Settings,
   Droplet,
@@ -71,6 +72,7 @@ const groups: { title: string; items: NavItem[] }[] = [
       { href: "/analytics", label: "分析", icon: LineChart },
       { href: "/reports", label: "レポート", icon: BarChart3 },
       { href: "/members", label: "メンバー", icon: UsersRound },
+      { href: "/test-mail", label: "テスト送信", icon: FlaskConical },
     ],
   },
 ];
