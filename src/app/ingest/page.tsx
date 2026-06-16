@@ -1,7 +1,7 @@
 import { IngestForm } from "./ingest-form";
 
 export const metadata = {
-  title: "メール取り込み | Kerykeion",
+  title: "メール取り込み | Caduceus",
 };
 
 export default function IngestPage() {

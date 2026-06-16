@@ -162,14 +162,14 @@ export function Sidebar({
           "mb-4 flex items-center gap-2.5",
           expanded ? "px-1" : "justify-center",
         )}
-        title="Kerykeion"
+        title="Caduceus"
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-yellow-800 text-white shadow-sm ring-1 ring-black/5">
           <CaduceusMark className="h-[22px] w-[22px]" />
         </span>
         {expanded && (
           <span className="flex flex-col leading-none">
-            <span className="text-[15px] font-bold tracking-tight text-slate-800">Kerykeion</span>
+            <span className="text-[15px] font-bold tracking-tight text-slate-800">Caduceus</span>
             <span className="mt-0.5 text-[10px] font-medium text-slate-400">人材・案件マッチング</span>
           </span>
         )}

@@ -6,7 +6,7 @@ import { InhouseMatchesList } from "./inhouse-list";
 import { toMatchVM, matchVmSelect, buildSentInfoMap, buildSentTalentMap } from "../serialize";
 import { RematchButton } from "../../matching/rematch-button";
 
-export const metadata = { title: "自社保有人材のマッチ — Kerykeion" };
+export const metadata = { title: "自社保有人材のマッチ — Caduceus" };
 export const dynamic = "force-dynamic";
 
 export default async function InhouseMatchesPage() {

@@ -1,7 +1,7 @@
 import { getCurrentOrg } from "@/lib/current-org";
 import { SettingsForm } from "./settings-form";
 
-export const metadata = { title: "設定 — Kerykeion" };
+export const metadata = { title: "設定 — Caduceus" };
 
 export const dynamic = "force-dynamic";
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { NewPartnerForm } from "./new-partner-form";
 
-export const metadata = { title: "提携先を追加 — Kerykeion" };
+export const metadata = { title: "提携先を追加 — Caduceus" };
 
 export default function NewPartnerPage() {
   return (

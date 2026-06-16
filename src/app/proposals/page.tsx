@@ -9,7 +9,7 @@ import { ProposalPipeline, type PipelineVM } from "./pipeline-table";
 import { RejectedTable, type RejectedVM } from "./rejected-table";
 import { ProposalSearch } from "./proposal-search";
 
-export const metadata = { title: "提案管理 — Kerykeion" };
+export const metadata = { title: "提案管理 — Caduceus" };
 export const dynamic = "force-dynamic";
 
 const PROPOSAL_STATUS_LABELS: Record<ProposalStatus, string> = {

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { SentList, type SentRow } from "./sent-list";
 
-export const metadata = { title: "送信履歴 — Kerykeion" };
+export const metadata = { title: "送信履歴 — Caduceus" };
 export const dynamic = "force-dynamic";
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
