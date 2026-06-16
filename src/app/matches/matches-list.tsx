@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Columns2 } from "lucide-react";
+import { Columns2, Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,8 +12,20 @@ import { formatRate, daysAgo } from "@/lib/utils";
 import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { REMOTE_LABELS } from "@/lib/enums";
+import { fetchJson } from "@/lib/http";
 import { ProposalButton } from "../matching/proposal-button";
 import { SendProjectButton } from "../matching/send-project-button";
+
+/** 選択キー（人材×案件）。bulk送信のペアにそのまま使う。 */
+function pairKey(talentId: string, projectId: string): string {
+  return `${talentId}:${projectId}`;
+}
+
+interface BulkSendResult {
+  sent: number;
+  skipped: number;
+  failed: number;
+}
 
 // サーバから渡る軽量ビューモデル（Prisma型から必要分だけ抜き出して直列化）。
 export interface MatchVM {
@@ -125,6 +137,63 @@ export function MatchesList({
   const [minScore, setMinScore] = useState("80");
   // 自社専用ページでは区分フィルタは固定（データが既に自社のみ）。
   const [talentType, setTalentType] = useState("ALL");
+  // 一括送信: 選択中のペア（key→{talentId,projectId}）と送信状態。
+  const [selected, setSelected] = useState<Map<string, { talentId: string; projectId: string }>>(
+    new Map(),
+  );
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  function togglePair(talentId: string, projectId: string) {
+    setSelected((cur) => {
+      const next = new Map(cur);
+      const k = pairKey(talentId, projectId);
+      if (next.has(k)) next.delete(k);
+      else next.set(k, { talentId, projectId });
+      return next;
+    });
+  }
+  function setManyPairs(pairs: { talentId: string; projectId: string }[], on: boolean) {
+    setSelected((cur) => {
+      const next = new Map(cur);
+      for (const p of pairs) {
+        const k = pairKey(p.talentId, p.projectId);
+        if (on) next.set(k, p);
+        else next.delete(k);
+      }
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelected(new Map());
+  }
+
+  async function sendSelected() {
+    if (bulkSending || selected.size === 0) return;
+    const pairs = [...selected.values()];
+    if (!window.confirm(`選択した ${pairs.length} 件に案件案内メールをまとめて送信します。よろしいですか？`))
+      return;
+    setBulkSending(true);
+    setBulkMsg(null);
+    try {
+      const data = await fetchJson<BulkSendResult>("/api/send-project/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairs }),
+      });
+      const parts = [`送信 ${data.sent}件`];
+      if (data.skipped) parts.push(`スキップ ${data.skipped}件`);
+      if (data.failed) parts.push(`失敗 ${data.failed}件`);
+      setBulkMsg({ tone: data.failed ? "err" : "ok", text: parts.join(" / ") });
+      clearSelection();
+      // 送信済みバッジ（sentInfoAt）を反映するため再取得。
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setBulkMsg({ tone: "err", text: e instanceof Error ? e.message : "送信に失敗しました" });
+    } finally {
+      setBulkSending(false);
+    }
+  }
 
   // 配信日の窓はサーバ側で絞るため URL を更新して再取得する。
   function changeDays(v: string) {
@@ -287,6 +356,18 @@ export function MatchesList({
         )}
       </Card>
 
+      {bulkMsg && (
+        <div
+          className={`rounded-lg border px-4 py-2.5 text-sm ${
+            bulkMsg.tone === "err"
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700"
+          }`}
+        >
+          一括送信の結果: {bulkMsg.text}
+        </div>
+      )}
+
       <div className="px-1 text-sm font-medium text-muted">
         {shownCount} 件のマッチ（{groups.length} 案件・重複まとめ後）
         {filtered.length !== matches.length && (
@@ -310,11 +391,34 @@ export function MatchesList({
         </Card>
       ) : (
         <div className="space-y-6">
-          {groups.map(({ project, rows }) => (
+          {groups.map(({ project, rows }) => {
+            // この案件グループ内で未送信＝一括送信できる行。
+            const sendableRows = rows.filter(({ m }) => !m.sentInfoAt);
+            const sendablePairs = sendableRows.map(({ m }) => ({
+              talentId: m.talent.id,
+              projectId: project.id,
+            }));
+            const allGroupSelected =
+              sendablePairs.length > 0 &&
+              sendablePairs.every((p) => selected.has(pairKey(p.talentId, p.projectId)));
+            return (
             <Card key={project.id} className="overflow-hidden p-0">
               {/* 案件ヘッダー */}
               <div className="border-b border-border bg-slate-50/60 px-5 py-4">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {sendablePairs.length > 0 && (
+                    <label
+                      className="inline-flex items-center"
+                      title="この案件の未送信マッチをすべて選択"
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={allGroupSelected}
+                        onChange={() => setManyPairs(sendablePairs, !allGroupSelected)}
+                      />
+                    </label>
+                  )}
                   <Link
                     href={`/projects/${project.id}`}
                     className="font-semibold text-foreground hover:text-primary hover:underline"
@@ -366,8 +470,26 @@ export function MatchesList({
                 {rows.map(({ m, dupes }) => {
                   const { strengths, concerns } = splitReasons(m.reasons);
                   const t = m.talent;
+                  const isSent = !!m.sentInfoAt;
+                  const isSelected = selected.has(pairKey(t.id, project.id));
                   return (
-                    <div key={m.id} className="flex items-start gap-4 px-5 py-4">
+                    <div
+                      key={m.id}
+                      className={`flex items-start gap-4 px-5 py-4 ${isSelected ? "bg-primary/5" : ""}`}
+                    >
+                      <div className="flex w-5 shrink-0 justify-center pt-1">
+                        {isSent ? (
+                          <span className="text-emerald-500" title="送信済み">✓</span>
+                        ) : (
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-slate-300"
+                            checked={isSelected}
+                            onChange={() => togglePair(t.id, project.id)}
+                            title="一括送信に選択"
+                          />
+                        )}
+                      </div>
                       <div className="w-14 shrink-0 text-center">
                         <div className="text-lg font-bold tabular-nums text-slate-700">
                           {Math.round(m.score)}
@@ -495,7 +617,32 @@ export function MatchesList({
                 })}
               </div>
             </Card>
-          ))}
+            );
+          })}
+        </div>
+      )}
+
+      {/* 一括送信バー（選択中のみ表示・画面下部に固定） */}
+      {selected.size > 0 && (
+        <div className="sticky bottom-4 z-10 mx-auto flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-border bg-white px-5 py-3 shadow-lg">
+          <span className="text-sm font-medium text-slate-700">{selected.size} 件選択中</span>
+          <button
+            type="button"
+            onClick={clearSelection}
+            disabled={bulkSending}
+            className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
+          >
+            選択解除
+          </button>
+          <button
+            type="button"
+            onClick={sendSelected}
+            disabled={bulkSending}
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            {bulkSending ? "送信中…" : `選択した ${selected.size} 件を送信`}
+          </button>
         </div>
       )}
     </div>
