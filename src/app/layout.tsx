@@ -30,7 +30,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Κηρύκειον — 人材・案件マッチング",
+  title: "Kerykeion — 人材・案件マッチング",
   description: "SES業界向け 人材・案件マッチング自動化プラットフォーム",
 };
 

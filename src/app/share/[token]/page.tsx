@@ -281,7 +281,7 @@ function PageShell({
       <div className="mx-auto max-w-2xl">
         {/* Mini header */}
         <div className="mb-6 flex items-center gap-2">
-          <span className="text-primary font-bold text-sm">Κηρύκειον</span>
+          <span className="text-primary font-bold text-sm">Kerykeion</span>
           <span className="text-slate-300">|</span>
           <span className="text-xs text-slate-400">公開プロフィール</span>
         </div>
@@ -292,7 +292,7 @@ function PageShell({
         </Card>
 
         <p className="mt-4 text-center text-xs text-slate-400">
-          このページはΚηρύκειονより共有されたリード専用ページです。
+          このページはKerykeionより共有されたリード専用ページです。
         </p>
       </div>
     </div>

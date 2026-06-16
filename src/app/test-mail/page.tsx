@@ -1,6 +1,6 @@
 import { TestMailView } from "./test-mail-view";
 
-export const metadata = { title: "テスト送信 — Κηρύκειον" };
+export const metadata = { title: "テスト送信 — Kerykeion" };
 export const dynamic = "force-dynamic";
 
 export default function TestMailPage() {

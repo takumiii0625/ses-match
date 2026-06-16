@@ -1,6 +1,6 @@
 import { ImportForm } from "./import-form";
 
-export const metadata = { title: "提携先CSV取込 — Κηρύκειον" };
+export const metadata = { title: "提携先CSV取込 — Kerykeion" };
 export const dynamic = "force-dynamic";
 
 export default function PartnerImportPage() {

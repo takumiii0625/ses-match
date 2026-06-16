@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Κηρύκειον（ヘルメスの翼ある杖）を象ったロゴマーク。 */
+/** Kerykeion（ヘルメスの翼ある杖）を象ったロゴマーク。 */
 function CaduceusMark({ className }: { className?: string }) {
   return (
     <svg
@@ -152,15 +152,15 @@ export function Sidebar({
           "mb-4 flex items-center gap-2.5",
           expanded ? "px-1" : "justify-center",
         )}
-        title="Κηρύκειον"
+        title="Kerykeion"
       >
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-500 text-white shadow-sm ring-1 ring-black/5">
           <CaduceusMark className="h-[22px] w-[22px]" />
         </span>
         {expanded && (
           <span className="flex flex-col leading-none">
-            <span className="text-[15px] font-bold tracking-tight text-slate-800">Κηρύκειον</span>
-            <span className="mt-0.5 text-[10px] font-medium text-slate-400">Kērykeion・人材マッチング</span>
+            <span className="text-[15px] font-bold tracking-tight text-slate-800">Kerykeion</span>
+            <span className="mt-0.5 text-[10px] font-medium text-slate-400">人材・案件マッチング</span>
           </span>
         )}
       </Link>
