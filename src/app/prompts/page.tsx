@@ -2,7 +2,7 @@ import { getCurrentOrg } from "@/lib/current-org";
 import { PROMPT_FIELDS } from "@/lib/ai/prompts";
 import { PromptsEditor, type PromptField } from "./prompts-editor";
 
-export const metadata = { title: "プロンプト管理 — Hermes" };
+export const metadata = { title: "プロンプト管理 — Κηρύκειον" };
 export const dynamic = "force-dynamic";
 
 export default async function PromptsPage() {

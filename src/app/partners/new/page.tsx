@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { NewPartnerForm } from "./new-partner-form";
 
-export const metadata = { title: "提携先を追加 — Hermes" };
+export const metadata = { title: "提携先を追加 — Κηρύκειον" };
 
 export default function NewPartnerPage() {
   return (

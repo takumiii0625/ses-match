@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { NgCompaniesView, type NgCompanyVM } from "./ng-companies-view";
 
-export const metadata = { title: "NG企業 — Hermes" };
+export const metadata = { title: "NG企業 — Κηρύκειον" };
 export const dynamic = "force-dynamic";
 
 export default async function NgCompaniesPage() {

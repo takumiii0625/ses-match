@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { BlastView, type BlastTalent, type CampaignRow } from "./blast-view";
 
-export const metadata = { title: "一斉案内 — Hermes" };
+export const metadata = { title: "一斉案内 — Κηρύκειον" };
 export const dynamic = "force-dynamic";
 
 export default async function BlastPage() {

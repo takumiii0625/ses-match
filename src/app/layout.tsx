@@ -30,7 +30,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "Hermes — 人材・案件マッチング",
+  title: "Κηρύκειον — 人材・案件マッチング",
   description: "SES業界向け 人材・案件マッチング自動化プラットフォーム",
 };
 
