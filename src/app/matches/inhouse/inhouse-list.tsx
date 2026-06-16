@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,12 +11,23 @@ import { Select } from "@/components/ui/select";
 import { formatRate, daysAgo } from "@/lib/utils";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { inhouseChannelStatus } from "@/lib/channel";
+import { fetchJson } from "@/lib/http";
 import { ProposalButton } from "../../matching/proposal-button";
 import { SendProjectButton } from "../../matching/send-project-button";
 import { SendTalentButton } from "../../matching/send-talent-button";
 import { fmtSentDate } from "../matches-list";
 import { groupByTalent } from "./group";
 import type { MatchVM } from "../matches-list";
+
+/** 選択キー（人材×案件）。bulk送信のペアにそのまま使う。 */
+function pairKey(talentId: string, projectId: string): string {
+  return `${talentId}:${projectId}`;
+}
+interface BulkSendResult {
+  sent: number;
+  skipped: number;
+  failed: number;
+}
 
 const SCORE_OPTIONS = [
   { value: "80", label: "80点以上" },
@@ -43,9 +56,68 @@ function splitReasons(reasons: string[]) {
 
 /** 自社マッチ：自社人材を起点に、その人にマッチした案件を一覧表示。 */
 export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [minScore, setMinScore] = useState("80");
   const [channel, setChannel] = useState("ALL");
+  // 一括送信: 選択中のペアと送信状態。
+  const [selected, setSelected] = useState<Map<string, { talentId: string; projectId: string }>>(
+    new Map(),
+  );
+  const [bulkSending, setBulkSending] = useState(false);
+  const [bulkMsg, setBulkMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  function togglePair(talentId: string, projectId: string) {
+    setSelected((cur) => {
+      const next = new Map(cur);
+      const k = pairKey(talentId, projectId);
+      if (next.has(k)) next.delete(k);
+      else next.set(k, { talentId, projectId });
+      return next;
+    });
+  }
+  function setManyPairs(pairs: { talentId: string; projectId: string }[], on: boolean) {
+    setSelected((cur) => {
+      const next = new Map(cur);
+      for (const p of pairs) {
+        const k = pairKey(p.talentId, p.projectId);
+        if (on) next.set(k, p);
+        else next.delete(k);
+      }
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelected(new Map());
+  }
+
+  // 選択分を、指定エンドポイント（要員提案 or 案件案内）でまとめて送信する。
+  async function sendSelected(endpoint: string, label: string) {
+    if (bulkSending || selected.size === 0) return;
+    const pairs = [...selected.values()];
+    if (!window.confirm(`選択した ${pairs.length} 件に「${label}」をまとめて送信します。よろしいですか？`))
+      return;
+    setBulkSending(true);
+    setBulkMsg(null);
+    try {
+      const data = await fetchJson<BulkSendResult>(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairs }),
+      });
+      const parts = [`送信 ${data.sent}件`];
+      if (data.skipped) parts.push(`スキップ ${data.skipped}件`);
+      if (data.failed) parts.push(`失敗 ${data.failed}件`);
+      setBulkMsg({ tone: data.failed ? "err" : "ok", text: `${label}: ${parts.join(" / ")}` });
+      clearSelection();
+      startTransition(() => router.refresh());
+    } catch (e) {
+      setBulkMsg({ tone: "err", text: e instanceof Error ? e.message : "送信に失敗しました" });
+    } finally {
+      setBulkSending(false);
+    }
+  }
 
   const isFiltered = !!query || minScore !== "80" || channel !== "ALL";
 
@@ -129,6 +201,18 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
         )}
       </Card>
 
+      {bulkMsg && (
+        <div
+          className={`rounded-lg border px-4 py-2.5 text-sm ${
+            bulkMsg.tone === "err"
+              ? "border-red-200 bg-red-50 text-red-700"
+              : "border-emerald-200 bg-emerald-50 text-emerald-700"
+          }`}
+        >
+          一括送信の結果: {bulkMsg.text}
+        </div>
+      )}
+
       <div className="px-1 text-sm font-medium text-muted">
         {shownTalents} 名の自社人材にマッチ（重複まとめ後）
       </div>
@@ -140,11 +224,30 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
         </Card>
       ) : (
         <div className="space-y-6">
-          {groups.map(({ talent, rows }) => (
+          {groups.map(({ talent, rows }) => {
+            // この人材グループ内の全マッチを一括選択対象にする（送信スキップは送信時に種別ごと判定）。
+            const groupPairs = rows.map(({ m }) => ({
+              talentId: talent.id,
+              projectId: m.project.id,
+            }));
+            const allGroupSelected =
+              groupPairs.length > 0 &&
+              groupPairs.every((p) => selected.has(pairKey(p.talentId, p.projectId)));
+            return (
             <Card key={talent.id} className="overflow-hidden p-0">
               {/* 人材ヘッダー */}
               <div className="border-b border-border bg-slate-50/60 px-5 py-4">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {groupPairs.length > 0 && (
+                    <label className="inline-flex items-center" title="この人材のマッチをすべて選択">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded border-slate-300"
+                        checked={allGroupSelected}
+                        onChange={() => setManyPairs(groupPairs, !allGroupSelected)}
+                      />
+                    </label>
+                  )}
                   <Link
                     href={`/talent/${talent.id}`}
                     className="font-semibold text-foreground hover:text-primary hover:underline"
@@ -191,8 +294,21 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                   const { strengths, concerns } = splitReasons(m.reasons);
                   const p = m.project;
                   const cs = inhouseChannelStatus(m.proposable, m.channelNote);
+                  const isSelected = selected.has(pairKey(talent.id, p.id));
                   return (
-                    <div key={m.id} className="flex items-start gap-4 px-5 py-4">
+                    <div
+                      key={m.id}
+                      className={`flex items-start gap-4 px-5 py-4 ${isSelected ? "bg-primary/5" : ""}`}
+                    >
+                      <div className="flex w-5 shrink-0 justify-center pt-1">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300"
+                          checked={isSelected}
+                          onChange={() => togglePair(talent.id, p.id)}
+                          title="一括送信に選択"
+                        />
+                      </div>
                       <div className="w-12 shrink-0 text-center">
                         <div className="text-lg font-bold tabular-nums text-slate-700">
                           {Math.round(m.score)}
@@ -212,9 +328,14 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                           </Badge>
                           {cs && <Badge tone={cs.tone}>{cs.label}</Badge>}
                           {m.locationOk === true && <Badge tone="green">勤務地・勤務形態OK</Badge>}
-                          {m.sentInfoAt && (
+                          {m.sentTalentAt && (
                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                              ✉ 送信済み {fmtSentDate(m.sentInfoAt)}
+                              ✉ 提案済み {fmtSentDate(m.sentTalentAt)}
+                            </span>
+                          )}
+                          {m.sentInfoAt && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-700">
+                              ✉ 案内済み {fmtSentDate(m.sentInfoAt)}
                             </span>
                           )}
                           {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
@@ -291,7 +412,41 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                 })}
               </div>
             </Card>
-          ))}
+            );
+          })}
+        </div>
+      )}
+
+      {/* 一括送信バー（選択中のみ表示・画面下部に固定）。両方のメール種別を選んで送れる。 */}
+      {selected.size > 0 && (
+        <div className="sticky bottom-4 z-10 mx-auto flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-border bg-white px-5 py-3 shadow-lg">
+          <span className="text-sm font-medium text-slate-700">{selected.size} 件選択中</span>
+          <button
+            type="button"
+            onClick={clearSelection}
+            disabled={bulkSending}
+            className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
+          >
+            選択解除
+          </button>
+          <button
+            type="button"
+            onClick={() => sendSelected("/api/send-talent/bulk", "要員提案メール")}
+            disabled={bulkSending}
+            className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            {bulkSending ? "送信中…" : "要員提案をまとめて送信"}
+          </button>
+          <button
+            type="button"
+            onClick={() => sendSelected("/api/send-project/bulk", "案件案内メール")}
+            disabled={bulkSending}
+            className="inline-flex items-center gap-1.5 rounded-full bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-60"
+          >
+            <Send className="h-4 w-4" />
+            {bulkSending ? "送信中…" : "案件案内をまとめて送信"}
+          </button>
         </div>
       )}
     </div>

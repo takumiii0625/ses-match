@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentOrg } from "@/lib/current-org";
-import { prepareProjectInfoMail, sendAndLogProjectInfo } from "@/lib/email/project-mail";
+import { prepareTalentProposalMail, sendAndLogTalentProposal } from "@/lib/email/talent-proposal";
 import { runBulkSend, normalizePairs, BULK_MAX_PAIRS, type PairResult } from "@/lib/email/bulk-send";
 
 export const maxDuration = 300;
 
-/** 選択した複数マッチの案件案内メールをまとめて送信する。重複（送信済み）は自動スキップ。 */
+/** 選択した複数マッチの要員提案メールをまとめて送信する。重複（提案済み）は自動スキップ。 */
 export async function POST(req: NextRequest) {
   try {
     const org = await getCurrentOrg();
@@ -22,29 +22,27 @@ export async function POST(req: NextRequest) {
     }
 
     const summary = await runBulkSend(pairs, async (pair): Promise<PairResult> => {
-      const prep = await prepareProjectInfoMail({
+      const prep = await prepareTalentProposalMail({
         orgId: org.id,
-        projectEmailPrompt: org.projectEmailPrompt,
         talentId: pair.talentId,
         projectId: pair.projectId,
       });
       if (!prep.ok) return { ...pair, status: "skipped", reason: prep.error };
-      if (prep.mail.lastSentAt) return { ...pair, status: "skipped", reason: "送信済み" };
-      await sendAndLogProjectInfo({
+      if (prep.mail.lastSentAt) return { ...pair, status: "skipped", reason: "提案済み" };
+      await sendAndLogTalentProposal({
         orgId: org.id,
         talentId: pair.talentId,
         projectId: pair.projectId,
         to: prep.mail.to,
         subject: prep.mail.subject,
         text: prep.mail.text,
-        inReplyTo: prep.mail.inReplyTo,
       });
       return { ...pair, status: "sent", to: prep.mail.to };
     });
 
     return NextResponse.json({ ok: true, ...summary });
   } catch (err) {
-    console.error("[POST /api/send-project/bulk]", err);
+    console.error("[POST /api/send-talent/bulk]", err);
     const message = err instanceof Error ? err.message : "Internal Server Error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

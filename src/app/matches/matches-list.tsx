@@ -36,6 +36,7 @@ export interface MatchVM {
   channelNote: string | null;
   locationOk: boolean | null; // 勤務地・勤務形態OKか（true=OKラベル表示、null=未評価）
   sentInfoAt: string | null; // 案件案内メールを送信済みの日時（未送信なら null）
+  sentTalentAt: string | null; // 要員提案メールを送信済みの日時（未送信なら null。自社マッチで使用）
   talent: {
     id: string;
     name: string;

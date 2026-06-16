@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { Card } from "@/components/ui/card";
 import { InhouseMatchesList } from "./inhouse-list";
-import { toMatchVM, matchVmSelect, buildSentInfoMap } from "../serialize";
+import { toMatchVM, matchVmSelect, buildSentInfoMap, buildSentTalentMap } from "../serialize";
 import { RematchButton } from "../../matching/rematch-button";
 
 export const metadata = { title: "自社保有人材のマッチ — SES Match" };
@@ -13,7 +13,7 @@ export default async function InhouseMatchesPage() {
   const org = await getCurrentOrg();
 
   // 自社保有人材(INHOUSE)が絡むマッチだけ・80点以上。
-  const [matches, sentMap] = await Promise.all([
+  const [matches, sentMap, sentTalentMap] = await Promise.all([
     prisma.match.findMany({
       where: {
         project: { orgId: org.id },
@@ -24,11 +24,13 @@ export default async function InhouseMatchesPage() {
       orderBy: { score: "desc" },
     }),
     buildSentInfoMap(org.id),
+    buildSentTalentMap(org.id),
   ]);
 
-  const vm = matches.map((m) =>
-    toMatchVM(m, sentMap.get(`${m.talent.id}#${m.project.id}`) ?? null),
-  );
+  const vm = matches.map((m) => {
+    const key = `${m.talent.id}#${m.project.id}`;
+    return toMatchVM(m, sentMap.get(key) ?? null, sentTalentMap.get(key) ?? null);
+  });
 
   return (
     <div className="space-y-6 p-8">

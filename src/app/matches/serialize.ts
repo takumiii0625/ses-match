@@ -2,10 +2,13 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { MatchVM } from "./matches-list";
 
-/** talentId#projectId → 案件案内メールの最新送信日時(ISO) のマップを作る（送信済みバッジ用）。 */
-export async function buildSentInfoMap(orgId: string): Promise<Map<string, string>> {
+/** talentId#projectId → 指定種別メールの最新送信日時(ISO) のマップを作る（送信済みバッジ用）。 */
+async function buildSentMap(
+  orgId: string,
+  kind: "PROJECT_INFO" | "TALENT_PROPOSAL",
+): Promise<Map<string, string>> {
   const sent = await prisma.sentEmail.findMany({
-    where: { orgId, kind: "PROJECT_INFO", status: "SENT" },
+    where: { orgId, kind, status: "SENT" },
     select: { talentId: true, projectId: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   });
@@ -15,6 +18,16 @@ export async function buildSentInfoMap(orgId: string): Promise<Map<string, strin
     if (!map.has(key)) map.set(key, s.createdAt.toISOString()); // 最新（降順の先頭）を採用
   }
   return map;
+}
+
+/** 案件案内メール（PROJECT_INFO）の送信済みマップ。 */
+export function buildSentInfoMap(orgId: string): Promise<Map<string, string>> {
+  return buildSentMap(orgId, "PROJECT_INFO");
+}
+
+/** 要員提案メール（TALENT_PROPOSAL）の送信済みマップ（自社マッチ用）。 */
+export function buildSentTalentMap(orgId: string): Promise<Map<string, string>> {
+  return buildSentMap(orgId, "TALENT_PROPOSAL");
 }
 
 // VM化に必要な列だけ取得する select。emailBody（フルのメール本文）等の重い列を読まず、
@@ -61,7 +74,11 @@ type MatchVmRow = Prisma.MatchGetPayload<{ select: typeof matchVmSelect }>;
  * Prisma の Match(+talent,+project) を、クライアント用 VM に直列化する。
  * sentInfoAt は呼び出し側で算出した「この人材×案件の案件案内メール送信日時」（ISO文字列 or null）。
  */
-export function toMatchVM(m: MatchVmRow, sentInfoAt: string | null = null): MatchVM {
+export function toMatchVM(
+  m: MatchVmRow,
+  sentInfoAt: string | null = null,
+  sentTalentAt: string | null = null,
+): MatchVM {
   return {
     id: m.id,
     score: m.score,
@@ -70,6 +87,7 @@ export function toMatchVM(m: MatchVmRow, sentInfoAt: string | null = null): Matc
     channelNote: m.channelNote,
     locationOk: m.locationOk,
     sentInfoAt,
+    sentTalentAt,
     talent: {
       id: m.talent.id,
       name: m.talent.name,

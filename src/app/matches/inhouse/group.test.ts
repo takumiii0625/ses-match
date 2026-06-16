@@ -22,6 +22,7 @@ function mk(p: {
     channelNote: null,
     locationOk: null,
     sentInfoAt: null,
+    sentTalentAt: null,
     talent: {
       id: `t-${p.talentName}`,
       name: p.talentName,
