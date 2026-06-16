@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
-import { Columns2, Send } from "lucide-react";
+import { Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,20 +12,8 @@ import { formatRate, daysAgo } from "@/lib/utils";
 import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { REMOTE_LABELS } from "@/lib/enums";
-import { fetchJson } from "@/lib/http";
+import { useSendController, SendPanel, pairKey } from "@/components/send-mail";
 import { ProposalButton } from "../matching/proposal-button";
-import { SendProjectButton } from "../matching/send-project-button";
-
-/** 選択キー（人材×案件）。bulk送信のペアにそのまま使う。 */
-function pairKey(talentId: string, projectId: string): string {
-  return `${talentId}:${projectId}`;
-}
-
-interface BulkSendResult {
-  sent: number;
-  skipped: number;
-  failed: number;
-}
 
 // サーバから渡る軽量ビューモデル（Prisma型から必要分だけ抜き出して直列化）。
 export interface MatchVM {
@@ -73,7 +61,6 @@ const TYPE_OPTIONS = [
   { value: "PARTNER", label: "他社人材" },
 ];
 
-
 function scoreBadgeTone(score: number): "green" | "amber" | "slate" {
   if (score >= 70) return "green";
   if (score >= 40) return "amber";
@@ -87,19 +74,6 @@ export function fmtSentDate(iso: string): string {
     day: "numeric",
     timeZone: "Asia/Tokyo",
   });
-}
-
-function ScoreBar({ score }: { score: number }) {
-  const color =
-    score >= 70 ? "bg-emerald-500" : score >= 40 ? "bg-amber-400" : "bg-slate-300";
-  return (
-    <div className="mt-1 h-1.5 w-full max-w-[180px] overflow-hidden rounded-full bg-slate-100">
-      <div
-        className={`h-full rounded-full ${color}`}
-        style={{ width: `${Math.min(100, score)}%` }}
-      />
-    </div>
-  );
 }
 
 /** reasons[] を「合致点」と「懸念点」に振り分ける。 */
@@ -121,6 +95,21 @@ const DAYS_OPTIONS = [
   { value: "all", label: "配信: 全期間" },
 ];
 
+function SkillChips({ main, all, limit = 8 }: { main: string[]; all: string[]; limit?: number }) {
+  const extra = all.filter((s) => !main.includes(s));
+  const shown = [...main, ...extra].slice(0, limit);
+  if (shown.length === 0) return <span className="text-xs text-slate-400">-</span>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {shown.map((s) => (
+        <Badge key={s} tone={main.includes(s) ? "blue" : "slate"} className="text-xs">
+          {s}
+        </Badge>
+      ))}
+    </div>
+  );
+}
+
 export function MatchesList({
   matches,
   scope = "all",
@@ -136,67 +125,12 @@ export function MatchesList({
   const [, startTransition] = useTransition();
   const [query, setQuery] = useState("");
   const [minScore, setMinScore] = useState("80");
-  // 自社専用ページでは区分フィルタは固定（データが既に自社のみ）。
   const [talentType, setTalentType] = useState("ALL");
-  // 一括送信: 選択中のペア（key→{talentId,projectId}）と送信状態。
-  const [selected, setSelected] = useState<Map<string, { talentId: string; projectId: string }>>(
-    new Map(),
-  );
-  const [bulkSending, setBulkSending] = useState(false);
-  const [bulkMsg, setBulkMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+  // 右ペインに出す選択中マッチ（行クリックで設定。チェックボックスとは別概念）。
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // メール編集・単体/一斉送信を統括する共有コントローラ。
+  const ctrl = useSendController();
 
-  function togglePair(talentId: string, projectId: string) {
-    setSelected((cur) => {
-      const next = new Map(cur);
-      const k = pairKey(talentId, projectId);
-      if (next.has(k)) next.delete(k);
-      else next.set(k, { talentId, projectId });
-      return next;
-    });
-  }
-  function setManyPairs(pairs: { talentId: string; projectId: string }[], on: boolean) {
-    setSelected((cur) => {
-      const next = new Map(cur);
-      for (const p of pairs) {
-        const k = pairKey(p.talentId, p.projectId);
-        if (on) next.set(k, p);
-        else next.delete(k);
-      }
-      return next;
-    });
-  }
-  function clearSelection() {
-    setSelected(new Map());
-  }
-
-  async function sendSelected() {
-    if (bulkSending || selected.size === 0) return;
-    const pairs = [...selected.values()];
-    if (!window.confirm(`選択した ${pairs.length} 件に案件案内メールをまとめて送信します。よろしいですか？`))
-      return;
-    setBulkSending(true);
-    setBulkMsg(null);
-    try {
-      const data = await fetchJson<BulkSendResult>("/api/send-project/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pairs }),
-      });
-      const parts = [`送信 ${data.sent}件`];
-      if (data.skipped) parts.push(`スキップ ${data.skipped}件`);
-      if (data.failed) parts.push(`失敗 ${data.failed}件`);
-      setBulkMsg({ tone: data.failed ? "err" : "ok", text: parts.join(" / ") });
-      clearSelection();
-      // 送信済みバッジ（sentInfoAt）を反映するため再取得。
-      startTransition(() => router.refresh());
-    } catch (e) {
-      setBulkMsg({ tone: "err", text: e instanceof Error ? e.message : "送信に失敗しました" });
-    } finally {
-      setBulkSending(false);
-    }
-  }
-
-  // 配信日の窓はサーバ側で絞るため URL を更新して再取得する。
   function changeDays(v: string) {
     const params = new URLSearchParams();
     if (v && v !== "1") params.set("days", v);
@@ -229,7 +163,6 @@ export function MatchesList({
 
   // 案件ごとにグループ化。重複（同名案件/同一人材）はまとめ、最新配信を代表にする。
   const groups = useMemo(() => {
-    // 案件キーごとの代表（最新配信）。
     const rep = new Map<string, { project: MatchVM["project"]; ms: number }>();
     for (const m of filtered) {
       const k = projectDedupeKey(m.project.title, m.project.clientName);
@@ -237,7 +170,6 @@ export function MatchesList({
       const cur = rep.get(k);
       if (!cur || ms > cur.ms) rep.set(k, { project: m.project, ms });
     }
-    // 案件キーでまとめ、各グループ内で人材キーごとに最新を代表に。
     const byKey = new Map<
       string,
       { project: MatchVM["project"]; talents: Map<string, { m: MatchVM; ms: number; dupes: number }> }
@@ -271,13 +203,25 @@ export function MatchesList({
       .sort((a, b) => (b.rows[0]?.m.score ?? 0) - (a.rows[0]?.m.score ?? 0));
   }, [filtered]);
 
-  const shownCount = useMemo(
-    () => groups.reduce((n, g) => n + g.rows.length, 0),
+  // 全行をフラットに（選択中マッチの取得・一覧キーに使う）。
+  const flatRows = useMemo(
+    () => groups.flatMap((g) => g.rows.map((r) => r.m)),
     [groups],
   );
+  const shownCount = flatRows.length;
+
+  const keyOf = (m: MatchVM) => pairKey({ talentId: m.talent.id, projectId: m.project.id });
+  const isSent = (m: MatchVM) => !!m.sentInfoAt || !!ctrl.get(keyOf(m))?.sentTo;
+  const selectedMatch = flatRows.find((m) => keyOf(m) === selectedKey) ?? null;
+
+  // 一斉送信に選べる行（未送信）。
+  const eligibleKeys = flatRows.filter((m) => !isSent(m)).map(keyOf);
+  const allSelected =
+    eligibleKeys.length > 0 && eligibleKeys.every((k) => ctrl.selected.has(k));
+  const allPairs = flatRows.map((m) => ({ talentId: m.talent.id, projectId: m.project.id }));
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {/* スコープ切替タブ */}
       <div className="flex gap-1 border-b border-border">
         <Link
@@ -304,7 +248,7 @@ export function MatchesList({
 
       {/* フィルタ */}
       <Card className="flex flex-wrap items-end gap-3 p-4">
-        <div className="min-w-[240px] flex-1">
+        <div className="min-w-[200px] flex-1">
           <label className="mb-1 block text-xs font-medium text-slate-500">
             案件名・人材名・スキルで検索
           </label>
@@ -315,31 +259,19 @@ export function MatchesList({
           />
         </div>
         {!inhouseOnly && (
-          <div className="w-40">
+          <div className="w-36">
             <label className="mb-1 block text-xs font-medium text-slate-500">区分</label>
-            <Select
-              options={TYPE_OPTIONS}
-              value={talentType}
-              onChange={(e) => setTalentType(e.target.value)}
-            />
+            <Select options={TYPE_OPTIONS} value={talentType} onChange={(e) => setTalentType(e.target.value)} />
           </div>
         )}
-        <div className="w-32">
+        <div className="w-28">
           <label className="mb-1 block text-xs font-medium text-slate-500">点数</label>
-          <Select
-            options={SCORE_OPTIONS}
-            value={minScore}
-            onChange={(e) => setMinScore(e.target.value)}
-          />
+          <Select options={SCORE_OPTIONS} value={minScore} onChange={(e) => setMinScore(e.target.value)} />
         </div>
         {!inhouseOnly && (
-          <div className="w-40">
+          <div className="w-36">
             <label className="mb-1 block text-xs font-medium text-slate-500">配信日</label>
-            <Select
-              options={DAYS_OPTIONS}
-              value={days}
-              onChange={(e) => changeDays(e.target.value)}
-            />
+            <Select options={DAYS_OPTIONS} value={days} onChange={(e) => changeDays(e.target.value)} />
           </div>
         )}
         {isFiltered && (
@@ -357,24 +289,17 @@ export function MatchesList({
         )}
       </Card>
 
-      {bulkMsg && (
+      {ctrl.bulkMsg && (
         <div
           className={`rounded-lg border px-4 py-2.5 text-sm ${
-            bulkMsg.tone === "err"
+            ctrl.bulkMsg.tone === "err"
               ? "border-red-200 bg-red-50 text-red-700"
               : "border-emerald-200 bg-emerald-50 text-emerald-700"
           }`}
         >
-          一括送信の結果: {bulkMsg.text}
+          一括送信の結果: {ctrl.bulkMsg.text}
         </div>
       )}
-
-      <div className="px-1 text-sm font-medium text-muted">
-        {shownCount} 件のマッチ（{groups.length} 案件・重複まとめ後）
-        {filtered.length !== matches.length && (
-          <span className="ml-1 text-xs">/ 全 {matches.length} 件中</span>
-        )}
-      </div>
 
       {groups.length === 0 ? (
         <Card className="p-10 text-center text-sm text-muted">
@@ -391,261 +316,252 @@ export function MatchesList({
           )}
         </Card>
       ) : (
-        <div className="space-y-6">
-          {groups.map(({ project, rows }) => {
-            // この案件グループ内で未送信＝一括送信できる行。
-            const sendableRows = rows.filter(({ m }) => !m.sentInfoAt);
-            const sendablePairs = sendableRows.map(({ m }) => ({
-              talentId: m.talent.id,
-              projectId: project.id,
-            }));
-            const allGroupSelected =
-              sendablePairs.length > 0 &&
-              sendablePairs.every((p) => selected.has(pairKey(p.talentId, p.projectId)));
-            return (
-            <Card key={project.id} className="overflow-hidden p-0">
-              {/* 案件ヘッダー */}
-              <div className="border-b border-border bg-slate-50/60 px-5 py-4">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {sendablePairs.length > 0 && (
-                    <label
-                      className="inline-flex items-center"
-                      title="この案件の未送信マッチをすべて選択"
-                    >
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 rounded border-slate-300"
-                        checked={allGroupSelected}
-                        onChange={() => setManyPairs(sendablePairs, !allGroupSelected)}
-                      />
-                    </label>
-                  )}
-                  <Link
-                    href={`/projects/${project.id}`}
-                    className="font-semibold text-foreground hover:text-primary hover:underline"
-                  >
-                    {project.title}
-                  </Link>
-                  <Badge tone="slate">{rows.length}名マッチ</Badge>
-                  {project.clientName && (
-                    <span className="text-xs text-muted">
-                      クライアント: {project.clientName}
-                    </span>
-                  )}
-                  {(project.rateMin != null || project.rateMax != null) && (
-                    <span className="text-xs text-muted">
-                      単価: {formatRate(project.rateMin, project.rateMax)}
-                    </span>
-                  )}
-                  <span className="text-xs text-muted">配信: {daysAgo(project.receivedDate)}</span>
-                  <Link
-                    href={`/compare?mode=project&projectId=${project.id}`}
-                    className="ml-auto inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-medium text-slate-600 ring-1 ring-border hover:bg-slate-50 hover:text-primary"
-                  >
-                    <Columns2 className="h-3.5 w-3.5" /> 見比べる
-                  </Link>
-                </div>
-                {(project.channelText || project.supportFee) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <span className="text-xs text-muted">商流:</span>
-                    {project.channelText && (
-                      <Badge tone="amber">{project.channelText}</Badge>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
+          {/* 左: 一覧 */}
+          <div className="min-w-0 space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-sm font-medium text-muted">
+                {shownCount} 件のマッチ（{groups.length} 案件）
+              </span>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-slate-300"
+                  checked={allSelected}
+                  disabled={eligibleKeys.length === 0}
+                  onChange={() => ctrl.selectMany(eligibleKeys, !allSelected)}
+                />
+                未送信をすべて選択
+              </label>
+            </div>
+
+            {groups.map(({ project, rows }) => (
+              <Card key={project.id} className="overflow-hidden p-0">
+                {/* 案件ヘッダー */}
+                <div className="border-b border-border bg-slate-50/60 px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-semibold text-foreground">{project.title}</span>
+                    <Badge tone="slate">{rows.length}名</Badge>
+                    {(project.rateMin != null || project.rateMax != null) && (
+                      <span className="text-xs text-muted">単価: {formatRate(project.rateMin, project.rateMax)}</span>
                     )}
+                    {project.channelText && <Badge tone="amber">{project.channelText}</Badge>}
                     {project.supportFee && <Badge tone="green">支援費あり</Badge>}
+                    <span className="ml-auto text-xs text-muted">配信: {daysAgo(project.receivedDate)}</span>
                   </div>
-                )}
-                {project.requiredSkills.length > 0 && (
-                  <div className="mt-2 flex flex-wrap items-center gap-1">
-                    <span className="text-xs text-muted">必須スキル:</span>
-                    {project.requiredSkills.map((s) => (
-                      <Badge key={s} tone="indigo">
-                        {s}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
+                </div>
 
-              {/* マッチ人材 */}
-              <div className="divide-y divide-border">
-                {rows.map(({ m, dupes }) => {
-                  const { strengths, concerns } = splitReasons(m.reasons);
-                  const t = m.talent;
-                  const isSent = !!m.sentInfoAt;
-                  const isSelected = selected.has(pairKey(t.id, project.id));
-                  return (
-                    <div
-                      key={m.id}
-                      className={`flex items-start gap-4 px-5 py-4 ${isSelected ? "bg-primary/5" : ""}`}
-                    >
-                      <div className="flex w-5 shrink-0 justify-center pt-1">
-                        {isSent ? (
-                          <span className="text-emerald-500" title="送信済み">✓</span>
-                        ) : (
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border-slate-300"
-                            checked={isSelected}
-                            onChange={() => togglePair(t.id, project.id)}
-                            title="一括送信に選択"
-                          />
-                        )}
-                      </div>
-                      <div className="w-14 shrink-0 text-center">
-                        <div className="text-lg font-bold tabular-nums text-slate-700">
-                          {Math.round(m.score)}
-                          <span className="text-xs font-normal text-slate-400">点</span>
-                        </div>
-                        <ScoreBar score={m.score} />
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Link
-                            href={`/talent/${t.id}`}
-                            className="font-semibold text-foreground hover:text-primary hover:underline"
-                          >
-                            {t.name}
-                          </Link>
-                          <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">
-                            {Math.round(m.score)}点
-                          </Badge>
-                          {(() => {
-                            const cs = channelStatus(m.proposable, m.channelNote);
-                            return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
-                          })()}
-                          {m.locationOk === true && <Badge tone="green">勤務地・勤務形態OK</Badge>}
-                          {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
-                          {(t.desiredRateMin != null || t.desiredRateMax != null) && (
-                            <span className="text-xs text-muted">
-                              希望単価: {formatRate(t.desiredRateMin, t.desiredRateMax)}
-                            </span>
-                          )}
-                          {t.remotePreference && (
-                            <span className="text-xs text-muted">
-                              {REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}
-                            </span>
-                          )}
-                          {t.affiliation && (
-                            <span className="text-xs text-muted">所属: {t.affiliation}</span>
-                          )}
-                          <span className="text-xs text-muted">配信: {daysAgo(t.receivedDate)}</span>
-                        </div>
-
-                        {/* スキル */}
-                        {(t.mainSkills.length > 0 || t.skills.length > 0) && (
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {t.mainSkills.map((s) => (
-                              <Badge key={s} tone="blue">
-                                {s}
-                              </Badge>
-                            ))}
-                            {t.skills
-                              .filter((s) => !t.mainSkills.includes(s))
-                              .slice(0, 6)
-                              .map((s) => (
-                                <Badge key={s} tone="slate">
-                                  {s}
-                                </Badge>
-                              ))}
-                          </div>
-                        )}
-
-                        {/* マッチ根拠（何を基準にマッチしたか） */}
-                        {strengths.length > 0 && (
-                          <div className="mt-3 flex flex-wrap gap-1">
-                            {strengths.map((r, i) => (
-                              <span
-                                key={i}
-                                className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-700"
-                              >
-                                ✓ {r}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {concerns.length > 0 && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {concerns.map((r, i) => (
-                              <span
-                                key={i}
-                                className="inline-flex items-center rounded-full border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-700"
-                              >
-                                ⚠ {r}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                        {strengths.length === 0 && concerns.length === 0 && (
-                          <p className="mt-2 text-xs text-slate-400">
-                            判定根拠は記録されていません。
-                          </p>
-                        )}
-                        {m.channelNote &&
-                          (m.proposable ? (
-                            <p className="mt-2 text-xs text-slate-500">商流: {m.channelNote}</p>
+                {/* マッチ人材（行＝クリックで右に詳細・メール） */}
+                <div className="divide-y divide-border">
+                  {rows.map(({ m, dupes }) => {
+                    const t = m.talent;
+                    const key = keyOf(m);
+                    const sent = isSent(m);
+                    const active = selectedKey === key;
+                    return (
+                      <div
+                        key={m.id}
+                        onClick={() => setSelectedKey(key)}
+                        className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors ${
+                          active ? "bg-primary/10" : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <div
+                          className="flex w-5 shrink-0 justify-center pt-0.5"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {sent ? (
+                            <span className="text-emerald-500" title="送信済み">✓</span>
                           ) : (
-                            <div className="mt-2">
-                              <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs text-red-700">
-                                提案不可の理由: {m.channelNote}
-                              </span>
-                            </div>
-                          ))}
-
-                        {/* アクション: 提案へ進む / 見比べる */}
-                        <div className="mt-3 flex flex-wrap items-center gap-2">
-                          {m.sentInfoAt && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                              ✉ 送信済み {fmtSentDate(m.sentInfoAt)}
-                            </span>
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 rounded border-slate-300"
+                              checked={ctrl.selected.has(key)}
+                              onChange={() => ctrl.toggleSelect(key)}
+                              title="一斉送信に選択"
+                            />
                           )}
-                          <ProposalButton talentId={t.id} projectId={project.id} />
-                          <SendProjectButton
-                            talentId={t.id}
-                            projectId={project.id}
-                            talentName={t.name}
-                          />
-                          <Link
-                            href={`/compare?mode=talent&talentId=${t.id}`}
-                            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-border hover:bg-slate-50 hover:text-primary"
-                          >
-                            <Columns2 className="h-3.5 w-3.5" /> この人材を見比べ
-                          </Link>
+                        </div>
+                        <div className="w-9 shrink-0 text-center">
+                          <div className="text-base font-bold tabular-nums text-slate-700">
+                            {Math.round(m.score)}
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-medium text-slate-800">{t.name}</span>
+                            <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">{Math.round(m.score)}点</Badge>
+                            {(() => {
+                              const cs = channelStatus(m.proposable, m.channelNote);
+                              return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
+                            })()}
+                            {m.locationOk === true && <Badge tone="green">勤務地OK</Badge>}
+                            {dupes > 1 && <Badge tone="slate">同一{dupes}</Badge>}
+                            {m.sentInfoAt && (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                ✉ {fmtSentDate(m.sentInfoAt)}
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted">
+                            {t.affiliation && <span>所属: {t.affiliation}</span>}
+                            {(t.desiredRateMin != null || t.desiredRateMax != null) && (
+                              <span>希望: {formatRate(t.desiredRateMin, t.desiredRateMax)}</span>
+                            )}
+                            {t.remotePreference && <span>{REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}</span>}
+                          </div>
+                          <div className="mt-1.5">
+                            <SkillChips main={t.mainSkills} all={t.skills} limit={5} />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-            );
-          })}
+                    );
+                  })}
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* 右: 選択マッチの詳細＋メール（画面遷移なし） */}
+          <div className="min-w-0">
+            <div className="lg:sticky lg:top-4">
+              {selectedMatch ? (
+                <MatchDetailPanel m={selectedMatch} controller={ctrl} sent={isSent(selectedMatch)} />
+              ) : (
+                <Card className="flex items-center justify-center p-12 text-center text-sm text-muted">
+                  左の一覧から人材を選ぶと、ここに案件・人材の詳細とメール内容が表示され、そのまま送信できます。
+                </Card>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* 一括送信バー（選択中のみ表示・画面下部に固定） */}
-      {selected.size > 0 && (
+      {/* 一斉送信バー（選択中のみ・画面下部に固定） */}
+      {ctrl.selected.size > 0 && (
         <div className="sticky bottom-4 z-10 mx-auto flex w-fit max-w-full flex-wrap items-center gap-3 rounded-full border border-border bg-white px-5 py-3 shadow-lg">
-          <span className="text-sm font-medium text-slate-700">{selected.size} 件選択中</span>
+          <span className="text-sm font-medium text-slate-700">{ctrl.selected.size} 件選択中</span>
           <button
             type="button"
-            onClick={clearSelection}
-            disabled={bulkSending}
+            onClick={ctrl.clearSelection}
+            disabled={ctrl.bulkSending}
             className="text-xs text-slate-500 underline hover:text-slate-700 disabled:opacity-50"
           >
             選択解除
           </button>
           <button
             type="button"
-            onClick={sendSelected}
-            disabled={bulkSending}
+            onClick={() => ctrl.sendSelected(allPairs)}
+            disabled={ctrl.bulkSending}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-60"
           >
             <Send className="h-4 w-4" />
-            {bulkSending ? "送信中…" : `選択した ${selected.size} 件を送信`}
+            {ctrl.bulkSending ? "送信中…" : `選択した ${ctrl.selected.size} 件を送信`}
           </button>
         </div>
       )}
     </div>
+  );
+}
+
+/** 右ペイン: 選択マッチの案件・人材サマリ＋マッチ根拠＋編集可能なメール送信。 */
+function MatchDetailPanel({
+  m,
+  controller,
+  sent,
+}: {
+  m: MatchVM;
+  controller: ReturnType<typeof useSendController>;
+  sent: boolean;
+}) {
+  const t = m.talent;
+  const p = m.project;
+  const { strengths, concerns } = splitReasons(m.reasons);
+  const pair = { talentId: t.id, projectId: p.id };
+
+  return (
+    <Card className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden p-0">
+      {/* ヘッダー */}
+      <div className="flex items-start justify-between gap-2 border-b border-border px-5 py-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Link href={`/talent/${t.id}`} className="truncate font-bold text-slate-800 hover:text-primary hover:underline">
+              {t.name}
+            </Link>
+            <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">{Math.round(m.score)}点</Badge>
+            {sent && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                ✉ 送信済み
+              </span>
+            )}
+          </div>
+          <Link href={`/projects/${p.id}`} className="mt-0.5 block truncate text-xs text-slate-500 hover:text-primary hover:underline">
+            案件: {p.title}
+          </Link>
+        </div>
+        <ProposalButton talentId={t.id} projectId={p.id} />
+      </div>
+
+      <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        {/* 案件・人材サマリ */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg bg-slate-50 p-3">
+            <div className="mb-1 text-xs font-semibold text-slate-500">案件</div>
+            <div className="text-sm font-medium text-slate-800">{p.title}</div>
+            {p.clientName && <div className="mt-0.5 text-xs text-muted">{p.clientName}</div>}
+            <div className="mt-1 text-xs text-muted">単価: {formatRate(p.rateMin, p.rateMax)}</div>
+            {p.channelText && <div className="mt-0.5 text-xs text-muted">商流: {p.channelText}{p.supportFee ? "（支援費あり）" : ""}</div>}
+            {p.requiredSkills.length > 0 && (
+              <div className="mt-1.5">
+                <SkillChips main={p.requiredSkills} all={[]} />
+              </div>
+            )}
+          </div>
+          <div className="rounded-lg bg-slate-50 p-3">
+            <div className="mb-1 text-xs font-semibold text-slate-500">人材</div>
+            <div className="text-sm font-medium text-slate-800">{t.name}</div>
+            {t.affiliation && <div className="mt-0.5 text-xs text-muted">{t.affiliation}</div>}
+            <div className="mt-1 text-xs text-muted">希望: {formatRate(t.desiredRateMin, t.desiredRateMax)}</div>
+            {t.remotePreference && (
+              <div className="mt-0.5 text-xs text-muted">{REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}</div>
+            )}
+            <div className="mt-1.5">
+              <SkillChips main={t.mainSkills} all={t.skills} />
+            </div>
+          </div>
+        </div>
+
+        {/* マッチ根拠 */}
+        {(strengths.length > 0 || concerns.length > 0) && (
+          <div>
+            <div className="mb-1 text-xs font-semibold text-slate-500">マッチ根拠</div>
+            <div className="flex flex-wrap gap-1">
+              {strengths.map((r, i) => (
+                <span key={`s${i}`} className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-700">
+                  ✓ {r}
+                </span>
+              ))}
+              {concerns.map((r, i) => (
+                <span key={`c${i}`} className="inline-flex items-center rounded-full border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-700">
+                  ⚠ {r}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {!m.proposable && m.channelNote && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            提案不可の理由: {m.channelNote}
+          </div>
+        )}
+
+        {/* メール（編集して送信） */}
+        <div className="border-t border-border pt-3">
+          <div className="mb-2 text-xs font-semibold text-slate-500">送信メール（編集可）</div>
+          {/* key=pair で人材切替時にパネルを作り直し、確実に再読込する。 */}
+          <SendPanel key={`${t.id}:${p.id}`} pair={pair} controller={controller} />
+        </div>
+      </div>
+    </Card>
   );
 }
