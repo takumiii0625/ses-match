@@ -111,6 +111,56 @@ function SkillChips({ main, all, limit = 8 }: { main: string[]; all: string[]; l
   );
 }
 
+/** 行の中身（起点に応じて「相手側」＝人材 or 案件 を表示）。 */
+function MatchRowContent({ m, dupes, show }: { m: MatchVM; dupes: number; show: "talent" | "project" }) {
+  const cs = channelStatus(m.proposable, m.channelNote);
+  const t = m.talent;
+  const p = m.project;
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="font-medium text-slate-800">{show === "talent" ? t.name : p.title}</span>
+        <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">{Math.round(m.score)}点</Badge>
+        {cs && <Badge tone={cs.tone}>{cs.label}</Badge>}
+        {m.locationOk === true && <Badge tone="green">勤務地OK</Badge>}
+        {dupes > 1 && <Badge tone="slate">同一{dupes}</Badge>}
+        {m.sentInfoAt && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+            ✉ {fmtSentDate(m.sentInfoAt)}
+          </span>
+        )}
+      </div>
+      {show === "talent" ? (
+        <>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted">
+            {t.affiliation && <span>所属: {t.affiliation}</span>}
+            {(t.desiredRateMin != null || t.desiredRateMax != null) && (
+              <span>希望: {formatRate(t.desiredRateMin, t.desiredRateMax)}</span>
+            )}
+            {t.remotePreference && <span>{REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}</span>}
+          </div>
+          <div className="mt-1.5">
+            <SkillChips main={t.mainSkills} all={t.skills} limit={5} />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted">
+            {p.clientName && <span>{p.clientName}</span>}
+            {(p.rateMin != null || p.rateMax != null) && (
+              <span>単価: {formatRate(p.rateMin, p.rateMax)}</span>
+            )}
+            {p.channelText && <span>商流: {p.channelText}</span>}
+          </div>
+          <div className="mt-1.5">
+            <SkillChips main={p.requiredSkills} all={[]} limit={5} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function MatchesList({
   matches,
   scope = "all",
@@ -127,6 +177,8 @@ export function MatchesList({
   const [query, setQuery] = useState("");
   const [minScore, setMinScore] = useState("80");
   const [talentType, setTalentType] = useState("ALL");
+  // 起点（グルーピング）: 案件ごと / 人材ごと。
+  const [groupMode, setGroupMode] = useState<"project" | "talent">("project");
   // 右ペインに出す選択中マッチ（行クリックで設定。チェックボックスとは別概念）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // メール編集・単体/一斉送信を統括する共有コントローラ。
@@ -162,30 +214,46 @@ export function MatchesList({
     });
   }, [matches, query, minScore, talentType]);
 
-  // 案件ごとにグループ化。重複（同名案件/同一人材）はまとめ、最新配信を代表にする。
+  // 起点に応じてグループ化。重複（同名案件/同一人材）はまとめ、最新配信を代表にする。
+  // project: 案件ごと（行＝人材）／ talent: 人材ごと（行＝案件）。
   const groups = useMemo(() => {
-    const rep = new Map<string, { project: MatchVM["project"]; ms: number }>();
+    const byTalent = groupMode === "talent";
+    const headKey = (m: MatchVM) =>
+      byTalent
+        ? talentDedupeKey(m.talent.name, m.talent.mainSkills)
+        : projectDedupeKey(m.project.title, m.project.clientName);
+    const headMs = (m: MatchVM) => {
+      const d = byTalent ? m.talent.receivedDate : m.project.receivedDate;
+      return d ? Date.parse(d) : 0;
+    };
+    const rowKey = (m: MatchVM) =>
+      byTalent
+        ? projectDedupeKey(m.project.title, m.project.clientName)
+        : talentDedupeKey(m.talent.name, m.talent.mainSkills);
+    const rowMs = (m: MatchVM) => {
+      const d = byTalent ? m.project.receivedDate : m.talent.receivedDate;
+      return d ? Date.parse(d) : 0;
+    };
+
+    const rep = new Map<string, { m: MatchVM; ms: number }>();
     for (const m of filtered) {
-      const k = projectDedupeKey(m.project.title, m.project.clientName);
-      const ms = m.project.receivedDate ? Date.parse(m.project.receivedDate) : 0;
+      const k = headKey(m);
+      const ms = headMs(m);
       const cur = rep.get(k);
-      if (!cur || ms > cur.ms) rep.set(k, { project: m.project, ms });
+      if (!cur || ms > cur.ms) rep.set(k, { m, ms });
     }
-    const byKey = new Map<
-      string,
-      { project: MatchVM["project"]; talents: Map<string, { m: MatchVM; ms: number; dupes: number }> }
-    >();
+    const byKey = new Map<string, { repM: MatchVM; rows: Map<string, { m: MatchVM; ms: number; dupes: number }> }>();
     for (const m of filtered) {
-      const pk = projectDedupeKey(m.project.title, m.project.clientName);
-      let g = byKey.get(pk);
+      const hk = headKey(m);
+      let g = byKey.get(hk);
       if (!g) {
-        g = { project: rep.get(pk)!.project, talents: new Map() };
-        byKey.set(pk, g);
+        g = { repM: rep.get(hk)!.m, rows: new Map() };
+        byKey.set(hk, g);
       }
-      const tk = talentDedupeKey(m.talent.name, m.talent.mainSkills);
-      const ms = m.talent.receivedDate ? Date.parse(m.talent.receivedDate) : 0;
-      const cur = g.talents.get(tk);
-      if (!cur) g.talents.set(tk, { m, ms, dupes: 1 });
+      const rk = rowKey(m);
+      const ms = rowMs(m);
+      const cur = g.rows.get(rk);
+      if (!cur) g.rows.set(rk, { m, ms, dupes: 1 });
       else {
         cur.dupes++;
         if (ms > cur.ms) {
@@ -196,13 +264,15 @@ export function MatchesList({
     }
     return [...byKey.values()]
       .map((g) => ({
-        project: g.project,
-        rows: [...g.talents.values()]
+        key: byTalent ? g.repM.talent.id : g.repM.project.id,
+        project: byTalent ? null : g.repM.project,
+        talent: byTalent ? g.repM.talent : null,
+        rows: [...g.rows.values()]
           .map((x) => ({ m: x.m, dupes: x.dupes }))
           .sort((a, b) => b.m.score - a.m.score),
       }))
       .sort((a, b) => (b.rows[0]?.m.score ?? 0) - (a.rows[0]?.m.score ?? 0));
-  }, [filtered]);
+  }, [filtered, groupMode]);
 
   // 全行をフラットに（選択中マッチの取得・一覧キーに使う）。
   const flatRows = useMemo(
@@ -320,10 +390,33 @@ export function MatchesList({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
           {/* 左: 一覧 */}
           <div className="min-w-0 space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-sm font-medium text-muted">
-                {shownCount} 件のマッチ（{groups.length} 案件）
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+              <div className="flex items-center gap-2">
+                {/* 起点切替 */}
+                <div className="inline-flex rounded-lg border border-border p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setGroupMode("project")}
+                    className={`rounded-md px-2.5 py-1 font-medium ${
+                      groupMode === "project" ? "bg-primary text-white" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    案件ごと
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGroupMode("talent")}
+                    className={`rounded-md px-2.5 py-1 font-medium ${
+                      groupMode === "talent" ? "bg-primary text-white" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    人材ごと
+                  </button>
+                </div>
+                <span className="text-sm font-medium text-muted">
+                  {shownCount} 件（{groups.length} {groupMode === "talent" ? "人材" : "案件"}）
+                </span>
+              </div>
               <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
                 <input
                   type="checkbox"
@@ -336,91 +429,86 @@ export function MatchesList({
               </label>
             </div>
 
-            {groups.map(({ project, rows }) => (
-              <Card key={project.id} className="overflow-hidden p-0">
-                {/* 案件ヘッダー */}
-                <div className="border-b border-border bg-slate-50/60 px-4 py-3">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="font-semibold text-foreground">{project.title}</span>
-                    <Badge tone="slate">{rows.length}名</Badge>
-                    {(project.rateMin != null || project.rateMax != null) && (
-                      <span className="text-xs text-muted">単価: {formatRate(project.rateMin, project.rateMax)}</span>
-                    )}
-                    {project.channelText && <Badge tone="amber">{project.channelText}</Badge>}
-                    {project.supportFee && <Badge tone="green">支援費あり</Badge>}
-                    <span className="ml-auto text-xs text-muted">配信: {daysAgo(project.receivedDate)}</span>
-                  </div>
-                </div>
-
-                {/* マッチ人材（行＝クリックで右に詳細・メール） */}
-                <div className="divide-y divide-border">
-                  {rows.map(({ m, dupes }) => {
-                    const t = m.talent;
-                    const key = keyOf(m);
-                    const sent = isSent(m);
-                    const active = selectedKey === key;
-                    return (
-                      <div
-                        key={m.id}
-                        onClick={() => setSelectedKey(key)}
-                        className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors ${
-                          active ? "bg-primary/10" : "hover:bg-slate-50"
-                        }`}
-                      >
-                        <div
-                          className="flex w-5 shrink-0 justify-center pt-0.5"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          {sent ? (
-                            <span className="text-emerald-500" title="送信済み">✓</span>
-                          ) : (
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 rounded border-slate-300"
-                              checked={ctrl.selected.has(key)}
-                              onChange={() => ctrl.toggleSelect(key)}
-                              title="一斉送信に選択"
-                            />
+            {groups.map((g) => {
+              const project = g.project;
+              const talent = g.talent;
+              const rowShow = groupMode === "talent" ? "project" : "talent";
+              return (
+                <Card key={g.key} className="overflow-hidden p-0">
+                  {/* グループ見出し（起点に応じて 案件 or 人材） */}
+                  <div className="border-b border-border bg-slate-50/60 px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {project ? (
+                        <>
+                          <span className="font-semibold text-foreground">{project.title}</span>
+                          <Badge tone="slate">{g.rows.length}名</Badge>
+                          {(project.rateMin != null || project.rateMax != null) && (
+                            <span className="text-xs text-muted">単価: {formatRate(project.rateMin, project.rateMax)}</span>
                           )}
-                        </div>
-                        <div className="w-9 shrink-0 text-center">
-                          <div className="text-base font-bold tabular-nums text-slate-700">
-                            {Math.round(m.score)}
-                          </div>
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-medium text-slate-800">{t.name}</span>
-                            <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">{Math.round(m.score)}点</Badge>
-                            {(() => {
-                              const cs = channelStatus(m.proposable, m.channelNote);
-                              return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
-                            })()}
-                            {m.locationOk === true && <Badge tone="green">勤務地OK</Badge>}
-                            {dupes > 1 && <Badge tone="slate">同一{dupes}</Badge>}
-                            {m.sentInfoAt && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                                ✉ {fmtSentDate(m.sentInfoAt)}
-                              </span>
+                          {project.channelText && <Badge tone="amber">{project.channelText}</Badge>}
+                          {project.supportFee && <Badge tone="green">支援費あり</Badge>}
+                          <span className="ml-auto text-xs text-muted">配信: {daysAgo(project.receivedDate)}</span>
+                        </>
+                      ) : talent ? (
+                        <>
+                          <span className="font-semibold text-foreground">{talent.name}</span>
+                          <Badge tone="slate">{g.rows.length}件</Badge>
+                          {talent.affiliation && <span className="text-xs text-muted">所属: {talent.affiliation}</span>}
+                          {(talent.desiredRateMin != null || talent.desiredRateMax != null) && (
+                            <span className="text-xs text-muted">希望: {formatRate(talent.desiredRateMin, talent.desiredRateMax)}</span>
+                          )}
+                          {talent.remotePreference && (
+                            <span className="text-xs text-muted">{REMOTE_LABELS[talent.remotePreference] ?? talent.remotePreference}</span>
+                          )}
+                          <span className="ml-auto text-xs text-muted">配信: {daysAgo(talent.receivedDate)}</span>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* 行（クリックで右に詳細・メール） */}
+                  <div className="divide-y divide-border">
+                    {g.rows.map(({ m, dupes }) => {
+                      const key = keyOf(m);
+                      const sent = isSent(m);
+                      const active = selectedKey === key;
+                      return (
+                        <div
+                          key={m.id}
+                          onClick={() => setSelectedKey(key)}
+                          className={`flex cursor-pointer items-start gap-3 px-4 py-3 transition-colors ${
+                            active ? "bg-primary/10" : "hover:bg-slate-50"
+                          }`}
+                        >
+                          <div
+                            className="flex w-5 shrink-0 justify-center pt-0.5"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {sent ? (
+                              <span className="text-emerald-500" title="送信済み">✓</span>
+                            ) : (
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4 rounded border-slate-300"
+                                checked={ctrl.selected.has(key)}
+                                onChange={() => ctrl.toggleSelect(key)}
+                                title="一斉送信に選択"
+                              />
                             )}
                           </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted">
-                            {t.affiliation && <span>所属: {t.affiliation}</span>}
-                            {(t.desiredRateMin != null || t.desiredRateMax != null) && (
-                              <span>希望: {formatRate(t.desiredRateMin, t.desiredRateMax)}</span>
-                            )}
-                            {t.remotePreference && <span>{REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}</span>}
+                          <div className="w-9 shrink-0 text-center">
+                            <div className="text-base font-bold tabular-nums text-slate-700">
+                              {Math.round(m.score)}
+                            </div>
                           </div>
-                          <div className="mt-1.5">
-                            <SkillChips main={t.mainSkills} all={t.skills} limit={5} />
-                          </div>
+                          <MatchRowContent m={m} dupes={dupes} show={rowShow} />
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            ))}
+                      );
+                    })}
+                  </div>
+                </Card>
+              );
+            })}
           </div>
 
           {/* 右: 選択マッチの詳細＋メール（画面遷移なし） */}
