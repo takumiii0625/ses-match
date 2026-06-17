@@ -151,11 +151,11 @@ async function ingestEmails(
         );
         // 送信元ドメインで自社/他社を自動判定
         const isOwn = companyDomain(sourceEmail) === OWN_DOMAIN;
-        // PDF添付（スキルシート）の抽出テキストを保存し、後で閲覧できるようにする
-        // （軽量＝テキスト。生PDFは保存しない）。最大8000文字に切り詰め。
+        // 添付スキルシート（PDF/Excel/Word）の抽出テキストを保存し、後で閲覧できるようにする
+        // （軽量＝テキスト。生ファイルは保存しない）。最大8000文字に切り詰め。
         const skillSheetText =
           mail.attachments
-            .filter((a) => a.mediaType === "application/pdf" && a.text?.trim())
+            .filter((a) => a.text?.trim())
             .map((a) => `【${a.filename}】\n${a.text!.trim()}`)
             .join("\n\n")
             .slice(0, 8000) || null;

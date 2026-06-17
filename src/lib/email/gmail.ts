@@ -4,6 +4,7 @@ import { extractTextItems, getDocumentProxy } from "unpdf";
 import { prisma } from "@/lib/prisma";
 import type { EmailAttachment } from "@/lib/ai/types";
 import { htmlToText, pickRicherBody } from "./html-text";
+import { extractOfficeText, isOfficeFile } from "@/lib/office";
 
 /**
  * PDFバイト列からテキストを抽出する。テキストPDFなら成功し、LLMには
@@ -239,9 +240,13 @@ async function parseMessage(
   const acc = { text: [] as string[], html: [] as string[], atts: [] as gmail_v1.Schema$MessagePart[] };
   walkParts(payload, acc);
 
+  // スキルシート添付を取り込む: PDF＋Excel(.xlsx/.xls)＋Word(.docx) をテキスト化。
   const attachments: EmailAttachment[] = [];
-  for (const a of acc.atts.slice(0, 3)) {
-    if (a.mimeType !== "application/pdf") continue;
+  for (const a of acc.atts.slice(0, 4)) {
+    const filename = a.filename ?? "attachment";
+    const isPdf = a.mimeType === "application/pdf" || /\.pdf$/i.test(filename);
+    const isOffice = isOfficeFile(filename);
+    if (!isPdf && !isOffice) continue;
     try {
       const att = await gmail.users.messages.attachments.get({
         userId: "me",
@@ -249,14 +254,24 @@ async function parseMessage(
         id: a.body!.attachmentId!,
       });
       const bytes = Buffer.from(att.data.data ?? "", "base64url");
-      const b64 = bytes.toString("base64");
-      attachments.push({
-        filename: a.filename ?? "attachment.pdf",
-        mediaType: "application/pdf",
-        dataBase64: b64,
-        // PDFからテキストを抽出（テキストPDFならLLMには安価なテキストで送れる）。
-        text: await extractPdfText(bytes),
-      });
+      if (isPdf) {
+        attachments.push({
+          filename,
+          mediaType: "application/pdf",
+          dataBase64: bytes.toString("base64"),
+          // テキストPDFは抽出（LLMには安価なテキストで送る）。スキャンPDFは undefined→document送付。
+          text: await extractPdfText(bytes),
+        });
+      } else {
+        // Excel/Word はClaudeが直接読めないのでサーバ側でテキスト抽出（本文をdataBase64には積まない）。
+        const text = await extractOfficeText(filename, bytes.toString("base64"));
+        attachments.push({
+          filename,
+          mediaType: a.mimeType ?? "application/octet-stream",
+          dataBase64: "",
+          text: text ?? undefined,
+        });
+      }
     } catch {}
   }
 

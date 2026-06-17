@@ -322,19 +322,19 @@ export class AnthropicAIService implements AIService {
         : rawEmail;
     const content: Anthropic.ContentBlockParam[] = [{ type: "text", text }];
     for (const att of attachments ?? []) {
-      if (att.mediaType !== "application/pdf") continue;
-      // テキスト抽出済みなら安価なテキストで送る（PDFの画像トークンを避ける）。
-      if (att.text && att.text.trim().length > 80) {
+      const isPdf = att.mediaType === "application/pdf";
+      // テキスト抽出済み（PDF/Excel/Word）なら安価なテキストで送る。
+      if (att.text && att.text.trim().length > 40) {
         const body =
           att.text.length > MAX_EMAIL_CHARS
             ? att.text.slice(0, MAX_EMAIL_CHARS) + "\n…（以下省略）"
             : att.text;
         content.push({
           type: "text",
-          text: `\n\n【添付PDF: ${att.filename}】\n${body}`,
+          text: `\n\n【添付: ${att.filename}】\n${body}`,
         });
-      } else {
-        // 抽出できない（スキャンPDF等）→ 従来どおり document ブロックで送る。
+      } else if (isPdf && att.dataBase64) {
+        // 抽出できないPDF（スキャン等）→ 従来どおり document ブロックで送る。
         content.push({
           type: "document",
           source: {
@@ -345,6 +345,7 @@ export class AnthropicAIService implements AIService {
           title: att.filename,
         });
       }
+      // Office で text 無し・dataBase64 無しはスキップ（Claudeは読めないため）。
     }
     return content;
   }

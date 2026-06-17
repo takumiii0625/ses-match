@@ -75,8 +75,20 @@ export async function backfillEmailBodies(
         emailSubject: mail.subject ?? null,
       };
 
+      // 添付スキルシート（PDF/Excel/Word）の抽出テキスト。再取得で復旧できるよう取り直す。
+      const skillSheetText =
+        mail.attachments
+          .filter((a) => a.text?.trim())
+          .map((a) => `【${a.filename}】\n${a.text!.trim()}`)
+          .join("\n\n")
+          .slice(0, 8000) || null;
+
       if (rec.talentId) {
-        await prisma.talent.update({ where: { id: rec.talentId }, data });
+        // 抽出できたときだけ summaryText を更新（既存を空で潰さない）。
+        await prisma.talent.update({
+          where: { id: rec.talentId },
+          data: skillSheetText ? { ...data, summaryText: skillSheetText } : data,
+        });
         result.updatedTalents++;
       } else if (rec.projectId) {
         // 本文が変わるので整形キャッシュをクリア（案内メールが新本文で作り直される）。
