@@ -13,7 +13,7 @@ import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { useSendController, SendPanel, pairKey } from "@/components/send-mail";
-import { SkillSheetView } from "./skillsheet-view";
+import { MatchSourceInfo } from "./match-source-info";
 import { ProposalButton } from "../matching/proposal-button";
 
 // サーバから渡る軽量ビューモデル（Prisma型から必要分だけ抜き出して直列化）。
@@ -721,11 +721,10 @@ function MatchDetailPanel({
           </div>
         )}
 
-        {/* スキルシート（添付PDF=テキスト化／スプレッドシート等はリンク／無ければ「なし」） */}
+        {/* 元情報: スキルシート＋（開閉）案件/人材のメール本文・概要。画面遷移なしで確認。 */}
         <div className="border-t border-border pt-3">
-          <div className="mb-2 text-xs font-semibold text-slate-500">スキルシート</div>
-          {/* key=talentId で人材切替時に作り直して再取得する。 */}
-          <SkillSheetView key={t.id} talentId={t.id} />
+          {/* key=pair で選択切替時に作り直して再取得する。 */}
+          <MatchSourceInfo key={`${t.id}:${p.id}`} talentId={t.id} projectId={p.id} />
         </div>
 
         {/* メール（編集して送信） */}
