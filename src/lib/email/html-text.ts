@@ -36,7 +36,17 @@ export function htmlToText(html: string): string {
   let s = html
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<!--[\s\S]*?-->/g, "");
+    .replace(/<!--[\s\S]*?-->/g, "")
+    // <a href="URL">テキスト</a> は URL を本文に残す（スキルシートのリンク等を失わない）。
+    // 後段の一括タグ除去で href が消えるため、ここで「テキスト URL」に展開しておく。
+    .replace(
+      /<a\b[^>]*?href=["']?([^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/a>/gi,
+      (_m, href: string, inner: string) => {
+        const txt = inner.replace(/<[^>]+>/g, "").trim();
+        if (!href || /^(mailto:|tel:|#|javascript:)/i.test(href)) return txt;
+        return txt && txt !== href ? `${txt} ${href}` : href;
+      },
+    );
   // 行区切りになる要素を改行へ。<br> と「閉じタグ」だけを改行にする
   // （開きタグも改行にすると </div><div> で二重改行になり間延びするため閉じ側のみ）。
   s = s

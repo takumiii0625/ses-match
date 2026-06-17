@@ -23,6 +23,18 @@ describe("htmlToText", () => {
     expect(decodeEntities("A&amp;B &lt;tag&gt; &#39;q&#39; &nbsp;x")).toBe("A&B <tag> 'q'  x");
   });
 
+  it("<a href> のURLを本文に残す（スキルシートのリンクを失わない）", () => {
+    const html =
+      '<div>スキルシートは<a href="https://docs.google.com/spreadsheets/d/abc/edit">こちら</a></div>';
+    const out = htmlToText(html);
+    expect(out).toContain("https://docs.google.com/spreadsheets/d/abc/edit");
+    expect(out).toContain("こちら");
+  });
+
+  it("mailto/tel のリンクはテキストのみ残す", () => {
+    expect(htmlToText('<a href="mailto:a@b.com">メール</a>')).toBe("メール");
+  });
+
   it("過剰な空行は2行までに詰める", () => {
     const html = "<div>A</div><br><br><br><div>B</div>";
     expect(htmlToText(html)).toBe("A\n\nB");
