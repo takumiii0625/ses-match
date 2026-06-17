@@ -13,7 +13,7 @@ import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { useSendController, SendPanel, pairKey } from "@/components/send-mail";
-import { MatchSourceInfo } from "./match-source-info";
+import { MatchSourceInfo, ProjectSourceDisclosure } from "./match-source-info";
 import { ProposalButton } from "../matching/proposal-button";
 
 // サーバから渡る軽量ビューモデル（Prisma型から必要分だけ抜き出して直列化）。
@@ -448,6 +448,10 @@ export function MatchesList({
                           {project.channelText && <Badge tone="amber">{project.channelText}</Badge>}
                           {project.supportFee && <Badge tone="green">支援費あり</Badge>}
                           <span className="ml-auto text-xs text-muted">配信: {daysAgo(project.receivedDate)}</span>
+                          {/* 案件の元メール・概要（左の案件ヘッダーに開閉表示） */}
+                          <div className="w-full">
+                            <ProjectSourceDisclosure projectId={project.id} />
+                          </div>
                         </>
                       ) : talent ? (
                         <>
@@ -515,7 +519,7 @@ export function MatchesList({
           <div className="min-w-0">
             <div className="lg:sticky lg:top-4">
               {selectedMatch ? (
-                <MatchDetailPanel m={selectedMatch} controller={ctrl} sent={isSent(selectedMatch)} />
+                <MatchDetailPanel m={selectedMatch} controller={ctrl} sent={isSent(selectedMatch)} groupMode={groupMode} />
               ) : (
                 <Card className="flex items-center justify-center p-12 text-center text-sm text-muted">
                   左の一覧から人材を選ぶと、ここに案件・人材の詳細とメール内容が表示され、そのまま送信できます。
@@ -558,10 +562,12 @@ function MatchDetailPanel({
   m,
   controller,
   sent,
+  groupMode,
 }: {
   m: MatchVM;
   controller: ReturnType<typeof useSendController>;
   sent: boolean;
+  groupMode: "project" | "talent";
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -724,7 +730,13 @@ function MatchDetailPanel({
         {/* 元情報: スキルシート＋（開閉）案件/人材のメール本文・概要。画面遷移なしで確認。 */}
         <div className="border-t border-border pt-3">
           {/* key=pair で選択切替時に作り直して再取得する。 */}
-          <MatchSourceInfo key={`${t.id}:${p.id}`} talentId={t.id} projectId={p.id} />
+          {/* 案件起点では案件メールは左ヘッダーに出すので右では非表示 */}
+          <MatchSourceInfo
+            key={`${t.id}:${p.id}`}
+            talentId={t.id}
+            projectId={p.id}
+            showProject={groupMode !== "project"}
+          />
         </div>
 
         {/* メール（編集して送信） */}
