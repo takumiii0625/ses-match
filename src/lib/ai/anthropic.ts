@@ -516,6 +516,34 @@ export class AnthropicAIService implements AIService {
     return denull(JSON.parse(text.text)) as ParsedSkillSheet;
   }
 
+  async analyzeRejections(input: string): Promise<string> {
+    const system = `あなたはSES営業のマッチング精度を高めるアシスタントです。
+以下は営業担当が「この人材×案件は送らない（差し戻し）」と判断したマッチと、その理由の一覧です。
+これらに共通する「今後のマッチ判定で避けるべき／減点すべき傾向」を、簡潔な日本語の箇条書き（最大10項目）で抽出してください。
+
+ルール:
+- 個別の固有名詞（会社名・人名）は使わず、一般化した条件・傾向で書く。
+- 「〜の場合は提案不可（除外）にする／大きく減点する」のように、判定に使える指示の形にする。
+- 【重要】「既に充足」「他社で決定」「タイミングが合わない」「今回は見送り」等の
+  “一回限り・状況依存”の理由は、繰り返し条件にできないため学習に含めない。
+  人材と案件の属性（スキル不足/単価/商流/勤務地/年齢/国籍/経験年数 等）に基づく
+  “繰り返し現れる確かな傾向”だけを抽出する。
+- 確かな傾向が無ければ「特筆すべき傾向なし」とだけ書く。
+- 箇条書き本文のみを出力（前置き・見出し・コードブロックは不要）。`;
+    const res = await this.client.messages.create({
+      model: MODEL,
+      max_tokens: 1200,
+      system: [{ type: "text", text: system }],
+      messages: [{ role: "user", content: input }],
+    });
+    logUsage("rejection-analysis", res.usage);
+    const text = res.content.find((b) => b.type === "text");
+    if (!text || text.type !== "text") {
+      throw new Error("AI応答にテキストが含まれていません");
+    }
+    return text.text.trim();
+  }
+
   async improveSkillSheet(currentText: string, systemPrompt?: string): Promise<string> {
     const res = await this.client.messages.create({
       model: MODEL,

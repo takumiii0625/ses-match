@@ -143,6 +143,8 @@ export interface AIService {
   ): Promise<ParsedSkillSheet>;
   /** 既存サマリ文を推敲（情報は足さず体裁のみ改善） */
   improveSkillSheet(currentText: string, systemPrompt?: string): Promise<string>;
+  /** 差し戻し(送らない判断)の一覧テキストから「避けるべきマッチ傾向」を要約する */
+  analyzeRejections(input: string): Promise<string>;
   /** 案件＋候補人材リスト → LLMによるマッチ判定（高い順） */
   rankCandidates(
     project: MatchProjectInput,

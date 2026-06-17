@@ -1,0 +1,48 @@
+import { prisma } from "@/lib/prisma";
+import { getAI } from "@/lib/ai";
+
+/**
+ * 差し戻し(送らない判断)の履歴(MatchRejection)をLLMで分析し、
+ * 「避けるべきマッチ傾向」を org.matchLearnings に保存（再生成）する。
+ * 保存内容は match-run がマッチ判定プロンプトに自動付加し、該当マッチを提案不可/除外にする。
+ * 差し戻しのたびに自動で呼ばれる（都度反映）ほか、手動でも実行できる。
+ */
+export async function regenerateMatchLearnings(
+  orgId: string,
+): Promise<{ ok: boolean; learnings?: string; count: number; error?: string }> {
+  const rejections = await prisma.matchRejection.findMany({
+    where: { orgId },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    select: { reason: true, projectTitle: true, talentName: true, score: true },
+  });
+  if (rejections.length === 0) {
+    // 履歴が無くなったら学習も消す。
+    await prisma.organization.update({
+      where: { id: orgId },
+      data: { matchLearnings: null, matchLearningsAt: null },
+    });
+    return { ok: false, count: 0, error: "差し戻しの記録がありません" };
+  }
+  const input = rejections
+    .map((r, i) => {
+      const score = r.score != null ? `${Math.round(r.score)}点` : "-";
+      return `${i + 1}. 案件「${r.projectTitle ?? "?"}」 × 人材「${r.talentName ?? "?"}」（${score}）\n   理由: ${r.reason}`;
+    })
+    .join("\n");
+
+  const learnings = (await getAI().analyzeRejections(input)).trim();
+  await prisma.organization.update({
+    where: { id: orgId },
+    data: { matchLearnings: learnings || null, matchLearningsAt: new Date() },
+  });
+  return { ok: true, learnings, count: rejections.length };
+}
+
+/** 学習メモをクリア（マッチ判定への反映を止める）。 */
+export async function clearMatchLearnings(orgId: string): Promise<void> {
+  await prisma.organization.update({
+    where: { id: orgId },
+    data: { matchLearnings: null, matchLearningsAt: null },
+  });
+}

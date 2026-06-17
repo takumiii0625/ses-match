@@ -8,6 +8,7 @@ import { STAGE_KEYS, type StageKey } from "@/lib/pipeline";
 import { ProposalPipeline, type PipelineVM } from "./pipeline-table";
 import { RejectedTable, type RejectedVM } from "./rejected-table";
 import { ProposalSearch } from "./proposal-search";
+import { RejectionLearnings } from "./rejection-learnings";
 
 export const metadata = { title: "提案管理 — Caduceus" };
 export const dynamic = "force-dynamic";
@@ -187,6 +188,10 @@ export default async function ProposalsPage(props: {
 
       {tab === "rejected" && (
         <>
+          <RejectionLearnings
+            learnings={org.matchLearnings ?? null}
+            updatedAt={org.matchLearningsAt ? org.matchLearningsAt.toISOString() : null}
+          />
           <p className="px-1 text-xs text-muted">
             送らずに差し戻したマッチと理由の記録です。「一覧に戻す」で再び送信対象にできます。
           </p>

@@ -162,6 +162,12 @@ export class MockAIService implements AIService {
       .trim();
   }
 
+  async analyzeRejections(input: string): Promise<string> {
+    // モックは要約せず、件数だけ返す（テスト・オフライン用）。
+    const lines = input.split("\n").filter((l) => l.trim()).length;
+    return `・差し戻し ${lines} 行を確認（モック応答）`;
+  }
+
   async generateProposal(input: ProposalInput): Promise<string> {
     const reasons = (input.matchReasons ?? []).map((r) => `・${r}`).join("\n");
     return [

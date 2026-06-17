@@ -37,6 +37,9 @@ model Organization {
   projectEmailPrompt      String? // 案件案内メールの本文整形
   skillSheetPrompt        String? // スキルシート→サマリ生成
   skillSheetImprovePrompt String? // サマリ文の改善
+  // 差し戻し(送らない判断)の理由をLLMで分析した「避けるべきマッチ傾向」。マッチ判定プロンプトに自動付加。
+  matchLearnings   String?
+  matchLearningsAt DateTime?
   createdAt         DateTime @default(now())
 
   users            User[]

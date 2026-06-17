@@ -8,6 +8,7 @@ import {
 } from "@/lib/matching";
 import { getAI } from "@/lib/ai";
 import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
+import { DEFAULT_MATCH_PROMPT } from "@/lib/ai/prompts";
 import { pregenerateProjectBodies } from "@/lib/email/project-mail";
 import { loadNgDomains, isNgDomain } from "@/lib/ng-company";
 
@@ -177,16 +178,22 @@ function toCandidateInput(t: Talent): MatchCandidateInput {
   };
 }
 
-/** 組織のマッチ判定プロンプト＋案件メール整形プロンプト（未設定なら null）。 */
+/** 組織のマッチ判定プロンプト＋案件メール整形＋差し戻し学習（未設定なら null）。 */
 async function resolveOrgPrompts(
   orgId: string,
 ): Promise<{ matchPrompt: string | undefined; projectEmailPrompt: string | null }> {
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
-    select: { matchPrompt: true, projectEmailPrompt: true },
+    select: { matchPrompt: true, projectEmailPrompt: true, matchLearnings: true },
   });
+  // 差し戻し学習があれば、マッチ判定プロンプトに「提案不可＝除外」の指示として付加する。
+  const base = org?.matchPrompt ?? DEFAULT_MATCH_PROMPT;
+  const learnings = org?.matchLearnings?.trim();
+  const matchPrompt = learnings
+    ? `${base}\n\n【営業の差し戻し傾向（過去に営業が「送らない」と判断したパターン。以下に明確に該当するマッチは提案不可とみなし、score を MIN_SCORE 未満まで大きく下げて除外する。曖昧なものは通常どおり判定）】\n${learnings}`
+    : base;
   return {
-    matchPrompt: org?.matchPrompt ?? undefined,
+    matchPrompt,
     projectEmailPrompt: org?.projectEmailPrompt ?? null,
   };
 }
