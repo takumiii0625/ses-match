@@ -3,6 +3,7 @@
 import { useEffect, useState, type SyntheticEvent } from "react";
 import { ChevronDown } from "lucide-react";
 import { SkillSheetBody, toSkillSheetData, type SkillSheetData } from "./skillsheet-view";
+import { formatSkillSheetText } from "@/lib/skillsheet-format";
 
 interface TalentSrc {
   summaryText?: string | null;
@@ -30,7 +31,8 @@ function Disclosure({ title, text }: { title: string; text: string | null | unde
       <div className="border-t border-border px-3 py-2">
         {has ? (
           <div className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words text-[13px] leading-relaxed text-slate-700">
-            {text}
+            {/* 旧取込等で改行が失われた塊データも読みやすく整形して表示 */}
+            {formatSkillSheetText(text)}
           </div>
         ) : (
           <p className="text-xs text-slate-400">記載なし</p>
@@ -139,7 +141,7 @@ export function ProjectSourceDisclosure({ projectId }: { projectId: string }) {
           <p className="text-xs text-slate-400">読み込み中…</p>
         ) : data.emailBody && data.emailBody.trim() ? (
           <div className="max-h-72 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-slate-50 p-3 text-[13px] leading-relaxed text-slate-700">
-            {data.emailBody}
+            {formatSkillSheetText(data.emailBody)}
           </div>
         ) : (
           <p className="text-xs text-slate-400">記載なし</p>
