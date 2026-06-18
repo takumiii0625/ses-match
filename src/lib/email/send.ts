@@ -309,7 +309,7 @@ export function buildProjectEmail(input: ProjectEmailInput): {
     `${input.talentName}様宛に下記案件はいかがでしょうか。`,
     `ご検討いただけますと幸いです。`,
     ``,
-    `-------`,
+    `-----------------------------------------`,
     block,
     ``,
     `何卒よろしくお願い致します。`,
