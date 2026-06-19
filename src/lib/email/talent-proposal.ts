@@ -95,6 +95,10 @@ export async function sendAndLogTalentProposal(opts: {
     await prisma.sentEmail.create({
       data: { orgId, talentId, projectId, kind: "TALENT_PROPOSAL", toAddr: to, subject, body: text, status: "SENT" },
     });
+    // 提案メールを送ったマッチは「人材提案」段階を自動でON（未設定のときのみ）。
+    await prisma.match
+      .updateMany({ where: { talentId, projectId, stTalent: null }, data: { stTalent: new Date() } })
+      .catch(() => {});
     return { id };
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

@@ -4,10 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import type { ProposalStatus } from "@prisma/client";
-import { STAGE_KEYS, type StageKey } from "@/lib/pipeline";
+import { STAGE_KEYS, isStageKey, type StageKey } from "@/lib/pipeline";
 import { ProposalPipeline, type PipelineVM } from "./pipeline-table";
 import { RejectedTable, type RejectedVM } from "./rejected-table";
 import { ProposalSearch } from "./proposal-search";
+import { PipelineFilters } from "./pipeline-filters";
 import { RejectionLearnings } from "./rejection-learnings";
 
 export const metadata = { title: "提案管理 — Caduceus" };
@@ -37,6 +38,11 @@ export default async function ProposalsPage(props: {
   const q = (typeof sp.q === "string" ? sp.q : "").trim().toLowerCase();
   const matchQ = (...parts: (string | null | undefined)[]) =>
     !q || parts.filter(Boolean).join(" ").toLowerCase().includes(q);
+  // パイプライン用フィルタ: 進捗(stage)・期間(period)。
+  const stageParam = typeof sp.stage === "string" ? sp.stage : "";
+  const periodParam = typeof sp.period === "string" ? sp.period : "";
+  const periodDays = ["7", "30", "90"].includes(periodParam) ? Number(periodParam) : 0;
+  const periodCutoff = periodDays > 0 ? Date.now() - periodDays * 24 * 60 * 60 * 1000 : 0;
   const org = await getCurrentOrg();
 
   // --- メール送信したマッチ（パイプライン） ---
@@ -98,7 +104,24 @@ export default async function ProposalsPage(props: {
     })
     .sort((a, b) => b.sortMs - a.sortMs)
     .map((x) => x.row)
-    .filter((r) => matchQ(r.projectTitle, r.clientName, r.talentName));
+    .filter((r) => matchQ(r.projectTitle, r.clientName, r.talentName))
+    .filter((r) => {
+      // 進捗フィルタ
+      if (stageParam === "none") {
+        if (STAGE_KEYS.some((k) => r.stages[k])) return false;
+      } else if (isStageKey(stageParam)) {
+        if (!r.stages[stageParam]) return false;
+      }
+      // 期間フィルタ（送信日＝案内/提案の新しい方）
+      if (periodCutoff > 0) {
+        const sent = Math.max(
+          r.sentInfoAt ? Date.parse(r.sentInfoAt) : 0,
+          r.sentTalentAt ? Date.parse(r.sentTalentAt) : 0,
+        );
+        if (sent < periodCutoff) return false;
+      }
+      return true;
+    });
 
   // --- 差し戻し済み ---
   const rejectedMatches = await prisma.match.findMany({
@@ -179,9 +202,12 @@ export default async function ProposalsPage(props: {
 
       {tab === "pipeline" && (
         <>
-          <p className="px-1 text-xs text-muted">
-            メールを送信したマッチの進捗を、各段階のチェックで管理できます（チェックは自動保存）。
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="px-1 text-xs text-muted">
+              メールを送信したマッチの進捗を、各段階のチェックで管理できます（チェックは自動保存）。
+            </p>
+            <PipelineFilters stage={stageParam} period={periodParam} />
+          </div>
           <ProposalPipeline rows={pipelineRows} />
         </>
       )}
