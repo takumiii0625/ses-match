@@ -8,7 +8,12 @@ on:
   # 取込は分類・登録のみ（自動マッチはしない＝安価）。マッチは rematch-daily が取込直後に実行。
   schedule:
     - cron: "0 2,6,8 * * *" # JST 11/15/17
-  workflow_dispatch: {} # 手動実行も可
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "取得期間（日）。空=今日のみ。取りこぼし回収時に 2〜3 を指定（既取込は自動スキップ）"
+        required: false
+        default: ""
 
 concurrency:
   group: fetch-mail
@@ -21,8 +26,10 @@ jobs:
       - name: 取り込みエンドポイントを呼び出す（ページ方式で完了までループ）
         run: |
           token=""
+          days="${{ github.event.inputs.days }}"
           for i in $(seq 1 500); do
             url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=10"
+            [ -n "$days" ] && url="$url&days=$days"
             [ -n "$token" ] && url="$url&pageToken=$token"
             resp=$(curl -fsS --max-time 300 -X POST "$url" \
               -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")

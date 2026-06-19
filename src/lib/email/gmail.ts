@@ -168,21 +168,23 @@ function jstTodayStr(): string {
   return `${y}/${m}/${d}`;
 }
 
-function mailQuery(): string {
-  // 優先度: MAIL_QUERY（直接指定）> MAIL_WINDOW_DAYS（newer_than:Nd）> 既定は今日(JST)のみ。
-  if (process.env.MAIL_QUERY) return process.env.MAIL_QUERY;
+function mailQuery(windowDays?: number): string {
   const to = process.env.MAIL_ADDRESS ? `to:${process.env.MAIL_ADDRESS} ` : "";
+  // 明示指定（取りこぼし回収用）が最優先: 直近 windowDays 日を対象に。
+  if (windowDays && windowDays > 0) return `${to}newer_than:${windowDays}d`;
+  // 次点: MAIL_QUERY（直接指定）> MAIL_WINDOW_DAYS（newer_than:Nd）> 既定は今日(JST)のみ。
+  if (process.env.MAIL_QUERY) return process.env.MAIL_QUERY;
   const days = process.env.MAIL_WINDOW_DAYS;
   if (days) return `${to}newer_than:${days}d`;
   return `${to}after:${jstTodayStr()}`; // 今日(JST)0:00以降
 }
 
 /** List + fetch messages matching the query (default: addressed to MAIL_ADDRESS). */
-export async function fetchEmails(limit = 20): Promise<FetchedEmail[]> {
+export async function fetchEmails(limit = 20, windowDays?: number): Promise<FetchedEmail[]> {
   const gmail = await authedGmail();
   const list = await gmail.users.messages.list({
     userId: "me",
-    q: mailQuery(),
+    q: mailQuery(windowDays),
     maxResults: limit,
   });
   const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
@@ -207,11 +209,12 @@ export interface MessageIdPage {
 export async function listMessageIds(
   pageSize = 12,
   pageToken?: string,
+  windowDays?: number,
 ): Promise<MessageIdPage> {
   const gmail = await authedGmail();
   const list = await gmail.users.messages.list({
     userId: "me",
-    q: mailQuery(),
+    q: mailQuery(windowDays),
     maxResults: pageSize,
     pageToken: pageToken || undefined,
   });

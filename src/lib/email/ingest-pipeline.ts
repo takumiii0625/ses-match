@@ -280,11 +280,12 @@ async function ingestEmails(
 // 取込とマッチは分離した（高流量で自動マッチが爆発し課金が大きいため）。
 // 取込は分類・登録のみ。マッチは別途（1日1回のスケジュール rematch / 手動）で行う。
 
-/** Fetch new mail, classify with AI, and register talents/projects.（最新 limit 件を一括処理） */
-export async function runMailIngest(limit = 20): Promise<IngestRunResult> {
+/** Fetch new mail, classify with AI, and register talents/projects.（最新 limit 件を一括処理）
+ *  windowDays 指定で取得期間を広げて取りこぼしを回収できる（既取込はdedupでスキップ）。 */
+export async function runMailIngest(limit = 20, windowDays?: number): Promise<IngestRunResult> {
   const org = await getCurrentOrg();
   const ai = getAI();
-  const emails = await fetchEmails(limit);
+  const emails = await fetchEmails(limit, windowDays);
   const { result } = await ingestEmails(emails, org, ai);
   return result;
 }
@@ -304,10 +305,11 @@ export interface IngestPageResult extends IngestRunResult {
 export async function runMailIngestPage(
   pageSize = 12,
   pageToken?: string,
+  windowDays?: number,
 ): Promise<IngestPageResult> {
   const org = await getCurrentOrg();
   const ai = getAI();
-  const { ids, nextPageToken } = await listMessageIds(pageSize, pageToken);
+  const { ids, nextPageToken } = await listMessageIds(pageSize, pageToken, windowDays);
 
   // gmailId で既取込を事前除外（本文取得・LLM不要で重複ページを安く飛ばす）。
   const known = ids.length
