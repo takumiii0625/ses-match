@@ -120,13 +120,20 @@ export function BlastView({
     setSending(true);
     setError(null);
     try {
-      const data = await fetchJson<{ campaignCount: number; totalEmails: number }>("/api/blast", {
+      const data = await fetchJson<{
+        campaignCount: number;
+        totalEmails: number;
+        sent: number;
+        remaining: number;
+      }>("/api/blast", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ talentIds: [...selected], confirm: true }),
       });
       setDone(
-        `送信キューに登録しました（人材${data.campaignCount}名・計${data.totalEmails}通）。数分以内に順次送信されます。`,
+        data.remaining > 0
+          ? `${data.sent}通を送信しました（人材${data.campaignCount}名）。残り${data.remaining}通は手動ドレイン（GitHub Actions: 一斉案内ワークフロー）で送信できます。`
+          : `送信しました（人材${data.campaignCount}名・計${data.sent}通）。`,
       );
       setPreview(null);
       setSelected(new Set());

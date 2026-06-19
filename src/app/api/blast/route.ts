@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { buildTalentIntroEmail } from "@/lib/email/send";
 import { buildTalentIntroBlock } from "@/lib/email/talent-block";
+import { drainBlast } from "@/lib/email/blast-send";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 function startOfTodayJst(): Date {
@@ -113,11 +114,34 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    // 作成したら、その場で送信（5分cronは廃止＝送信時に即ドレイン）。
+    // 時間内に送り切れなかった残りは PENDING のまま残り、手動ワークフローで流せる。
+    const started = Date.now();
+    let sent = 0;
+    let failed = 0;
+    try {
+      for (let i = 0; i < 300; i++) {
+        if (Date.now() - started > 250_000) break; // 時間切れ（maxDuration手前で止める）
+        const r = await drainBlast(org.id, { maxToSend: 1000 });
+        sent += r.sent;
+        failed += r.failed;
+        if (r.campaignId === null) break; // 送信待ちなし＝完了
+      }
+    } catch (e) {
+      console.error("[POST /api/blast] drain失敗:", e);
+    }
+    const remaining = await prisma.blastRecipient.count({
+      where: { campaign: { orgId: org.id }, status: "PENDING" },
+    });
+
     return NextResponse.json({
       ok: true,
       campaignCount: created.length,
       recipientCount: recipients.length,
       totalEmails,
+      sent,
+      failed,
+      remaining,
     });
   } catch (err) {
     console.error("[POST /api/blast]", err);
