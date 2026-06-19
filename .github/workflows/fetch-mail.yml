@@ -23,16 +23,26 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: 取り込みエンドポイントを呼び出す（ページ方式で完了までループ）
+      - name: 取り込みエンドポイントを呼び出す（ページ方式で完了までループ・エラー耐性あり）
         run: |
           token=""
           days="${{ github.event.inputs.days }}"
-          for i in $(seq 1 500); do
-            url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=10"
+          fails=0
+          for i in $(seq 1 800); do
+            url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=5"
             [ -n "$days" ] && url="$url&days=$days"
             [ -n "$token" ] && url="$url&pageToken=$token"
-            resp=$(curl -fsS --max-time 300 -X POST "$url" \
-              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+            # -f を外し || true で、1ページの500等でワークフロー全体を止めない。
+            resp=$(curl -sS --max-time 300 -X POST "$url" \
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" || true)
+            if [ -z "$resp" ] || ! echo "$resp" | grep -q '"fetched"'; then
+              fails=$((fails + 1))
+              echo "page error ($fails/5) — retry: $resp"
+              if [ "$fails" -ge 5 ]; then echo "連続エラーで打ち切り（残りは次回・再実行で続きから）"; break; fi
+              sleep 15
+              continue
+            fi
+            fails=0
             echo "$resp"
             echo "$resp" | grep -q '"done":true' && { echo "完了"; break; }
             token=$(echo "$resp" | grep -o '"nextPageToken":"[^"]*"' | sed 's/.*:"//;s/"//')
