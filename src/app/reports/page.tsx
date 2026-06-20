@@ -166,7 +166,19 @@ const AI_TAG_LABELS: Record<string, string> = {
   proposal: "提案文生成",
   skillsheet: "スキルシート解析",
   "skillsheet-improve": "スキルシート改善",
+  "rejection-analysis": "差し戻し分析",
 };
+
+// USD→JPY 換算レート（環境変数 USD_JPY_RATE で上書き可。既定160円/$）。
+const USD_JPY = Number(process.env.USD_JPY_RATE ?? "160") || 160;
+const fmtYen = (usd: number) => `¥${Math.round(usd * USD_JPY).toLocaleString("ja-JP")}`;
+const fmtUsd = (usd: number, digits = 2) => `$${usd.toFixed(digits)}`;
+/** 短い日付 M/D（曜日付き）。 */
+function fmtDay(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dow = ["日", "月", "火", "水", "木", "金", "土"][new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${m}/${d}(${dow})`;
+}
 
 export default async function ReportsPage() {
   const org = await getCurrentOrg();
@@ -185,6 +197,7 @@ export default async function ReportsPage() {
     sendersToday,
     partnerCompanies,
     ngCompanies,
+    aiDaily,
   ] = await Promise.all([
       // All talent lightweight fields
       prisma.talent.findMany({
@@ -244,6 +257,16 @@ export default async function ReportsPage() {
       }),
       // NG企業ドメイン（送信元一覧でのNG表示用）。
       prisma.ngCompany.findMany({ where: { orgId }, select: { domain: true } }),
+      // 日別のAIコスト（直近30日・JST日付で集計）。
+      prisma.$queryRaw<{ day: string; cost: number; calls: number }[]>`
+        SELECT to_char("createdAt" AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD') AS day,
+               SUM(cost)::float8 AS cost,
+               COUNT(*)::int AS calls
+        FROM "AiUsage"
+        WHERE "createdAt" >= NOW() - INTERVAL '30 days'
+        GROUP BY day
+        ORDER BY day DESC
+      `,
     ]);
 
   // -- AI cost aggregates --
@@ -438,8 +461,8 @@ export default async function ReportsPage() {
         <StatCard label="提案件数" value={totalProposals} />
         <StatCard
           label="今日のAIコスト"
-          value={`$${aiTodayCost.toFixed(2)}`}
-          sub={`今月累計 $${aiMonthCost.toFixed(2)}`}
+          value={`${fmtUsd(aiTodayCost)}（${fmtYen(aiTodayCost)}）`}
+          sub={`今月累計 ${fmtUsd(aiMonthCost)}（${fmtYen(aiMonthCost)}）`}
         />
       </div>
 
@@ -451,11 +474,54 @@ export default async function ReportsPage() {
               <div key={r.label} className="flex items-center justify-between text-sm">
                 <span className="text-slate-700">{r.label}</span>
                 <span className="text-muted">
-                  {r.calls}回 / <span className="font-medium text-slate-800">${r.cost.toFixed(3)}</span>
+                  {r.calls}回 / <span className="font-medium text-slate-800">{fmtUsd(r.cost, 3)}（{fmtYen(r.cost)}）</span>
                 </span>
               </div>
             ))}
           </div>
+        </Section>
+      )}
+
+      {/* 日別AIコスト（直近30日・1日ずつ） */}
+      {aiDaily.length > 0 && (
+        <Section title="日別AIコスト（直近30日）">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-slate-500">
+                  <th className="px-3 py-2 text-left font-medium">日付</th>
+                  <th className="px-3 py-2 text-right font-medium">回数</th>
+                  <th className="px-3 py-2 text-right font-medium">コスト(USD)</th>
+                  <th className="px-3 py-2 text-right font-medium">コスト(円)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {aiDaily.map((d) => (
+                  <tr key={d.day} className="hover:bg-slate-50">
+                    <td className="px-3 py-2 text-slate-700 whitespace-nowrap">{fmtDay(d.day)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-600">{d.calls.toLocaleString("ja-JP")}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-slate-700">{fmtUsd(d.cost)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-medium text-slate-800">{fmtYen(d.cost)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border bg-slate-50 text-sm font-medium">
+                  <td className="px-3 py-2 text-slate-700">合計（30日）</td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                    {aiDaily.reduce((s, d) => s + d.calls, 0).toLocaleString("ja-JP")}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                    {fmtUsd(aiDaily.reduce((s, d) => s + d.cost, 0))}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-slate-800">
+                    {fmtYen(aiDaily.reduce((s, d) => s + d.cost, 0))}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          <p className="text-xs text-muted">円換算レート: $1 = ¥{USD_JPY}（環境変数 USD_JPY_RATE で変更可）</p>
         </Section>
       )}
 
