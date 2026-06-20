@@ -30,6 +30,7 @@ interface BulkSendResult {
 }
 
 const SCORE_OPTIONS = [
+  { value: "70", label: "70点以上" },
   { value: "80", label: "80点以上" },
   { value: "90", label: "90点以上" },
 ];
@@ -59,7 +60,7 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [query, setQuery] = useState("");
-  const [minScore, setMinScore] = useState("80");
+  const [minScore, setMinScore] = useState("70");
   const [channel, setChannel] = useState("ALL");
   // 一括送信: 選択中のペアと送信状態。
   const [selected, setSelected] = useState<Map<string, { talentId: string; projectId: string }>>(
@@ -119,7 +120,7 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
     }
   }
 
-  const isFiltered = !!query || minScore !== "80" || channel !== "ALL";
+  const isFiltered = !!query || minScore !== "70" || channel !== "ALL";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -191,7 +192,7 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
             type="button"
             onClick={() => {
               setQuery("");
-              setMinScore("80");
+              setMinScore("70");
               setChannel("ALL");
             }}
             className="h-10 text-sm text-slate-500 underline hover:text-slate-700"

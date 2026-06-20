@@ -24,8 +24,9 @@ export default async function NgCompaniesPage() {
       <div>
         <h1 className="text-xl font-semibold text-foreground">NG企業</h1>
         <p className="mt-1 text-sm text-muted">
-          取引NG（出禁）の会社をドメインで登録します。登録した会社の他社人材・案件はマッチング対象から除外されます。
-          ただし<span className="font-medium text-slate-700">自社保有人材の提案はNG企業でもマッチ対象に含めます</span>。
+          取引NG（出禁）の会社をドメインで登録します。登録した会社の<span className="font-medium text-slate-700">他社人材はマッチ対象から除外</span>されます
+          （その会社の人材は提案しない）。
+          <span className="font-medium text-slate-700">NG企業の「案件」は通常どおりマッチ対象</span>です（他社人材・自社人材ともマッチできます）。
         </p>
       </div>
       <NgCompaniesView initial={items} />

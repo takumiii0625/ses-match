@@ -75,7 +75,7 @@ export async function runAutoSendProjectInfo(
   const matches = await prisma.match.findMany({
     where: {
       proposable: true,
-      score: { gte: 80 },
+      score: { gte: 80 }, // 自動送信は高確度(80+)のみ。70-79は一覧で手動確認用。
       rejectedAt: null, // 差し戻し済みは自動送信しない
       OR: [
         { project: { orgId, receivedDate: { gte: todayStart } } },

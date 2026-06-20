@@ -168,15 +168,16 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // t2, t3
   });
 
-  it("NG企業の案件は他社人材を除外し、自社人材は残す", async () => {
+  it("NG企業の案件でもマッチ可（NG以外の他社人材＋自社人材）。NG企業の人材だけ除外", async () => {
     db.ngCompany.findMany.mockResolvedValue([{ domain: "ng.co.jp" }]);
     db.project.findMany.mockResolvedValue([{ ...project("p1"), sourceEmail: "x@ng.co.jp" }]);
     db.talent.findMany.mockResolvedValue([
-      { ...talent("t1"), sourceEmail: "a@ok.co.jp" }, // 他社 → 案件NGで除外
-      { ...talent("t2"), talentType: "INHOUSE", sourceEmail: null }, // 自社 → 残す
+      { ...talent("t1"), sourceEmail: "a@ok.co.jp" }, // 他社(NG以外) → マッチ可
+      { ...talent("t2"), talentType: "INHOUSE", sourceEmail: null }, // 自社 → マッチ可
+      { ...talent("t3"), sourceEmail: "c@ng.co.jp" }, // 他社(NG) → 除外
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
-    expect(res.saved).toBe(1); // 自社 t2 のみ
+    expect(res.saved).toBe(2); // t1, t2（t3はNG企業の人材で除外）
   });
 
   it("貴社まで案件は貴社チェック付きの自社人材のみ候補", async () => {

@@ -13,7 +13,7 @@ import { pregenerateProjectBodies } from "@/lib/email/project-mail";
 import { loadNgDomains, isNgDomain } from "@/lib/ng-company";
 
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
-export const MIN_SCORE = 80;
+export const MIN_SCORE = 70;
 
 // マッチ処理で実際に使う列だけ取得する。emailBody（フルのメール本文）等の重い列を
 // 読まないことで、Neonのネットワーク転送量を大幅に削減する（無料枠の超過対策）。
@@ -121,16 +121,12 @@ function restrictCandidatesByChannel(candidates: Talent[], project: Project): Ta
  * - 案件の会社がNG → 他社人材は提案しない（除外）。
  * - 人材の会社がNG → その他社人材は除外。
  */
-function restrictCandidatesByNg(
-  candidates: Talent[],
-  project: Project,
-  ng: Set<string>,
-): Talent[] {
+function restrictCandidatesByNg(candidates: Talent[], ng: Set<string>): Talent[] {
   if (ng.size === 0) return candidates;
-  const projectIsNg = isNgDomain(project.sourceEmail, ng);
+  // NG企業の「人材」は提案しない（除外）。NG企業の「案件」は通常どおりマッチ可
+  // （他社人材ともマッチさせる）。自社保有人材は常に対象。
   return candidates.filter((t) => {
     if (t.talentType === "INHOUSE") return true;
-    if (projectIsNg) return false;
     return !isNgDomain(t.sourceEmail, ng);
   });
 }
@@ -341,7 +337,6 @@ export async function runMatchingForOrg(
           talents.filter((t) => !isSameCompany(t, project)),
           project,
         ),
-        project,
         ngDomains,
       );
       const r = await rankAndSave(project, candidates, systemPrompt);
@@ -445,7 +440,6 @@ export async function runMatchingForNew(
           pool.filter((t) => !isSameCompany(t, project)),
           project,
         ),
-        project,
         ngDomains,
       );
       const r = await rankAndSave(project, candidates, systemPrompt);
