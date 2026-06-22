@@ -197,9 +197,10 @@ export interface PrefilterHit {
  */
 // 金額足切りの許容マージン（万円）。交渉余地を考慮し、これ以内の超過は通す。
 const RATE_MARGIN_MAN = 10;
-// スキル/言語の最低カバー率。必須スキルのこの割合以上を満たす候補だけ通す
-// （1スキルのみの案件はそのスキル一致が必須、複数スキルは過半数）。
-const MIN_COVERAGE = 0.5;
+// スキル/言語の最低カバー率。必須スキルのこの割合以上を満たす候補だけLLM判定に通す（足切り）。
+// 0.6 = 2スキル案件は両方／3スキル案件は2つ以上の一致を要求。弱いマッチを減らしLLMコストを削減。
+// 緩めたい場合は MATCH_MIN_COVERAGE で 0.5 等に下げられる。
+const MIN_COVERAGE = Number(process.env.MATCH_MIN_COVERAGE ?? "0.6") || 0.6;
 
 /** エンド直/プロパー/直のみ等、弊社が挟まると提案できない厳格商流か。 */
 export function isStrictDirectChannel(channelText: string | null): boolean {

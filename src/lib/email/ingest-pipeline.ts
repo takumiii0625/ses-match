@@ -15,6 +15,10 @@ import type { RemotePreference } from "@prisma/client";
 // 自社ドメイン。送信元がこのドメインなら自社保有人材(INHOUSE)、それ以外は他社(PARTNER)。
 const OWN_DOMAIN = (process.env.COMPANY_DOMAIN ?? "obfall.co.jp").toLowerCase();
 
+// 再送メール検出の窓（日）。同一ドメイン×同一本文をこの日数内に取込済みならLLMを呼ばずスキップ。
+// SES業者は同じ案内を毎日再送するため、窓を広げるほど重複抽出（＝LLMコスト）を減らせる。
+const DEDUP_DAYS = Number(process.env.MAIL_DEDUP_DAYS ?? "7") || 7;
+
 const REMOTE_VALUES = new Set<RemotePreference>([
   "FULL_REMOTE",
   "MOSTLY_REMOTE",
@@ -98,10 +102,10 @@ async function ingestEmails(
     const cleanedText = cleanEmailText(mail.text);
     const bodyHash = emailBodyHash(companyDomain(sourceEmail), cleanedText);
 
-    // 再送メール検出: 同一ドメイン×同一本文を3日以内に取込済みなら、LLMを呼ばずスキップ。
+    // 再送メール検出: 同一ドメイン×同一本文を DEDUP_DAYS 日以内に取込済みなら、LLMを呼ばずスキップ。
     // SES業者は同じ案件/人材を毎日再送するため、分類・抽出コストとレコード重複を防ぐ。
     // 本文が少しでも変われば（単価改定等）ハッシュが変わるので取り込まれる。
-    const since = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+    const since = new Date(Date.now() - DEDUP_DAYS * 24 * 60 * 60 * 1000);
     const resent = await prisma.ingestedEmail.findFirst({
       where: {
         orgId: org.id,

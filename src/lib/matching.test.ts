@@ -106,17 +106,26 @@ describe("companyDomain / isSameCompany", () => {
 
 describe("prefilterCandidates", () => {
   it("必須スキルを満たす候補のみ残しカバー率順に並べる", () => {
-    const p = project({ requiredSkills: ["PHP", "Laravel"] });
-    const phpFull = talent({ id: "a", skills: ["PHP", "Laravel"] } as Partial<Talent>);
-    const phpPartial = talent({ id: "b", skills: ["PHP"] } as Partial<Talent>);
-    const javaOnly = talent({ id: "c", skills: ["Java"] } as Partial<Talent>);
+    const p = project({ requiredSkills: ["PHP", "Laravel", "MySQL"] });
+    const full = talent({ id: "a", skills: ["PHP", "Laravel", "MySQL"] } as Partial<Talent>); // 3/3=1.0
+    const two = talent({ id: "b", skills: ["PHP", "Laravel"] } as Partial<Talent>); // 2/3≈0.67 ≥0.6 通る
+    const one = talent({ id: "c", skills: ["PHP"] } as Partial<Talent>); // 1/3≈0.33 < 0.6 除外
 
-    const hits = prefilterCandidates(p, [javaOnly, phpPartial, phpFull]);
+    const hits = prefilterCandidates(p, [one, two, full]);
     const ids = hits.map((h) => h.talent.id);
     expect(ids).toContain("a");
     expect(ids).toContain("b");
-    expect(ids).not.toContain("c"); // Javaのみは除外
+    expect(ids).not.toContain("c"); // カバー率0.6未満は除外
     expect(ids[0]).toBe("a"); // カバー率100%が先頭
+  });
+
+  it("足切り強化: 2スキル案件は両方一致が必須（片方のみは除外）", () => {
+    const p = project({ requiredSkills: ["PHP", "Laravel"] });
+    const both = talent({ id: "both", skills: ["PHP", "Laravel"] } as Partial<Talent>); // 2/2=1.0
+    const partial = talent({ id: "partial", skills: ["PHP"] } as Partial<Talent>); // 1/2=0.5 < 0.6
+    const ids = prefilterCandidates(p, [both, partial]).map((h) => h.talent.id);
+    expect(ids).toContain("both");
+    expect(ids).not.toContain("partial");
   });
 
   it("limit で件数を絞る", () => {
@@ -136,7 +145,7 @@ describe("prefilterCandidates", () => {
     expect(ids).not.toContain("over"); // 120 > 110
   });
 
-  it("カバー率0.5未満は除外（3スキル中1つは落ちる・2つは通る）", () => {
+  it("カバー率0.6未満は除外（3スキル中1つは落ちる・2つは通る）", () => {
     const p = project({ requiredSkills: ["Java", "Spring", "AWS"] });
     const one = talent({ id: "one", skills: ["Java"] } as Partial<Talent>); // 1/3 ≈ 0.33
     const two = talent({ id: "two", skills: ["Java", "AWS"] } as Partial<Talent>); // 2/3 ≈ 0.67
