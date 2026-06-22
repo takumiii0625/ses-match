@@ -182,6 +182,9 @@ export function MatchesList({
   const [groupMode, setGroupMode] = useState<"project" | "talent">("project");
   // 右ペインに出す選択中マッチ（行クリックで設定。チェックボックスとは別概念）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // 差し戻し済みマッチID。再フェッチ（router.refresh）で一覧が並び替わって見づらくなるのを避け、
+  // クライアント側でその行だけ隠す（他の行の並びは保持）。サーバ側も rejectedAt で除外済み。
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   // メール編集・単体/一斉送信を統括する共有コントローラ。
   const ctrl = useSendController();
 
@@ -198,6 +201,7 @@ export function MatchesList({
     const q = query.trim().toLowerCase();
     const min = Number(minScore);
     return matches.filter((m) => {
+      if (hiddenIds.has(m.id)) return false;
       if (m.score < min) return false;
       if (talentType !== "ALL" && m.talent.talentType !== talentType) return false;
       if (!q) return true;
@@ -213,7 +217,7 @@ export function MatchesList({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [matches, query, minScore, talentType]);
+  }, [matches, query, minScore, talentType, hiddenIds]);
 
   // 起点に応じてグループ化。重複（同名案件/同一人材）はまとめ、最新配信を代表にする。
   // project: 案件ごと（行＝人材）／ talent: 人材ごと（行＝案件）。
@@ -285,6 +289,18 @@ export function MatchesList({
   const keyOf = (m: MatchVM) => pairKey({ talentId: m.talent.id, projectId: m.project.id });
   const isSent = (m: MatchVM) => !!m.sentInfoAt || !!ctrl.get(keyOf(m))?.sentTo;
   const selectedMatch = flatRows.find((m) => keyOf(m) === selectedKey) ?? null;
+
+  // 差し戻し後: その行だけ隠し、並びは変えずに「次の行」へ選択を進める（最後なら直前へ）。
+  function handleRejected(id: string) {
+    const idx = flatRows.findIndex((mm) => mm.id === id);
+    const nextM = idx >= 0 ? flatRows[idx + 1] ?? flatRows[idx - 1] ?? null : null;
+    setHiddenIds((prev) => {
+      const n = new Set(prev);
+      n.add(id);
+      return n;
+    });
+    setSelectedKey(nextM ? keyOf(nextM) : null);
+  }
 
   // 一斉送信に選べる行（未送信）。
   const eligibleKeys = flatRows.filter((m) => !isSent(m)).map(keyOf);
@@ -520,7 +536,7 @@ export function MatchesList({
           <div className="min-w-0">
             <div className="lg:sticky lg:top-4">
               {selectedMatch ? (
-                <MatchDetailPanel m={selectedMatch} controller={ctrl} sent={isSent(selectedMatch)} groupMode={groupMode} />
+                <MatchDetailPanel m={selectedMatch} controller={ctrl} sent={isSent(selectedMatch)} groupMode={groupMode} onRejected={handleRejected} />
               ) : (
                 <Card className="flex items-center justify-center p-12 text-center text-sm text-muted">
                   左の一覧から人材を選ぶと、ここに案件・人材の詳細とメール内容が表示され、そのまま送信できます。
@@ -564,14 +580,14 @@ function MatchDetailPanel({
   controller,
   sent,
   groupMode,
+  onRejected,
 }: {
   m: MatchVM;
   controller: ReturnType<typeof useSendController>;
   sent: boolean;
   groupMode: "project" | "talent";
+  onRejected: (matchId: string) => void;
 }) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
   const t = m.talent;
   const p = m.project;
   const { strengths, concerns } = splitReasons(m.reasons);
@@ -596,7 +612,8 @@ function MatchDetailPanel({
       if (!res.ok) throw new Error(data.error || "差し戻しに失敗しました");
       setRejecting(false);
       setReason("");
-      startTransition(() => router.refresh());
+      // 再フェッチせず、その行だけ一覧から隠す（並びを保持して次の行へ進む）。
+      onRejected(m.id);
     } catch (e) {
       setRejectErr(e instanceof Error ? e.message : "差し戻しに失敗しました");
     } finally {
