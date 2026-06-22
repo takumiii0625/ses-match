@@ -198,6 +198,8 @@ export default async function ReportsPage() {
     partnerCompanies,
     ngCompanies,
     aiDaily,
+    ingestToday,
+    matchCreatedToday,
   ] = await Promise.all([
       // All talent lightweight fields
       prisma.talent.findMany({
@@ -267,6 +269,16 @@ export default async function ReportsPage() {
         GROUP BY day
         ORDER BY day DESC
       `,
+      // 今日取り込んだメールの内訳（種別ごと）。新規＝人材/案件。
+      prisma.ingestedEmail.groupBy({
+        by: ["kind"],
+        where: { orgId, createdAt: { gte: todayStart } },
+        _count: { _all: true },
+      }),
+      // 今日作成されたマッチ件数（マッチ処理が流れた結果）。
+      prisma.match.count({
+        where: { createdAt: { gte: todayStart }, talent: { orgId } },
+      }),
     ]);
 
   // -- AI cost aggregates --
@@ -279,6 +291,19 @@ export default async function ReportsPage() {
       calls: g._count._all,
     }))
     .sort((a, b) => b.cost - a.cost);
+
+  // -- 今日の取込・マッチ処理 --
+  const ingestCount = (k: string) =>
+    ingestToday.find((g) => g.kind === k)?._count._all ?? 0;
+  const todayTalents = ingestCount("TALENT");
+  const todayProjects = ingestCount("PROJECT");
+  const todayNew = todayTalents + todayProjects; // 新規（人材＋案件）
+  const todayDuplicate = ingestCount("DUPLICATE");
+  const todayIgnore = ingestCount("IGNORE");
+  const todayError = ingestCount("ERROR");
+  const todayMailTotal = todayNew + todayDuplicate + todayIgnore + todayError;
+  // マッチ判定の実行回数（LLMバッチ数）。
+  const matchRunsToday = aiToday.find((g) => g.tag === "match")?._count._all ?? 0;
 
   // -- メール送信元の会社集計（差出人ドメイン＝会社で名寄せ） --
   const domainNameMap = new Map<string, string>();
@@ -465,6 +490,40 @@ export default async function ReportsPage() {
           sub={`今月累計 ${fmtUsd(aiMonthCost)}（${fmtYen(aiMonthCost)}）`}
         />
       </div>
+
+      {/* 今日の処理（取込・マッチ） */}
+      <Section title="今日の処理（取込・マッチ）">
+        <div className="flex flex-wrap gap-x-8 gap-y-3">
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">{todayNew}</div>
+            <div className="mt-1 text-xs text-muted">
+              今日の新規（人材 {todayTalents}・案件 {todayProjects}）
+            </div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">{matchCreatedToday}</div>
+            <div className="mt-1 text-xs text-muted">
+              今日作成されたマッチ（判定実行 {matchRunsToday}回）
+            </div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">{todayMailTotal}</div>
+            <div className="mt-1 text-xs text-muted">今日取り込んだメール総数</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+          <span>新規人材 <b className="text-slate-800">{todayTalents}</b></span>
+          <span>新規案件 <b className="text-slate-800">{todayProjects}</b></span>
+          <span>重複/再送 <b className="text-slate-700">{todayDuplicate}</b></span>
+          <span>対象外 <b className="text-slate-700">{todayIgnore}</b></span>
+          <span>
+            エラー <b className={todayError > 0 ? "text-red-600" : "text-slate-700"}>{todayError}</b>
+          </span>
+        </div>
+        <p className="text-xs text-muted">
+          ※ 「今日取り込んだ」は取込処理が走った時刻基準。新規＝人材・案件として登録された件数。
+        </p>
+      </Section>
 
       {/* 今日のAIコスト内訳（暴騰の早期検知用） */}
       {aiTagRows.length > 0 && (
