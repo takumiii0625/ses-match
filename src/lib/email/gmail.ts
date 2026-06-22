@@ -159,24 +159,17 @@ function walkParts(
 }
 
 
-/** 今日(JST)の日付を Gmail 用 YYYY/MM/DD で返す。 */
-function jstTodayStr(): string {
-  const jst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  const y = jst.getUTCFullYear();
-  const m = String(jst.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(jst.getUTCDate()).padStart(2, "0");
-  return `${y}/${m}/${d}`;
-}
-
 function mailQuery(windowDays?: number): string {
   const to = process.env.MAIL_ADDRESS ? `to:${process.env.MAIL_ADDRESS} ` : "";
   // 明示指定（取りこぼし回収用）が最優先: 直近 windowDays 日を対象に。
   if (windowDays && windowDays > 0) return `${to}newer_than:${windowDays}d`;
-  // 次点: MAIL_QUERY（直接指定）> MAIL_WINDOW_DAYS（newer_than:Nd）> 既定は今日(JST)のみ。
+  // 次点: MAIL_QUERY（直接指定）> MAIL_WINDOW_DAYS（newer_than:Nd）。
   if (process.env.MAIL_QUERY) return process.env.MAIL_QUERY;
   const days = process.env.MAIL_WINDOW_DAYS;
   if (days) return `${to}newer_than:${days}d`;
-  return `${to}after:${jstTodayStr()}`; // 今日(JST)0:00以降
+  // 既定は「直近1日(newer_than:1d)」。after:<日付> はGmailアカウントのタイムゾーン境界で
+  // JSTの日中に取りこぼすため、タイムゾーン非依存の相対指定にする（重複はdedupでスキップ）。
+  return `${to}newer_than:1d`;
 }
 
 /** List + fetch messages matching the query (default: addressed to MAIL_ADDRESS). */
