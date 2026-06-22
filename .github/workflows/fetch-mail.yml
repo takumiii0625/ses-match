@@ -29,7 +29,7 @@ jobs:
           days="${{ github.event.inputs.days }}"
           fails=0
           for i in $(seq 1 800); do
-            url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=5"
+            url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=10"
             [ -n "$days" ] && url="$url&days=$days"
             [ -n "$token" ] && url="$url&pageToken=$token"
             # -f を外し || true で、1ページの500等でワークフロー全体を止めない。
