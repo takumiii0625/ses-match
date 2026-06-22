@@ -33,8 +33,10 @@ import { prisma } from "@/lib/prisma";
 // ANTHROPIC_MODEL で claude-sonnet-4-6 / claude-opus-4-8 に上書き可。
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5";
 
-// LLMに渡すメール本文の最大文字数。転送スレッド等の巨大本文で入力トークンが膨らむのを防ぐ。
-const MAX_EMAIL_CHARS = 12000;
+// LLMに渡すメール本文/添付テキストの最大文字数。転送スレッド等の巨大本文で入力トークンが
+// 膨らむのを防ぐ（コスト削減）。引用・フッタは cleanEmailText で除去済みなので、SES案件/人材
+// メールの実質情報は概ね収まる。長い案件で取りこぼす場合は AI_MAX_EMAIL_CHARS で引き上げ可。
+const MAX_EMAIL_CHARS = Number(process.env.AI_MAX_EMAIL_CHARS ?? "8000") || 8000;
 // 分類は件名＋冒頭で判定できる。抽出と違い全文は不要（コスト削減）。
 const CLASSIFY_MAX_CHARS = 2000;
 

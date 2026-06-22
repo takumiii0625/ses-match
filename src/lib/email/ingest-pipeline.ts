@@ -9,6 +9,7 @@ import {
 } from "./gmail";
 import { companyDomain } from "@/lib/matching";
 import { cleanEmailText, emailBodyHash } from "./clean";
+import { prefilterEmail } from "./prefilter";
 import type { RemotePreference } from "@prisma/client";
 
 // 自社ドメイン。送信元がこのドメインなら自社保有人材(INHOUSE)、それ以外は他社(PARTNER)。
@@ -129,6 +130,35 @@ async function ingestEmails(
         .catch(() => {});
       result.skipped++;
       result.items.push({ subject: mail.subject, from: mail.from, kind: "DUPLICATE", reason });
+      continue;
+    }
+
+    // LLM前の足切り: 自動返信・no-reply・空メール等はルールで弾き、分類/抽出のLLMを呼ばない。
+    const pre = prefilterEmail({
+      from: mail.from,
+      subject: mail.subject,
+      text: cleanedText,
+      hasAttachments: mail.attachments.some((a) => a.text?.trim() || a.dataBase64),
+    });
+    if (pre.skip) {
+      const reason = `ルール除外: ${pre.reason}`;
+      await prisma.ingestedEmail
+        .create({
+          data: {
+            orgId: org.id,
+            messageId: mail.messageId,
+            gmailId: mail.gmailId,
+            fromAddr: mail.from ?? null,
+            subject: mail.subject ?? null,
+            receivedAt: mail.date ?? null,
+            kind: "IGNORE",
+            reason,
+            bodyHash,
+          },
+        })
+        .catch(() => {});
+      result.ignored++;
+      result.items.push({ subject: mail.subject, from: mail.from, kind: "IGNORE", reason });
       continue;
     }
 
