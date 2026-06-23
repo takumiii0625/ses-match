@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 
 // 依存をモック（Gmail・DB・LLM・マッチ不要でページング制御を検証）。
 const db = vi.hoisted(() => ({
-  ingestedEmail: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
+  ingestedEmail: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn(), aggregate: vi.fn() },
   talent: { create: vi.fn() },
   project: { create: vi.fn() },
 }));
@@ -37,6 +37,7 @@ beforeEach(() => {
   db.ingestedEmail.findUnique.mockResolvedValue(null); // messageId 重複は無し（既取込は gmailId で事前除外）
   db.ingestedEmail.findFirst.mockResolvedValue(null); // 再送（同一本文）も無し
   db.ingestedEmail.findMany.mockResolvedValue([]);
+  db.ingestedEmail.aggregate.mockResolvedValue({ _max: { receivedAt: null } }); // ウォーターマーク無し→既定窓
   matchNew.mockResolvedValue({ pairs: 0, saved: 0 });
   classify.mockResolvedValue({ kind: "IGNORE", reason: "対象外" });
   fetchById.mockImplementation(async (id: string) => mail(id));

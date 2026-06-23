@@ -26,11 +26,14 @@ jobs:
       - name: 取り込みエンドポイントを呼び出す（ページ方式で完了までループ・エラー耐性あり）
         run: |
           token=""
+          after=""
           days="${{ github.event.inputs.days }}"
           fails=0
           for i in $(seq 1 800); do
             url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=10"
             [ -n "$days" ] && url="$url&days=$days"
+            # 1ページ目で算出された after(ウォーターマーク)を以降のページへ引き継ぎ、クエリを固定。
+            [ -n "$after" ] && url="$url&after=$after"
             [ -n "$token" ] && url="$url&pageToken=$token"
             # -f を外し || true で、1ページの500等でワークフロー全体を止めない。
             resp=$(curl -sS --max-time 300 -X POST "$url" \
@@ -44,6 +47,9 @@ jobs:
             fi
             fails=0
             echo "$resp"
+            # usedAfter を取得して固定（0=既定窓。空でなければ毎ページ同じ値を渡す）。
+            ua=$(echo "$resp" | grep -o '"usedAfter":[0-9]*' | sed 's/.*://')
+            [ -n "$ua" ] && after="$ua"
             echo "$resp" | grep -q '"done":true' && { echo "完了"; break; }
             token=$(echo "$resp" | grep -o '"nextPageToken":"[^"]*"' | sed 's/.*:"//;s/"//')
             [ -z "$token" ] && { echo "次ページなし"; break; }

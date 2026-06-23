@@ -19,6 +19,34 @@ const OWN_DOMAIN = (process.env.COMPANY_DOMAIN ?? "obfall.co.jp").toLowerCase();
 // SES業者は同じ案内を毎日再送するため、窓を広げるほど重複抽出（＝LLMコスト）を減らせる。
 const DEDUP_DAYS = Number(process.env.MAIL_DEDUP_DAYS ?? "7") || 7;
 
+// ウォーターマーク取得の安全マージン（分）。最終取込時刻からこの分だけ遡って取得し、
+// 配信順の前後ズレや境界での取りこぼしを防ぐ（重複はdedupでスキップ）。
+const AFTER_OVERLAP_MIN = Number(process.env.MAIL_AFTER_OVERLAP_MIN ?? "180") || 180;
+// ウォーターマークが古すぎても、これより遡らない（暴走スキャン防止）。長期停止の回収は days=N で。
+const AFTER_MAX_LOOKBACK_DAYS = Number(process.env.MAIL_AFTER_MAX_LOOKBACK_DAYS ?? "2") || 2;
+
+/**
+ * 最終取込（最新の受信時刻）を基に Gmail の after:<epoch秒> を算出する純関数。
+ * - lastReceived が無ければ undefined（初回 → 既定の newer_than:1d にフォールバック）。
+ * - overlap ぶん遡り、かつ now-maxLookback より古くはしない（再スキャン範囲を有界化）。
+ */
+export function afterEpochFrom(lastReceived: Date | null, now = Date.now()): number | undefined {
+  if (!lastReceived) return undefined;
+  const overlapMs = AFTER_OVERLAP_MIN * 60 * 1000;
+  const maxLookbackMs = AFTER_MAX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000;
+  const epochMs = Math.max(lastReceived.getTime() - overlapMs, now - maxLookbackMs);
+  return Math.floor(epochMs / 1000); // Gmail の after: は Unix 秒
+}
+
+/** 取込済みメールの最新受信時刻から after:<epoch秒> を求める（無ければ undefined）。 */
+async function computeIngestAfterEpoch(orgId: string): Promise<number | undefined> {
+  const agg = await prisma.ingestedEmail.aggregate({
+    where: { orgId, receivedAt: { not: null } },
+    _max: { receivedAt: true },
+  });
+  return afterEpochFrom(agg._max.receivedAt ?? null);
+}
+
 const REMOTE_VALUES = new Set<RemotePreference>([
   "FULL_REMOTE",
   "MOSTLY_REMOTE",
@@ -319,7 +347,9 @@ async function ingestEmails(
 export async function runMailIngest(limit = 20, windowDays?: number): Promise<IngestRunResult> {
   const org = await getCurrentOrg();
   const ai = getAI();
-  const emails = await fetchEmails(limit, windowDays);
+  // windowDays（手動回収）指定が無ければ、最終取込時刻以降だけを取得（再スキャン削減）。
+  const afterEpoch = windowDays ? undefined : await computeIngestAfterEpoch(org.id);
+  const emails = await fetchEmails(limit, windowDays, afterEpoch);
   const { result } = await ingestEmails(emails, org, ai);
   return result;
 }
@@ -327,6 +357,9 @@ export async function runMailIngest(limit = 20, windowDays?: number): Promise<In
 export interface IngestPageResult extends IngestRunResult {
   nextPageToken: string | null;
   done: boolean;
+  // この実行で使った after:<epoch秒>（0=ウォーターマーク無し＝既定窓）。
+  // ワークフローが後続ページに引き継ぎ、ページング中にクエリがブレないようにする。
+  usedAfter: number;
 }
 
 /**
@@ -340,10 +373,30 @@ export async function runMailIngestPage(
   pageSize = 12,
   pageToken?: string,
   windowDays?: number,
+  afterParam?: number,
 ): Promise<IngestPageResult> {
   const org = await getCurrentOrg();
   const ai = getAI();
-  const { ids, nextPageToken } = await listMessageIds(pageSize, pageToken, windowDays);
+
+  // 取得範囲の決定（ページング中にクエリがブレないよう usedAfter を後続ページへ引き継ぐ）:
+  // - windowDays(手動回収) 指定時は newer_than 優先（after は使わない）→ usedAfter=0。
+  // - afterParam 未指定（1ページ目）はウォーターマークを算出。あれば after:W、無ければ既定窓。
+  // - afterParam>0 はその値をそのまま使用（2ページ目以降）。afterParam==0 は「既定窓」を維持。
+  let after: number | undefined;
+  let usedAfter = 0;
+  if (windowDays) {
+    after = undefined;
+  } else if (afterParam === undefined) {
+    after = await computeIngestAfterEpoch(org.id);
+    usedAfter = after ?? 0;
+  } else if (afterParam > 0) {
+    after = afterParam;
+    usedAfter = afterParam;
+  } else {
+    after = undefined; // afterParam===0 → 既定窓を維持（再算出しない）
+  }
+
+  const { ids, nextPageToken } = await listMessageIds(pageSize, pageToken, windowDays, after);
 
   // gmailId で既取込を事前除外（本文取得・LLM不要で重複ページを安く飛ばす）。
   const known = ids.length
@@ -369,5 +422,5 @@ export async function runMailIngestPage(
   result.fetched = ids.length;
   result.skipped += gmailDup;
 
-  return { ...result, nextPageToken, done: !nextPageToken };
+  return { ...result, nextPageToken, done: !nextPageToken, usedAfter };
 }

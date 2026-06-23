@@ -19,7 +19,10 @@ async function handle(req: Request) {
     if (pageSizeRaw !== null) {
       const pageSize = Number(pageSizeRaw) || 12;
       const pageToken = url.searchParams.get("pageToken") ?? undefined;
-      const result = await runMailIngestPage(pageSize, pageToken, days);
+      // ?after=<epoch秒> でウォーターマークを後続ページへ引き継ぐ（未指定の1ページ目で自動算出）。
+      const afterRaw = url.searchParams.get("after");
+      const afterParam = afterRaw === null ? undefined : Number(afterRaw) || 0;
+      const result = await runMailIngestPage(pageSize, pageToken, days, afterParam);
       return NextResponse.json(result);
     }
     const limit = Number(url.searchParams.get("limit") ?? "200");

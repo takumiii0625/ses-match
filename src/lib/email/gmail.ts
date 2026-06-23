@@ -159,10 +159,13 @@ function walkParts(
 }
 
 
-function mailQuery(windowDays?: number): string {
+function mailQuery(windowDays?: number, afterEpoch?: number): string {
   const to = process.env.MAIL_ADDRESS ? `to:${process.env.MAIL_ADDRESS} ` : "";
   // 明示指定（取りこぼし回収用）が最優先: 直近 windowDays 日を対象に。
   if (windowDays && windowDays > 0) return `${to}newer_than:${windowDays}d`;
+  // 次点: ウォーターマーク（最終取込時刻）以降だけを取得。after:<epoch秒> は絶対時刻なので
+  // タイムゾーン非依存。直近24時間を毎回丸ごと再スキャンせずに済み、実行時間を大幅に削減できる。
+  if (afterEpoch && afterEpoch > 0) return `${to}after:${afterEpoch}`;
   // 次点: MAIL_QUERY（直接指定）> MAIL_WINDOW_DAYS（newer_than:Nd）。
   if (process.env.MAIL_QUERY) return process.env.MAIL_QUERY;
   const days = process.env.MAIL_WINDOW_DAYS;
@@ -173,11 +176,15 @@ function mailQuery(windowDays?: number): string {
 }
 
 /** List + fetch messages matching the query (default: addressed to MAIL_ADDRESS). */
-export async function fetchEmails(limit = 20, windowDays?: number): Promise<FetchedEmail[]> {
+export async function fetchEmails(
+  limit = 20,
+  windowDays?: number,
+  afterEpoch?: number,
+): Promise<FetchedEmail[]> {
   const gmail = await authedGmail();
   const list = await gmail.users.messages.list({
     userId: "me",
-    q: mailQuery(windowDays),
+    q: mailQuery(windowDays, afterEpoch),
     maxResults: limit,
   });
   const ids = (list.data.messages ?? []).map((m) => m.id!).filter(Boolean);
@@ -203,11 +210,12 @@ export async function listMessageIds(
   pageSize = 12,
   pageToken?: string,
   windowDays?: number,
+  afterEpoch?: number,
 ): Promise<MessageIdPage> {
   const gmail = await authedGmail();
   const list = await gmail.users.messages.list({
     userId: "me",
-    q: mailQuery(windowDays),
+    q: mailQuery(windowDays, afterEpoch),
     maxResults: pageSize,
     pageToken: pageToken || undefined,
   });
