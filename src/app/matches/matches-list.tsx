@@ -53,6 +53,7 @@ export interface MatchVM {
 
 const SCORE_OPTIONS = [
   { value: "70", label: "70点以上" },
+  { value: "75", label: "75点以上" },
   { value: "80", label: "80点以上" },
   { value: "90", label: "90点以上" },
 ];
@@ -176,7 +177,7 @@ export function MatchesList({
   const pathname = usePathname();
   const [, startTransition] = useTransition();
   const [query, setQuery] = useState("");
-  const [minScore, setMinScore] = useState("70");
+  const [minScore, setMinScore] = useState("75");
   const [talentType, setTalentType] = useState("ALL");
   // 起点（グルーピング）: 案件ごと / 人材ごと。
   const [groupMode, setGroupMode] = useState<"project" | "talent">("project");
@@ -195,7 +196,7 @@ export function MatchesList({
   }
 
   const isFiltered =
-    !!query || minScore !== "70" || (!inhouseOnly && talentType !== "ALL");
+    !!query || minScore !== "75" || (!inhouseOnly && talentType !== "ALL");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -367,7 +368,7 @@ export function MatchesList({
             type="button"
             onClick={() => {
               setQuery("");
-              setMinScore("70");
+              setMinScore("75");
               setTalentType("ALL");
             }}
             className="h-10 text-sm text-slate-500 underline hover:text-slate-700"

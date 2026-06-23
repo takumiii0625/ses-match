@@ -8,7 +8,8 @@ export const maxDuration = 60;
 export async function POST() {
   try {
     const org = await getCurrentOrg();
-    const res = await regenerateMatchLearnings(org.id);
+    // 手動の「今すぐ反映」はデバウンスを無視して即時に再生成する。
+    const res = await regenerateMatchLearnings(org.id, { force: true });
     if (!res.ok) return NextResponse.json({ error: res.error }, { status: 400 });
     return NextResponse.json(res);
   } catch (e) {

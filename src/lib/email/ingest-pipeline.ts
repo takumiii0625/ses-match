@@ -3,7 +3,8 @@ import { getCurrentOrg } from "@/lib/current-org";
 import { getAI } from "@/lib/ai";
 import {
   fetchEmails,
-  fetchEmailById,
+  fetchEmailByIdLight,
+  extractAttachmentsFor,
   listMessageIds,
   type FetchedEmail,
 } from "./gmail";
@@ -166,11 +167,15 @@ async function ingestEmails(
     }
 
     // LLM前の足切り: 自動返信・no-reply・空メール等はルールで弾き、分類/抽出のLLMを呼ばない。
+    // 軽量取得では添付は未抽出なので、参照(attachmentRefs)の有無で「添付あり」を判定する。
+    const hasAttachments =
+      (mail.attachmentRefs?.length ?? 0) > 0 ||
+      mail.attachments.some((a) => a.text?.trim() || a.dataBase64);
     const pre = prefilterEmail({
       from: mail.from,
       subject: mail.subject,
       text: cleanedText,
-      hasAttachments: mail.attachments.some((a) => a.text?.trim() || a.dataBase64),
+      hasAttachments,
     });
     if (pre.skip) {
       const reason = `ルール除外: ${pre.reason}`;
@@ -192,6 +197,12 @@ async function ingestEmails(
       result.ignored++;
       result.items.push({ subject: mail.subject, from: mail.from, kind: "IGNORE", reason });
       continue;
+    }
+
+    // ここまでで dedup（既取込・再送）と足切りを通過＝新規確定。重いPDF/Office抽出はここで初めて行う
+    // （軽量取得で参照だけ持っている場合のみ。再送で捨てるメールに抽出コストをかけない）。
+    if (mail.attachmentRefs && mail.attachmentRefs.length > 0 && mail.attachments.length === 0) {
+      mail.attachments = await extractAttachmentsFor(mail.gmailId, mail.attachmentRefs);
     }
 
     const raw = `件名: ${mail.subject ?? ""}\n差出人: ${mail.from ?? ""}\n\n${cleanedText}`;
@@ -408,10 +419,10 @@ export async function runMailIngestPage(
   const knownSet = new Set(known.map((k) => k.gmailId));
   const newIds = ids.filter((id) => !knownSet.has(id));
 
-  // 新規だけ本文を取得。
+  // 新規だけ本文を取得（軽量＝添付は参照のみ。抽出は dedup 通過後に遅延）。
   const emails: FetchedEmail[] = [];
   for (const id of newIds) {
-    const m = await fetchEmailById(id);
+    const m = await fetchEmailByIdLight(id);
     if (m) emails.push(m);
   }
 

@@ -117,6 +117,13 @@ async function authedGmail(): Promise<gmail_v1.Gmail> {
   return google.gmail({ version: "v1", auth: client });
 }
 
+/** 添付の参照情報（ダウンロード前。テキスト抽出を後段に遅延させるため）。 */
+export interface AttachmentRef {
+  filename: string;
+  mimeType: string;
+  attachmentId: string;
+}
+
 export interface FetchedEmail {
   gmailId: string;
   messageId: string; // RFC Message-ID header (fallback: gmailId)
@@ -126,6 +133,9 @@ export interface FetchedEmail {
   date?: Date;
   text: string;
   attachments: EmailAttachment[];
+  // 軽量取得（fetchEmailByIdLight）時にセットされる未抽出の添付参照。
+  // dedup通過後に extractAttachmentsFor で初めてダウンロード＆テキスト抽出する（再送で捨てる無駄を回避）。
+  attachmentRefs?: AttachmentRef[];
 }
 
 function header(
@@ -223,7 +233,7 @@ export async function listMessageIds(
   return { ids, nextPageToken: list.data.nextPageToken ?? null };
 }
 
-/** Fetch + parse a single message by its Gmail id (for backfill). */
+/** Fetch + parse a single message by its Gmail id, 添付テキストも抽出（backfill等の単発用）。 */
 export async function fetchEmailById(gmailId: string): Promise<FetchedEmail | null> {
   const gmail = await authedGmail();
   try {
@@ -233,34 +243,64 @@ export async function fetchEmailById(gmailId: string): Promise<FetchedEmail | nu
   }
 }
 
-/** Parse one Gmail message into a FetchedEmail (body text + PDF attachments). */
-async function parseMessage(
-  gmail: gmail_v1.Gmail,
-  id: string,
-): Promise<FetchedEmail> {
-  const msg = await gmail.users.messages.get({ userId: "me", id, format: "full" });
-  const payload = msg.data.payload;
-  const headers = payload?.headers;
-  const acc = { text: [] as string[], html: [] as string[], atts: [] as gmail_v1.Schema$MessagePart[] };
-  walkParts(payload, acc);
+/**
+ * 軽量取得: 本文と「添付の参照情報」だけ取り、添付のダウンロード・テキスト抽出はしない。
+ * dedup（既取込・再送）で捨てるメールに対して重いPDF/Office抽出を走らせない（順序の無駄を排除）。
+ * 取込（ページ方式）はこちらを使い、新規確定後に extractAttachmentsFor で抽出する。
+ */
+export async function fetchEmailByIdLight(gmailId: string): Promise<FetchedEmail | null> {
+  const gmail = await authedGmail();
+  try {
+    return await parseMessageLight(gmail, gmailId);
+  } catch {
+    return null;
+  }
+}
 
-  // スキルシート添付を取り込む: PDF＋Excel(.xlsx/.xls)＋Word(.docx) をテキスト化。
-  const attachments: EmailAttachment[] = [];
-  for (const a of acc.atts.slice(0, 4)) {
+/** dedup通過後に呼ぶ: 添付参照からダウンロード＆テキスト抽出して EmailAttachment[] を得る。 */
+export async function extractAttachmentsFor(
+  gmailId: string,
+  refs: AttachmentRef[],
+): Promise<EmailAttachment[]> {
+  if (!refs || refs.length === 0) return [];
+  const gmail = await authedGmail();
+  return extractAttachmentsFromRefs(gmail, gmailId, refs);
+}
+
+/** 添付パートから、対象（PDF/Office）の参照情報だけを取り出す（最大4件）。 */
+function attachmentRefsFromParts(atts: gmail_v1.Schema$MessagePart[]): AttachmentRef[] {
+  const refs: AttachmentRef[] = [];
+  for (const a of atts.slice(0, 4)) {
     const filename = a.filename ?? "attachment";
-    const isPdf = a.mimeType === "application/pdf" || /\.pdf$/i.test(filename);
-    const isOffice = isOfficeFile(filename);
-    if (!isPdf && !isOffice) continue;
+    const mimeType = a.mimeType ?? "";
+    const attachmentId = a.body?.attachmentId;
+    if (!attachmentId) continue;
+    const isPdf = mimeType === "application/pdf" || /\.pdf$/i.test(filename);
+    if (!isPdf && !isOfficeFile(filename)) continue;
+    refs.push({ filename, mimeType, attachmentId });
+  }
+  return refs;
+}
+
+/** 添付参照を実際にダウンロードしてテキスト化（PDF=抽出 or document、Office=サーバ抽出）。 */
+async function extractAttachmentsFromRefs(
+  gmail: gmail_v1.Gmail,
+  messageId: string,
+  refs: AttachmentRef[],
+): Promise<EmailAttachment[]> {
+  const attachments: EmailAttachment[] = [];
+  for (const r of refs) {
+    const isPdf = r.mimeType === "application/pdf" || /\.pdf$/i.test(r.filename);
     try {
       const att = await gmail.users.messages.attachments.get({
         userId: "me",
-        messageId: id,
-        id: a.body!.attachmentId!,
+        messageId,
+        id: r.attachmentId,
       });
       const bytes = Buffer.from(att.data.data ?? "", "base64url");
       if (isPdf) {
         attachments.push({
-          filename,
+          filename: r.filename,
           mediaType: "application/pdf",
           dataBase64: bytes.toString("base64"),
           // テキストPDFは抽出（LLMには安価なテキストで送る）。スキャンPDFは undefined→document送付。
@@ -268,16 +308,29 @@ async function parseMessage(
         });
       } else {
         // Excel/Word はClaudeが直接読めないのでサーバ側でテキスト抽出（本文をdataBase64には積まない）。
-        const text = await extractOfficeText(filename, bytes.toString("base64"));
+        const text = await extractOfficeText(r.filename, bytes.toString("base64"));
         attachments.push({
-          filename,
-          mediaType: a.mimeType ?? "application/octet-stream",
+          filename: r.filename,
+          mediaType: r.mimeType || "application/octet-stream",
           dataBase64: "",
           text: text ?? undefined,
         });
       }
     } catch {}
   }
+  return attachments;
+}
+
+/** messages.get＋本文組み立てまでの共通部（添付は参照のみ返す）。 */
+async function parseMessageCommon(
+  gmail: gmail_v1.Gmail,
+  id: string,
+): Promise<{ base: Omit<FetchedEmail, "attachments" | "attachmentRefs">; atts: gmail_v1.Schema$MessagePart[] }> {
+  const msg = await gmail.users.messages.get({ userId: "me", id, format: "full" });
+  const payload = msg.data.payload;
+  const headers = payload?.headers;
+  const acc = { text: [] as string[], html: [] as string[], atts: [] as gmail_v1.Schema$MessagePart[] };
+  walkParts(payload, acc);
 
   // 本文は「プレーン」と「HTML由来」から情報量の多い方を採用（リッチHTMLの取りこぼし対策）。
   const plain = acc.text.join("\n").trim();
@@ -285,13 +338,28 @@ async function parseMessage(
   const text = pickRicherBody(plain, htmlText) || msg.data.snippet || "";
   const dateStr = header(headers, "Date");
   return {
-    gmailId: id,
-    messageId: header(headers, "Message-ID") ?? id,
-    from: header(headers, "From"),
-    to: header(headers, "To"),
-    subject: header(headers, "Subject"),
-    date: dateStr ? new Date(dateStr) : undefined,
-    text,
-    attachments,
+    base: {
+      gmailId: id,
+      messageId: header(headers, "Message-ID") ?? id,
+      from: header(headers, "From"),
+      to: header(headers, "To"),
+      subject: header(headers, "Subject"),
+      date: dateStr ? new Date(dateStr) : undefined,
+      text,
+    },
+    atts: acc.atts,
   };
+}
+
+/** Parse one Gmail message into a FetchedEmail (body text + 添付テキスト抽出まで実施)。 */
+async function parseMessage(gmail: gmail_v1.Gmail, id: string): Promise<FetchedEmail> {
+  const { base, atts } = await parseMessageCommon(gmail, id);
+  const attachments = await extractAttachmentsFromRefs(gmail, id, attachmentRefsFromParts(atts));
+  return { ...base, attachments };
+}
+
+/** 軽量版: 本文＋添付参照のみ（ダウンロード・抽出はしない）。 */
+async function parseMessageLight(gmail: gmail_v1.Gmail, id: string): Promise<FetchedEmail> {
+  const { base, atts } = await parseMessageCommon(gmail, id);
+  return { ...base, attachments: [], attachmentRefs: attachmentRefsFromParts(atts) };
 }

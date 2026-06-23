@@ -22,6 +22,8 @@ vi.mock("@/lib/match-run", () => ({ runMatchingForNew: matchNew }));
 vi.mock("./gmail", () => ({
   listMessageIds: listIds,
   fetchEmailById: fetchById,
+  fetchEmailByIdLight: fetchById,
+  extractAttachmentsFor: vi.fn().mockResolvedValue([]),
   fetchEmails: vi.fn(),
 }));
 

@@ -54,6 +54,7 @@ export default async function ProposalsPage(props: {
     },
     select: { talentId: true, projectId: true, kind: true, createdAt: true },
     orderBy: { createdAt: "desc" },
+    take: 2000, // パイプラインは直近分のみ。全件ロードを防ぐ（データ増の時限爆弾対策）。
   });
   const sentMap = new Map<string, { info?: Date; proposal?: Date }>();
   for (const s of sent) {
@@ -131,6 +132,7 @@ export default async function ProposalsPage(props: {
       project: { select: { id: true, title: true, clientName: true } },
     },
     orderBy: { rejectedAt: "desc" },
+    take: 500, // 差し戻しは直近500件まで表示（全件ロード防止）。
   });
   const rejectedRows: RejectedVM[] = rejectedMatches
     .map((m) => ({
@@ -154,6 +156,7 @@ export default async function ProposalsPage(props: {
       project: { select: { id: true, title: true, clientName: true } },
     },
     orderBy: { createdAt: "desc" },
+    take: 1000, // 提案文は直近1000件まで（全件ロード防止）。
   });
   const proposals = proposalsAll.filter((p) =>
     matchQ(p.project.title, p.project.clientName, p.talent.name),

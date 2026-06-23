@@ -11,6 +11,9 @@ async function buildSentMap(
     where: { orgId, kind, status: "SENT" },
     select: { talentId: true, projectId: true, createdAt: true },
     orderBy: { createdAt: "desc" },
+    // 送信済みバッジ用。一覧に出るのは直近のマッチなので直近分で十分（全件ロード防止）。
+    // ※実際の二重送信防止は送信時にDBを直接照合するため、バッジ欠落で誤送信は起きない。
+    take: 5000,
   });
   const map = new Map<string, string>();
   for (const s of sent) {
