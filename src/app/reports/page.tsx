@@ -305,6 +305,38 @@ export default async function ReportsPage() {
   // マッチ判定の実行回数（LLMバッチ数）。
   const matchRunsToday = aiToday.find((g) => g.tag === "match")?._count._all ?? 0;
 
+  // -- マッチ実行ステータス（「動いて0件」「対象0件で空振り」「未稼働」を判別） --
+  // 判定対象は「today の新規案件」。matchRunsToday は今日の LLM 判定回数（=実際に
+  // 判定が走ったか）、matchCreatedToday は成立件数。todayProjects は今日の新規案件数。
+  // ・判定>0・成立>0 → 正常稼働
+  // ・判定>0・成立0  → 動いたが条件に合う候補なし（正常）
+  // ・判定0・新規案件>0 → ★異常: 新規案件があるのに判定されていない（窓/receivedDate問題等）
+  // ・判定0・新規案件0 → 本日の判定対象なし（週末等。異常ではない）
+  const matchStatus: { tone: "ok" | "info" | "warn"; label: string; detail: string } =
+    matchRunsToday > 0
+      ? matchCreatedToday > 0
+        ? {
+            tone: "ok",
+            label: `稼働中・成立 ${matchCreatedToday}件`,
+            detail: `今日 ${matchRunsToday}回の判定を実行し、${matchCreatedToday}件のマッチが成立しました。`,
+          }
+        : {
+            tone: "info",
+            label: "稼働中・成立0件",
+            detail: `今日 ${matchRunsToday}回の判定を実行しましたが、条件に合う候補が無くマッチは0件でした（処理自体は正常）。`,
+          }
+      : todayProjects > 0
+        ? {
+            tone: "warn",
+            label: `要確認・判定0回（新規案件 ${todayProjects}件）`,
+            detail: `今日 ${todayProjects}件の案件を新規取込しましたが、マッチ判定が1回も実行されていません。マッチ対象は「配信日(receivedDate)が今日」の案件に限定されるため、過去日付メール（バックログ）の取込だと窓から外れて判定されません。定時ジョブ rematch-daily のログ、または取込メールの配信日を確認してください。`,
+          }
+        : {
+            tone: "info",
+            label: "本日の判定対象なし",
+            detail: "今日は新規案件の取込が無く、マッチ判定の対象がありませんでした（週末などでは正常）。",
+          };
+
   // -- メール送信元の会社集計（差出人ドメイン＝会社で名寄せ） --
   const domainNameMap = new Map<string, string>();
   for (const c of partnerCompanies) {
@@ -493,6 +525,53 @@ export default async function ReportsPage() {
 
       {/* 今日の処理（取込・マッチ） */}
       <Section title="今日の処理（取込・マッチ）">
+        <div
+          className={
+            "rounded-md border px-3 py-2 " +
+            (matchStatus.tone === "ok"
+              ? "border-emerald-200 bg-emerald-50"
+              : matchStatus.tone === "info"
+                ? "border-blue-200 bg-blue-50"
+                : "border-red-200 bg-red-50")
+          }
+        >
+          <div className="flex items-center gap-2">
+            <span
+              className={
+                "inline-block h-2.5 w-2.5 rounded-full " +
+                (matchStatus.tone === "ok"
+                  ? "bg-emerald-500"
+                  : matchStatus.tone === "info"
+                    ? "bg-blue-500"
+                    : "bg-red-500")
+              }
+            />
+            <span
+              className={
+                "text-sm font-semibold " +
+                (matchStatus.tone === "ok"
+                  ? "text-emerald-800"
+                  : matchStatus.tone === "info"
+                    ? "text-blue-800"
+                    : "text-red-800")
+              }
+            >
+              マッチ実行ステータス：{matchStatus.label}
+            </span>
+          </div>
+          <p
+            className={
+              "mt-1 text-xs " +
+              (matchStatus.tone === "ok"
+                ? "text-emerald-700"
+                : matchStatus.tone === "info"
+                  ? "text-blue-700"
+                  : "text-red-700")
+            }
+          >
+            {matchStatus.detail}
+          </p>
+        </div>
         <div className="flex flex-wrap gap-x-8 gap-y-3">
           <div>
             <div className="text-3xl font-bold leading-none text-foreground">{todayNew}</div>

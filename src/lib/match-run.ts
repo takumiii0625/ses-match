@@ -54,17 +54,19 @@ const PROJECT_MATCH_SELECT = {
   receivedDate: true,
 } satisfies Prisma.ProjectSelect;
 
-// 案件・他社人材は「直近3日の配信」に限定するが、自社保有人材(INHOUSE)は
-// 常に対象（保有ロスターなので配信日に関係なく提案候補にする）。
+// 案件・他社人材は「直近に取り込んだ分」に限定するが、自社保有人材(INHOUSE)は
+// 常に対象（保有ロスターなので取込日に関係なく提案候補にする）。
+// 窓の基準は createdAt(取込日)。receivedDate(メール配信日)は古いバックログを取り込むと
+// 当日でも過去日付になり窓から外れてしまうため使わない（取込したのに未マッチを防ぐ）。
 const talentWindowWhere = (orgId: string, since: Date) => ({
   orgId,
-  OR: [{ talentType: "INHOUSE" as const }, { receivedDate: { gte: since } }],
+  OR: [{ talentType: "INHOUSE" as const }, { createdAt: { gte: since } }],
 });
 
 // 1案件あたりLLMに渡す候補の上限（事前フィルタ後の上位N件）。
 const SHORTLIST_LIMIT = 30;
 
-// 取込時の差分マッチで対象にする配信日の範囲（日数）。これより古い案件・人材はマッチしない。
+// 取込時の差分マッチで対象にする取込日(createdAt)の範囲（日数）。これより前に取り込んだ案件・人材はマッチしない。
 export const MATCH_WINDOW_DAYS = 3;
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
@@ -74,7 +76,7 @@ function windowStart(): Date {
   return new Date(Date.now() - MATCH_WINDOW_DAYS * 24 * 60 * 60 * 1000);
 }
 
-/** 今日(JST)の0:00をUTCのDateで返す。手動の全件マッチは「今日の配信」だけを対象にする。 */
+/** 今日(JST)の0:00をUTCのDateで返す。手動の全件マッチは「今日の取込」だけを対象にする。 */
 function startOfTodayJst(): Date {
   const jst = new Date(Date.now() + JST_OFFSET_MS);
   jst.setUTCHours(0, 0, 0, 0);
@@ -279,8 +281,9 @@ export async function runMatchingForOrg(
   const offset = Math.max(0, opts.offset ?? 0);
   const limit = opts.limit && opts.limit > 0 ? opts.limit : Number.MAX_SAFE_INTEGER;
   const inhouseOnly = opts.scope === "inhouse";
-  // 既定は「今日(JST)配信」のみ。sinceDays で過去に遡る（過去マッチの復旧用）。
-  // 自社人材は常に対象。
+  // 既定は「今日(JST)取込分」のみ。sinceDays で過去に遡る（過去マッチの復旧用）。
+  // 窓の基準は createdAt(取込日)。配信日(receivedDate)はバックログ取込で過去日付になり
+  // 当日取込でも窓から外れるため使わない。自社人材は常に対象。
   const sinceDays = opts.sinceDays && opts.sinceDays > 0 ? opts.sinceDays : 1;
   const todayStart = startOfTodayJst();
   const since =
@@ -296,7 +299,7 @@ export async function runMatchingForOrg(
   const [projectsRaw, talents, prompts, ngDomains] = await Promise.all([
     // ページングを安定させるため作成日昇順で固定。必要列のみ取得（転送量削減）。
     prisma.project.findMany({
-      where: { orgId, receivedDate: { gte: since } },
+      where: { orgId, createdAt: { gte: since } },
       orderBy: { createdAt: "asc" },
       select: PROJECT_MATCH_SELECT,
     }) as unknown as Promise<Project[]>,
@@ -404,7 +407,8 @@ export async function runMatchingForNew(
   const since = windowStart();
   const [projectsRaw, talents, prompts, ngDomains] = await Promise.all([
     prisma.project.findMany({
-      where: { orgId, receivedDate: { gte: since } },
+      // 取込日(createdAt)基準。配信日(receivedDate)だと古いメール取込が窓外になる。
+      where: { orgId, createdAt: { gte: since } },
       select: PROJECT_MATCH_SELECT,
     }) as unknown as Promise<Project[]>,
     prisma.talent.findMany({
