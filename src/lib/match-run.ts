@@ -92,14 +92,14 @@ function startOfTodayJst(): Date {
  * マッチング対象を貴社チェック付き自社人材だけに絞る（restrictCandidatesByChannel）。
  *
  * 表現ゆれに強く判定する: 貴社/御社 の直後に
- * 「正社員 / 社員 / プロパー / 直 / まで / 迄 / のみ」が続くものを「貴社止まり」とみなす。
- * 例: 貴社まで・貴社迄・貴社のみ・貴社社員・貴社正社員(まで)・貴社プロパー・貴社直(まで)。
+ * 「正社員 / 社員 / プロパー / 所属 / 直 / まで / 迄 / のみ」が続くものを「貴社止まり」とみなす。
+ * 例: 貴社まで・貴社迄・貴社のみ・貴社社員・貴社正社員(まで)・貴社プロパー・貴社直(まで)・貴社所属(まで)。
  * 「貴社の2社先まで」「貴社から1社先」等（貴社の直後が の/から）は対象外（誤検知しない）。
  */
 function isOwnOnlyChannel(channelText: string | null): boolean {
   if (!channelText) return false;
   const t = channelText.replace(/\s/g, "");
-  return /(貴社|御社)(正?社員|プロパー|直|まで|迄|のみ)/.test(t);
+  return /(貴社|御社)(正?社員|プロパー|所属|直|まで|迄|のみ)/.test(t);
 }
 
 /**

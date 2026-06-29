@@ -136,11 +136,12 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // p1 × t1,t2
   });
 
-  it("貴社まで判定は表現ゆれ（貴社正社員まで/貴社プロパー/御社まで）も拾う", async () => {
+  it("貴社まで判定は表現ゆれ（貴社正社員まで/貴社プロパー/御社まで/貴社所属まで）も拾う", async () => {
     db.project.findMany.mockResolvedValue([
       { ...project("p1"), channelText: "貴社正社員まで" },
       { ...project("p2"), channelText: "貴社プロパー" },
       { ...project("p3"), channelText: "御社まで" },
+      { ...project("p4"), channelText: "貴社所属まで" }, // 「所属」も貴社止まり
     ]);
     // TALENTS は全員 PARTNER → 貴社止まり案件は候補0でLLM呼び出しなし（全件除外）。
     const res = await runMatchingForOrg("org1", { offset: 0 });
