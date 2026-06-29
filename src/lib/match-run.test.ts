@@ -32,6 +32,7 @@ function project(id: string) {
     supportFee: false,
     sourceEmail: null,
     receivedDate: new Date(),
+    createdAt: new Date(), // 既定は「新規（当日取込）」として扱う。
   };
 }
 function talent(id: string) {
@@ -50,6 +51,7 @@ function talent(id: string) {
     note: null,
     sourceEmail: null,
     receivedDate: new Date(),
+    createdAt: new Date(), // 既定は「新規（当日取込）」として扱う。
   };
 }
 
@@ -240,5 +242,54 @@ describe("runMatchingForOrg（ページング）", () => {
     const call = db.match.upsert.mock.calls[0][0];
     expect(call.create.proposable).toBe(false);
     expect(call.create.channelNote).toContain("提案不可");
+  });
+});
+
+describe("runMatchingForOrg（新規×直近の窓）", () => {
+  const old = () => new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2日前取込
+
+  it("新規案件→全人材、既存案件→新規人材のみ を判定対象にする", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("pOld"), createdAt: old() }, // 既存案件（2日前）
+      project("pNew"), // 新規案件（今日）
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("tOld"), createdAt: old() }, // 既存人材（2日前）
+      talent("tNew"), // 新規人材（今日）
+    ]);
+
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+
+    // 新規案件pNew × [tOld,tNew]=2、既存案件pOld × [tNew]=1 → 計3。
+    expect(res.saved).toBe(3);
+    expect(rankMock).toHaveBeenCalledTimes(2); // 両案件とも新規が絡むので対象
+    expect(res.totalProjects).toBe(2);
+  });
+
+  it("クリーン再生成（削除）は新規案件のマッチだけ。既存案件のマッチは消さない", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("pOld"), createdAt: old() },
+      project("pNew"),
+    ]);
+    db.talent.findMany.mockResolvedValue([talent("tNew")]);
+
+    await runMatchingForOrg("org1", { offset: 0 });
+
+    expect(db.match.deleteMany).toHaveBeenCalledTimes(1);
+    const where = db.match.deleteMany.mock.calls[0][0].where;
+    expect(where.projectId.in).toEqual(["pNew"]); // 既存案件pOldは削除対象に含めない
+  });
+
+  it("既存案件 × 既存人材だけ（新規なし）は判定もせず削除もしない", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("pOld"), createdAt: old() }]);
+    db.talent.findMany.mockResolvedValue([{ ...talent("tOld"), createdAt: old() }]);
+
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+
+    expect(rankMock).not.toHaveBeenCalled();
+    expect(res.saved).toBe(0);
+    expect(res.totalProjects).toBe(0);
+    expect(res.done).toBe(true);
+    expect(db.match.deleteMany).not.toHaveBeenCalled();
   });
 });

@@ -34,6 +34,7 @@ const TALENT_MATCH_SELECT = {
   nearestStation: true,
   note: true,
   sourceEmail: true,
+  createdAt: true, // 「新規（当日取込）」判定に使う。
 } satisfies Prisma.TalentSelect;
 
 const PROJECT_MATCH_SELECT = {
@@ -52,6 +53,7 @@ const PROJECT_MATCH_SELECT = {
   sourceEmail: true,
   emailSubject: true,
   receivedDate: true,
+  createdAt: true, // 「新規（当日取込）」判定に使う。
 } satisfies Prisma.ProjectSelect;
 
 // 案件・他社人材は「直近に取り込んだ分」に限定するが、自社保有人材(INHOUSE)は
@@ -66,8 +68,10 @@ const talentWindowWhere = (orgId: string, since: Date) => ({
 // 1案件あたりLLMに渡す候補の上限（事前フィルタ後の上位N件）。
 const SHORTLIST_LIMIT = 30;
 
-// 取込時の差分マッチで対象にする取込日(createdAt)の範囲（日数）。これより前に取り込んだ案件・人材はマッチしない。
-export const MATCH_WINDOW_DAYS = 3;
+// 新規と突き合わせる「直近」の範囲（取込日 createdAt の日数）。
+// 新規案件は直近この日数の人材と、新規人材は直近この日数の案件とマッチする。
+// 広げるほどマッチ網羅は上がるがLLMコストも増える。env MATCH_WINDOW_DAYS で調整可（既定3日）。
+export const MATCH_WINDOW_DAYS = Number(process.env.MATCH_WINDOW_DAYS ?? "3") || 3;
 
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -254,7 +258,7 @@ async function rankAndSave(
 }
 
 export interface RematchPageResult {
-  totalProjects: number; // 対象案件の総数（今日の配信のみ・名寄せ後）
+  totalProjects: number; // 対象案件の総数（新規が絡む案件のみ・名寄せ後）
   processed: number; // ここまでに処理した案件数（= 次回 offset）
   done: boolean; // 全件処理が完了したか
   talents: number;
@@ -281,25 +285,28 @@ export async function runMatchingForOrg(
   const offset = Math.max(0, opts.offset ?? 0);
   const limit = opts.limit && opts.limit > 0 ? opts.limit : Number.MAX_SAFE_INTEGER;
   const inhouseOnly = opts.scope === "inhouse";
-  // 既定は「今日(JST)取込分」のみ。sinceDays で過去に遡る（過去マッチの復旧用）。
+  // 「新規」境界(createdAt)。既定は今日(JST)取込分。sinceDays>1 で過去に遡る（復旧用）。
   // 窓の基準は createdAt(取込日)。配信日(receivedDate)はバックログ取込で過去日付になり
-  // 当日取込でも窓から外れるため使わない。自社人材は常に対象。
+  // 当日取込でも窓から外れるため使わない。
   const sinceDays = opts.sinceDays && opts.sinceDays > 0 ? opts.sinceDays : 1;
+  const dayMs = 24 * 60 * 60 * 1000;
   const todayStart = startOfTodayJst();
-  const since =
-    sinceDays <= 1
-      ? todayStart
-      : new Date(todayStart.getTime() - (sinceDays - 1) * 24 * 60 * 60 * 1000);
+  const newSince =
+    sinceDays <= 1 ? todayStart : new Date(todayStart.getTime() - (sinceDays - 1) * dayMs);
+  // 候補プールの窓: 新規境界からさらに MATCH_WINDOW_DAYS 日前まで取り込んだ分。
+  // これで「新規案件 × 直近N日の人材」「新規人材 × 直近N日の案件」を両立できる。
+  // 自社人材(INHOUSE)は取込日に関係なく常にプールに含む。
+  const poolSince = new Date(newSince.getTime() - MATCH_WINDOW_DAYS * dayMs);
 
   // inhouse スコープでは候補を自社保有人材だけに限定する。
   const talentWhere = inhouseOnly
     ? { orgId, talentType: "INHOUSE" as const }
-    : talentWindowWhere(orgId, since);
+    : talentWindowWhere(orgId, poolSince);
 
   const [projectsRaw, talents, prompts, ngDomains] = await Promise.all([
-    // ページングを安定させるため作成日昇順で固定。必要列のみ取得（転送量削減）。
+    // プール窓の案件を作成日昇順で取得（ページング安定のため）。必要列のみ取得（転送量削減）。
     prisma.project.findMany({
-      where: { orgId, createdAt: { gte: since } },
+      where: { orgId, createdAt: { gte: poolSince } },
       orderBy: { createdAt: "asc" },
       select: PROJECT_MATCH_SELECT,
     }) as unknown as Promise<Project[]>,
@@ -314,30 +321,53 @@ export async function runMatchingForOrg(
 
   // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
   // 「貴社社員/貴社まで」案件は除外せず残し、候補を自社人材だけに絞る（下で対応）。
-  const projectsAll = dedupeProjectsForMatch(projectsRaw);
+  const projectsPool = dedupeProjectsForMatch(projectsRaw);
 
-  // クリーン再生成は先頭チャンクのみ。
-  // 重要: 削除は「今回の対象（今日配信の案件）」に限定する。全マッチを消すと、
-  // 窓外（過去日）のマッチまで消えて作り直されず、過去のマッチが消失してしまう。
+  // 「新規」= newSince 以降に取り込んだもの。新規が絡むペアだけを対象にする:
+  //  ・新規案件 → プール内の全人材を候補（新規案件 × 直近N日の人材）。
+  //  ・既存案件(プール内) → 新規人材のみを候補（直近N日の案件 × 新規人材）。
+  // どちらも新規でないペア（既存案件 × 既存人材）は再判定しない（過去に判定済み）。
+  const newTalentIds = new Set(
+    talents.filter((t) => t.createdAt >= newSince).map((t) => t.id),
+  );
+  const targets = projectsPool
+    .map((project) => {
+      const projectIsNew = project.createdAt >= newSince;
+      const pool = projectIsNew
+        ? talents
+        : talents.filter((t) => newTalentIds.has(t.id));
+      return { project, projectIsNew, pool };
+    })
+    .filter(({ pool }) => pool.length > 0)
+    // 新規案件を先に処理する（offset=0で消すのは新規案件のマッチだけ＝消失リスク窓を最小化）。
+    .sort((a, b) => Number(b.projectIsNew) - Number(a.projectIsNew));
+
+  // クリーン再生成は先頭チャンク・かつ「新規案件」だけに限定する。
+  // 新規案件は毎回作り直すが、既存案件のマッチは消さず upsert で新規人材ぶんだけ追記する。
+  // （既存案件のマッチを消すと、窓外の過去マッチが復元されず消失するため＝過去の事故対策）
   // inhouse スコープでは対象案件のうち自社人材のマッチだけ削除し、他社のマッチは残す。
   if (offset === 0) {
-    const windowProjectIds = projectsRaw.map((p) => p.id);
-    await prisma.match.deleteMany({
-      where: {
-        projectId: { in: windowProjectIds },
-        ...(inhouseOnly ? { talent: { talentType: "INHOUSE" as const } } : {}),
-      },
-    });
+    const newProjectIds = targets
+      .filter((t) => t.projectIsNew)
+      .map((t) => t.project.id);
+    if (newProjectIds.length > 0) {
+      await prisma.match.deleteMany({
+        where: {
+          projectId: { in: newProjectIds },
+          ...(inhouseOnly ? { talent: { talentType: "INHOUSE" as const } } : {}),
+        },
+      });
+    }
   }
 
-  const slice = projectsAll.slice(offset, offset + limit);
+  const slice = targets.slice(offset, offset + limit);
 
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
-    slice.map(async (project) => {
+    slice.map(async ({ project, pool }) => {
       const candidates = restrictCandidatesByNg(
         restrictCandidatesByChannel(
-          talents.filter((t) => !isSameCompany(t, project)),
+          pool.filter((t) => !isSameCompany(t, project)),
           project,
         ),
         ngDomains,
@@ -369,11 +399,11 @@ export async function runMatchingForOrg(
     projectEmailPrompt: prompts.projectEmailPrompt,
   }).catch((e) => console.error("[match] メール本文の事前生成に失敗:", e));
 
-  const processed = Math.min(offset + slice.length, projectsAll.length);
+  const processed = Math.min(offset + slice.length, targets.length);
   return {
-    totalProjects: projectsAll.length,
+    totalProjects: targets.length,
     processed,
-    done: processed >= projectsAll.length,
+    done: processed >= targets.length,
     talents: talents.length,
     pairs,
     saved,
