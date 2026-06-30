@@ -82,10 +82,10 @@ beforeEach(() => {
 });
 
 describe("runMatchingForOrg（ページング）", () => {
-  it("先頭チャンク(offset=0)はクリーン再生成し、limit件だけ処理する", async () => {
+  it("先頭チャンク(offset=0)は追記のみ・limit件だけ処理する（削除しない）", async () => {
     const res = await runMatchingForOrg("org1", { offset: 0, limit: 2 });
 
-    expect(db.match.deleteMany).toHaveBeenCalledTimes(1); // クリーン再生成
+    expect(db.match.deleteMany).not.toHaveBeenCalled(); // 追記のみ＝削除しない
     expect(rankMock).toHaveBeenCalledTimes(2); // 2案件ぶん
     expect(res.totalProjects).toBe(3);
     expect(res.processed).toBe(2);
@@ -94,7 +94,7 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(db.match.upsert).toHaveBeenCalledTimes(4);
   });
 
-  it("2チャンク目(offset>0)はクリーン再生成しない・残りを処理して done", async () => {
+  it("2チャンク目(offset>0)も削除せず・残りを処理して done", async () => {
     const res = await runMatchingForOrg("org1", { offset: 2, limit: 2 });
 
     expect(db.match.deleteMany).not.toHaveBeenCalled();
@@ -267,7 +267,7 @@ describe("runMatchingForOrg（新規×直近の窓）", () => {
     expect(res.totalProjects).toBe(2);
   });
 
-  it("クリーン再生成（削除）は新規案件のマッチだけ。既存案件のマッチは消さない", async () => {
+  it("再実行でマッチを削除しない（追記のみ＝レビュー中・対応中のマッチを消さない）", async () => {
     db.project.findMany.mockResolvedValue([
       { ...project("pOld"), createdAt: old() },
       project("pNew"),
@@ -276,9 +276,9 @@ describe("runMatchingForOrg（新規×直近の窓）", () => {
 
     await runMatchingForOrg("org1", { offset: 0 });
 
-    expect(db.match.deleteMany).toHaveBeenCalledTimes(1);
-    const where = db.match.deleteMany.mock.calls[0][0].where;
-    expect(where.projectId.in).toEqual(["pNew"]); // 既存案件pOldは削除対象に含めない
+    // 新規案件であっても既存マッチは削除しない（upsertで追記のみ）。
+    expect(db.match.deleteMany).not.toHaveBeenCalled();
+    expect(db.match.upsert).toHaveBeenCalled();
   });
 
   it("既存案件 × 既存人材だけ（新規なし）は判定もせず削除もしない", async () => {

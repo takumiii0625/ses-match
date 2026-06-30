@@ -339,27 +339,15 @@ export async function runMatchingForOrg(
       return { project, projectIsNew, pool };
     })
     .filter(({ pool }) => pool.length > 0)
-    // 新規案件を先に処理する（offset=0で消すのは新規案件のマッチだけ＝消失リスク窓を最小化）。
+    // 新規案件を先に処理する（最も関連が高く、ページング途中で打ち切られても優先的に判定済みになる）。
     .sort((a, b) => Number(b.projectIsNew) - Number(a.projectIsNew));
 
-  // クリーン再生成は先頭チャンク・かつ「新規案件」だけに限定する。
-  // 新規案件は毎回作り直すが、既存案件のマッチは消さず upsert で新規人材ぶんだけ追記する。
-  // （既存案件のマッチを消すと、窓外の過去マッチが復元されず消失するため＝過去の事故対策）
-  // inhouse スコープでは対象案件のうち自社人材のマッチだけ削除し、他社のマッチは残す。
-  if (offset === 0) {
-    const newProjectIds = targets
-      .filter((t) => t.projectIsNew)
-      .map((t) => t.project.id);
-    if (newProjectIds.length > 0) {
-      await prisma.match.deleteMany({
-        where: {
-          projectId: { in: newProjectIds },
-          ...(inhouseOnly ? { talent: { talentType: "INHOUSE" as const } } : {}),
-        },
-      });
-    }
-  }
-
+  // マッチは「追記(upsert)のみ」。再実行で既存マッチを削除しない。
+  // 理由: マッチには手動の営業パイプライン状態(stTalent/stAccept/stClient/stInterview/
+  // stClosed)や差し戻し(rejectedAt)が保存される。削除して作り直すとレビュー中・対応中の
+  // マッチが消え、手動入力も失われる（差し戻しも復活する）。1日に複数回（取込完了ごと）
+  // 走るため、削除→再生成は実害が大きい。よって新しい候補ペアを足すだけにする。
+  // rankAndSave の upsert は update でパイプライン/差し戻し列に触れないので状態は保持される。
   const slice = targets.slice(offset, offset + limit);
 
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
