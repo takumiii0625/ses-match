@@ -1,16 +1,18 @@
-name: 定時マッチ（11/15/17時 JST・今日のみ）
+name: 定時マッチ（取込完了後・今日のみ）
 
-# 定時マッチは取込（11/15/17時）の直後に毎回実行（取込で増えた当日分を反映するため）。
-# 取込は数分かかるので15分ずらす。各回 offset=0 でクリーン再生成（当日分を作り直す）。
+# メール取込(fetch-mail)が完了したら自動でマッチを実行する。
+# 取込は件数により 1〜1.5 時間かかるため、従来の「取込開始の15分後」では当日分が
+# 出揃う前にマッチが走り空振りしていた。取込の "完了" をトリガにすることで毎回フル件数を判定する。
+# 取込は1日3回(11/15/17時 JST)走るので、本ワークフローもその完了ごとに3回実行される。
 # 手動(workflow_dispatch)は days(対象期間) と startOffset(再開位置)を指定可。
-# 時刻(UTC→JST): 02:15→11:15, 06:15→15:15, 08:15→17:15
 on:
-  schedule:
-    - cron: "15 2,6,8 * * *" # JST 11:15 / 15:15 / 17:15（取込の直後）
+  workflow_run:
+    workflows: ["メール自動取込（11/15/17時 JST）"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       days:
-        description: "対象とする配信日の幅（1=今日のみ。再マッチ範囲を広げる時に3や7）"
+        description: "対象とする取込日の幅（1=今日のみ。再マッチ範囲を広げる時に3や7）"
         required: false
         default: "1"
       startOffset:
@@ -25,19 +27,20 @@ concurrency:
 jobs:
   rematch:
     runs-on: ubuntu-latest
+    # 取込完了トリガの場合は、取込が成功したときだけ走らせる（失敗・キャンセル時はスキップ）。
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: マッチを実行（完了までページループ・遅いページはスキップして継続）
         run: |
-          # 定時は1日3回（11/15/17時）とも実行する＝daily ガードは付けない。
-          # 各回 offset=0・days=1 で「当日分」をクリーン再生成する。
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            days=1; guard=""; offset=0
+          # 取込完了トリガ＝当日分(days=1)を offset=0 からクリーン再生成。手動は入力値を使う。
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            days="${{ github.event.inputs.days }}"; offset="${{ github.event.inputs.startOffset }}"
           else
-            days="${{ github.event.inputs.days }}"; guard=""; offset="${{ github.event.inputs.startOffset }}"
+            days=1; offset=0
           fi
           for i in $(seq 1 1000); do
             resp=$(curl -fsS --max-time 290 -X POST \
-              "https://sesmatch.encore-biz.com/api/cron/rematch?offset=$offset&limit=3&scope=all&days=$days$guard" \
+              "https://sesmatch.encore-biz.com/api/cron/rematch?offset=$offset&limit=3&scope=all&days=$days" \
               -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" || true)
             if [ -z "$resp" ]; then
               echo "page failed at offset=$offset — skip ahead"
