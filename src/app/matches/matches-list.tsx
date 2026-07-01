@@ -201,8 +201,9 @@ export function MatchesList({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const min = Number(minScore);
+    // 差し戻し済み(hiddenIds)はここでは除外しない。順序計算に含めることで、差し戻しても
+    // 一覧の並び（グループ位置・行順）が変わらないようにする。除外は描画直前(visibleGroups)で行う。
     return matches.filter((m) => {
-      if (hiddenIds.has(m.id)) return false;
       if (m.score < min) return false;
       if (talentType !== "ALL" && m.talent.talentType !== talentType) return false;
       if (!q) return true;
@@ -218,7 +219,7 @@ export function MatchesList({
         .toLowerCase();
       return hay.includes(q);
     });
-  }, [matches, query, minScore, talentType, hiddenIds]);
+  }, [matches, query, minScore, talentType]);
 
   // 起点に応じてグループ化。重複（同名案件/同一人材）はまとめ、最新配信を代表にする。
   // project: 案件ごと（行＝人材）／ talent: 人材ごと（行＝案件）。
@@ -280,10 +281,20 @@ export function MatchesList({
       .sort((a, b) => (b.rows[0]?.m.score ?? 0) - (a.rows[0]?.m.score ?? 0));
   }, [filtered, groupMode]);
 
-  // 全行をフラットに（選択中マッチの取得・一覧キーに使う）。
+  // 差し戻し済み(hiddenIds)を描画直前に除外する。groups の並びは hiddenIds に依存しないので、
+  // 差し戻してもグループ位置・行順は変わらず、その行が消えて下が繰り上がるだけになる。
+  const visibleGroups = useMemo(
+    () =>
+      groups
+        .map((g) => ({ ...g, rows: g.rows.filter((r) => !hiddenIds.has(r.m.id)) }))
+        .filter((g) => g.rows.length > 0),
+    [groups, hiddenIds],
+  );
+
+  // 全行をフラットに（選択中マッチの取得・一覧キーに使う）。差し戻し済みは除外済み。
   const flatRows = useMemo(
-    () => groups.flatMap((g) => g.rows.map((r) => r.m)),
-    [groups],
+    () => visibleGroups.flatMap((g) => g.rows.map((r) => r.m)),
+    [visibleGroups],
   );
   const shownCount = flatRows.length;
 
@@ -390,7 +401,7 @@ export function MatchesList({
         </div>
       )}
 
-      {groups.length === 0 ? (
+      {visibleGroups.length === 0 ? (
         <Card className="p-10 text-center text-sm text-muted">
           {matches.length === 0 ? (
             <>
@@ -432,7 +443,7 @@ export function MatchesList({
                   </button>
                 </div>
                 <span className="text-sm font-medium text-muted">
-                  {shownCount} 件（{groups.length} {groupMode === "talent" ? "人材" : "案件"}）
+                  {shownCount} 件（{visibleGroups.length} {groupMode === "talent" ? "人材" : "案件"}）
                 </span>
               </div>
               <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
@@ -447,7 +458,7 @@ export function MatchesList({
               </label>
             </div>
 
-            {groups.map((g) => {
+            {visibleGroups.map((g) => {
               const project = g.project;
               const talent = g.talent;
               const rowShow = groupMode === "talent" ? "project" : "talent";
