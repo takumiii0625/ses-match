@@ -328,8 +328,8 @@ export default async function ReportsPage() {
       : todayProjects > 0
         ? {
             tone: "warn",
-            label: `要確認・判定0回（新規案件 ${todayProjects}件）`,
-            detail: `今日 ${todayProjects}件の案件を新規取込しましたが、マッチ判定が1回も実行されていません。マッチ対象は「配信日(receivedDate)が今日」の案件に限定されるため、過去日付メール（バックログ）の取込だと窓から外れて判定されません。定時ジョブ rematch-daily のログ、または取込メールの配信日を確認してください。`,
+            label: `判定待ち・判定0回（新規案件 ${todayProjects}件）`,
+            detail: `今日 ${todayProjects}件の案件を新規取込しましたが、マッチ判定はまだ実行されていません。マッチは取込(fetch-mail)の完了後に自動起動する設計のため、取込が進行中なら完了後に判定されます。取込完了後もしばらく0のままなら、定時ジョブ rematch-daily（取込完了トリガ）のログを確認してください。`,
           }
         : {
             tone: "info",
