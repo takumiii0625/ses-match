@@ -228,11 +228,11 @@ export default async function ReportsPage() {
         where: { orgId },
         _count: { _all: true },
       }),
-      // 今日のAIコスト（タグ別）
+      // 今日のAIコスト（タグ別）。items はマッチ判定でLLMにかけた候補人数（延べ）。
       prisma.aiUsage.groupBy({
         by: ["tag"],
         where: { createdAt: { gte: todayStart } },
-        _sum: { cost: true },
+        _sum: { cost: true, items: true },
         _count: { _all: true },
       }),
       // 今月のAIコスト合計
@@ -302,8 +302,11 @@ export default async function ReportsPage() {
   const todayIgnore = ingestCount("IGNORE");
   const todayError = ingestCount("ERROR");
   const todayMailTotal = todayNew + todayDuplicate + todayIgnore + todayError;
-  // マッチ判定の実行回数（LLMバッチ数）。
-  const matchRunsToday = aiToday.find((g) => g.tag === "match")?._count._all ?? 0;
+  // マッチ判定の実行回数（LLMバッチ数）と、LLMにかけた候補人数（延べ・バッチ人数の合計）。
+  // マッチ判定は候補5人ごとのバッチでLLMを呼ぶため、回数=バッチ数、人数=延べ候補数。
+  const matchAgg = aiToday.find((g) => g.tag === "match");
+  const matchRunsToday = matchAgg?._count._all ?? 0;
+  const matchItemsToday = matchAgg?._sum.items ?? 0;
 
   // -- マッチ実行ステータス（「動いて0件」「対象0件で空振り」「未稼働」を判別） --
   // 判定対象は「today の新規案件」。matchRunsToday は今日の LLM 判定回数（=実際に
@@ -318,12 +321,12 @@ export default async function ReportsPage() {
         ? {
             tone: "ok",
             label: `稼働中・成立 ${matchCreatedToday}件`,
-            detail: `今日 ${matchRunsToday}回の判定を実行し、${matchCreatedToday}件のマッチが成立しました。`,
+            detail: `今日 延べ ${matchItemsToday.toLocaleString("ja-JP")}人の候補をLLM判定し（${matchRunsToday}バッチ）、${matchCreatedToday}件のマッチが成立しました。`,
           }
         : {
             tone: "info",
             label: "稼働中・成立0件",
-            detail: `今日 ${matchRunsToday}回の判定を実行しましたが、条件に合う候補が無くマッチは0件でした（処理自体は正常）。`,
+            detail: `今日 延べ ${matchItemsToday.toLocaleString("ja-JP")}人の候補をLLM判定しましたが（${matchRunsToday}バッチ）、条件に合う候補が無くマッチは0件でした（処理自体は正常）。`,
           }
       : todayProjects > 0
         ? {
@@ -582,7 +585,7 @@ export default async function ReportsPage() {
           <div>
             <div className="text-3xl font-bold leading-none text-foreground">{matchCreatedToday}</div>
             <div className="mt-1 text-xs text-muted">
-              今日作成されたマッチ（判定実行 {matchRunsToday}回）
+              今日成立したマッチ／LLM判定 延べ {matchItemsToday.toLocaleString("ja-JP")}人（候補5人ごとに判定・{matchRunsToday}バッチ）
             </div>
           </div>
           <div>

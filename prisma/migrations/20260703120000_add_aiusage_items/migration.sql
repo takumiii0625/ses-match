@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "AiUsage" ADD COLUMN     "items" INTEGER NOT NULL DEFAULT 0;

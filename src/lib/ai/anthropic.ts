@@ -60,7 +60,7 @@ interface UsageLike {
  * 1コールのトークン使用量と概算コストをログ出力＋DBに記録（/reportsで日次・月次集計）。
  * DB書き込みは fire-and-forget（失敗しても本処理に影響させない）。
  */
-function logUsage(tag: string, usage: UsageLike | undefined): void {
+function logUsage(tag: string, usage: UsageLike | undefined, items = 0): void {
   if (!usage) return;
   const p = PRICES[MODEL] ?? { in: 5, out: 25 };
   const inp = usage.input_tokens ?? 0;
@@ -82,6 +82,7 @@ function logUsage(tag: string, usage: UsageLike | undefined): void {
         cacheWrite: cacheW,
         outputTokens: out,
         cost,
+        items,
       },
     })
     .catch(() => {});
@@ -664,7 +665,7 @@ export class AnthropicAIService implements AIService {
       }),
     );
 
-    logUsage("match", res.usage);
+    logUsage("match", res.usage, candidates.length); // items = このバッチで判定した候補人数
 
     // 打ち切り時は曖昧なパースエラーにせず原因の分かるメッセージにする。
     if (res.stop_reason === "max_tokens") {

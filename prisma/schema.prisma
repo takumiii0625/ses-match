@@ -427,6 +427,7 @@ model AiUsage {
   cacheWrite   Int      @default(0)
   outputTokens Int
   cost         Float // 概算USD
+  items        Int      @default(0) // このコールで処理した件数（match=1バッチで判定した候補人数）
   createdAt    DateTime @default(now())
 
   @@index([createdAt])
