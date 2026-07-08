@@ -157,7 +157,7 @@ describe("buildProjectEmail", () => {
       projectBlock: transformProjectBody(SAMPLE),
     });
     expect(subject).toContain("SAPコンサル");
-    expect(text).toContain("山田太郎様");
+    expect(text).toContain("ご担当者様"); // 宛名はご担当者様で統一
     expect(text).toContain("T.K様宛に下記案件はいかがでしょうか。");
     expect(text).toContain("OBFall株式会社");
     expect(text).toContain("sales@obfall.co.jp");
@@ -170,7 +170,7 @@ describe("buildProjectEmail", () => {
       talentBlock: "【氏名】Y.S\n【スキル】Java / Spring Boot",
     });
     expect(subject).toBe("【要員のご提案】旅行サイトエンハンス開発（Java）");
-    expect(text).toContain("アストロ 鈴木りら様");
+    expect(text).toContain("ご担当者様"); // 宛名はご担当者様で統一
     expect(text).toContain("OBFall営業部です。");
     expect(text).toContain("案件のご紹介ありがとうございます。");
     expect(text).toContain("本案件に下記要員はいかがでしょうか。");
@@ -179,17 +179,18 @@ describe("buildProjectEmail", () => {
     expect(text).toContain("OBFall株式会社");
   });
 
-  it("提案メール: Fromに表示名が無ければ案件メール本文から宛名を補完", () => {
+  it("提案メール: 宛名はご担当者様で統一（抽出名は使わない）", () => {
     const { text } = buildTalentProposalEmail({
       contactFrom: "info@astro-hd.com",
       contactBody: "お世話になっております。アストロの鈴木です。",
       projectTitle: "SAP案件",
       talentBlock: "【氏名】T.A",
     });
-    expect(text).toContain("鈴木様");
+    expect(text).toContain("ご担当者様");
+    expect(text).not.toContain("鈴木様");
   });
 
-  it("Fromに表示名が無くても本文署名から宛名を補完", () => {
+  it("案件案内メール: 宛名はご担当者様で統一（抽出名は使わない）", () => {
     const { text } = buildProjectEmail({
       talentName: "Y.S",
       contactFrom: "k.sugawara@harumina.jp",
@@ -198,7 +199,7 @@ describe("buildProjectEmail", () => {
       projectTitle: "旅行サイトエンハンス開発（Java）",
       projectBlock: "■案件名：\n　旅行サイトエンハンス開発",
     });
-    expect(text).toContain("菅原様");
-    expect(text).not.toContain("ご担当者様");
+    expect(text).toContain("ご担当者様");
+    expect(text).not.toContain("菅原様");
   });
 });

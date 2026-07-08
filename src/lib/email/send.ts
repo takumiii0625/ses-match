@@ -233,10 +233,9 @@ export function buildTalentProposalEmail(input: TalentProposalEmailInput): {
   subject: string;
   text: string;
 } {
-  const contactName = resolveContactName(input.contactFrom, null, input.contactBody);
   const subject = `【要員のご提案】${input.projectTitle}`;
   const text = [
-    `${contactName}様`,
+    `ご担当者様`,
     ``,
     `お世話になっております。`,
     `OBFall営業部です。`,
@@ -295,11 +294,10 @@ export function buildProjectEmail(input: ProjectEmailInput): {
   subject: string;
   text: string;
 } {
-  const contactName = resolveContactName(input.contactFrom, input.contactName, input.contactBody);
   const block = input.projectBlock.trim();
   const subject = `【案件のご案内】${input.projectTitle}`;
   const text = [
-    `${contactName}様`,
+    `ご担当者様`,
     ``,
     `お世話になっております。`,
     `OBFall営業部です。`,
