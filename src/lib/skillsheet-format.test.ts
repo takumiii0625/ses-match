@@ -24,6 +24,20 @@ describe("formatSkillSheetText", () => {
     expect(out).toContain("\n・Java");
   });
 
+  it("CSV/Excel由来のカンマ空セルを掃除して読みやすくする", () => {
+    const csv = [
+      "業務経歴書,,,,,,,,,,,,,,,,,,,,",
+      "フリガナ,,,,,性別,,男性,,,年齢,,,34,,,",
+      ",,,,,,,,,,,,,,,,,,,,",
+      "氏名,,,,,ST,,,,,",
+    ].join("\n");
+    const out = formatSkillSheetText(csv);
+    expect(out).toContain("業務経歴書");
+    expect(out).toContain("フリガナ 性別 男性 年齢 34");
+    expect(out).toContain("氏名 ST");
+    expect(out).not.toMatch(/,{2,}/); // カンマ羅列が消える
+  });
+
   it("空・null は空文字", () => {
     expect(formatSkillSheetText("")).toBe("");
     expect(formatSkillSheetText(null)).toBe("");

@@ -7,6 +7,24 @@ export function formatSkillSheetText(raw: string | null | undefined): string {
   if (!raw) return "";
   let s = raw.replace(/\r\n?/g, "\n");
 
+  // CSV/Excel由来の「空セル（カンマの羅列）」を掃除する。
+  // 各行を「,」区切りのセルとみなし、空セルを除いて中身のある語だけを空白で連結。
+  // 全セルが空の行（区切りだけの行）は空行になり、下で圧縮される。カンマ無しの行はそのまま。
+  s = s
+    .split("\n")
+    .map((line) =>
+      line.includes(",")
+        ? line
+            .split(",")
+            .map((c) => c.trim())
+            .filter(Boolean)
+            .join(" ")
+        : line.trimEnd(),
+    )
+    .join("\n")
+    .replace(/[ \t　]{2,}/g, " ") // 連続空白を1つに
+    .replace(/\n{3,}/g, "\n\n"); // 空行の連続を1つに
+
   // 1行あたりの平均文字数。既に短ければ整形済みとみなしてそのまま返す。
   const nonEmptyLines = s.split("\n").filter((l) => l.trim()).length;
   const avg = s.replace(/\n/g, "").length / Math.max(1, nonEmptyLines);
