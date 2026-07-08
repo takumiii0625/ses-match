@@ -30,6 +30,7 @@ function mk(p: {
       affiliation: null,
       mainSkills: p.mainSkills ?? [],
       skills: [],
+      skillYears: null,
       desiredRateMin: null,
       desiredRateMax: null,
       remotePreference: null,

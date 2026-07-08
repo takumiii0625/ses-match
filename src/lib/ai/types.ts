@@ -1,12 +1,19 @@
 // AI service contract. Implementations: mock (default), anthropic, openai.
 // Swap by setting AI_PROVIDER + the matching API key in .env.
 
+/** 言語・技術ごとの経験年数（例: { skill: "Java", years: 3 }）。 */
+export interface SkillYear {
+  skill: string;
+  years: number;
+}
+
 export interface ParsedTalent {
   name?: string;
   age?: number;
   gender?: string; // MALE | FEMALE | OTHER
   skills: string[];
   mainSkills: string[];
+  skillYears?: SkillYear[]; // 言語/技術ごとの経験年数（分かるものだけ）
   desiredRateMin?: number;
   desiredRateMax?: number;
   remotePreference?: string;
@@ -89,6 +96,7 @@ export interface MatchCandidateInput {
   talentType?: string | null;
   affiliation?: string | null; // 所属（商流上の立場。例: "1社先正社員"）
   skills: string[];
+  skillYears?: SkillYear[] | null; // 言語/技術ごとの経験年数（判定で「必須◯年」に対する充足を見る）
   desiredRateMin?: number | null;
   desiredRateMax?: number | null;
   remotePreference?: string | null;

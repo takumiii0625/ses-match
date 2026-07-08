@@ -7,7 +7,7 @@ import {
   dedupeProjectsForMatch,
 } from "@/lib/matching";
 import { getAI } from "@/lib/ai";
-import type { MatchProjectInput, MatchCandidateInput } from "@/lib/ai";
+import type { MatchProjectInput, MatchCandidateInput, SkillYear } from "@/lib/ai";
 import { DEFAULT_MATCH_PROMPT } from "@/lib/ai/prompts";
 import { pregenerateProjectBodies } from "@/lib/email/project-mail";
 import { loadNgDomains, isNgDomain } from "@/lib/ng-company";
@@ -27,6 +27,7 @@ const TALENT_MATCH_SELECT = {
   affiliation: true,
   mainSkills: true,
   skills: true,
+  skillYears: true,
   desiredRateMin: true,
   desiredRateMax: true,
   remotePreference: true,
@@ -174,6 +175,7 @@ function toCandidateInput(t: Talent): MatchCandidateInput {
     talentType: t.talentType,
     affiliation: t.affiliation,
     skills: [...new Set([...t.mainSkills, ...t.skills])],
+    skillYears: (t.skillYears as unknown as SkillYear[] | null) ?? undefined,
     desiredRateMin: t.desiredRateMin,
     desiredRateMax: t.desiredRateMax,
     remotePreference: t.remotePreference,

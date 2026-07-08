@@ -170,6 +170,7 @@ model Talent {
   // multi-value attributes
   mainSkills     String[] @default([])
   skills         String[] @default([])
+  skillYears     Json? // 言語/技術ごとの経験年数 [{skill,years}]（抽出で分かるものだけ）
   qualifications String[] @default([])
   tags           String[] @default([])
 

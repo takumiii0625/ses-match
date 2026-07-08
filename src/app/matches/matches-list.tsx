@@ -33,6 +33,7 @@ export interface MatchVM {
     affiliation: string | null;
     mainSkills: string[];
     skills: string[];
+    skillYears: { skill: string; years: number }[] | null; // 言語別の経験年数
     desiredRateMin: number | null;
     desiredRateMax: number | null;
     remotePreference: string | null;
@@ -98,17 +99,33 @@ const DAYS_OPTIONS = [
   { value: "all", label: "配信: 全期間" },
 ];
 
-function SkillChips({ main, all, limit = 8 }: { main: string[]; all: string[]; limit?: number }) {
+function SkillChips({
+  main,
+  all,
+  limit = 8,
+  years,
+}: {
+  main: string[];
+  all: string[];
+  limit?: number;
+  years?: { skill: string; years: number }[] | null;
+}) {
   const extra = all.filter((s) => !main.includes(s));
   const shown = [...main, ...extra].slice(0, limit);
   if (shown.length === 0) return <span className="text-xs text-slate-400">-</span>;
+  const yearMap = new Map(
+    (years ?? []).map((y) => [y.skill.trim().toLowerCase(), y.years]),
+  );
   return (
     <div className="flex flex-wrap gap-1">
-      {shown.map((s) => (
-        <Badge key={s} tone={main.includes(s) ? "blue" : "slate"} className="text-xs">
-          {s}
-        </Badge>
-      ))}
+      {shown.map((s) => {
+        const y = yearMap.get(s.trim().toLowerCase());
+        return (
+          <Badge key={s} tone={main.includes(s) ? "blue" : "slate"} className="text-xs">
+            {y != null ? `${s}（${y}年）` : s}
+          </Badge>
+        );
+      })}
     </div>
   );
 }
@@ -142,7 +159,7 @@ function MatchRowContent({ m, dupes, show }: { m: MatchVM; dupes: number; show: 
             {t.remotePreference && <span>{REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}</span>}
           </div>
           <div className="mt-1.5">
-            <SkillChips main={t.mainSkills} all={t.skills} limit={5} />
+            <SkillChips main={t.mainSkills} all={t.skills} limit={5} years={t.skillYears} />
           </div>
         </>
       ) : (
@@ -728,7 +745,7 @@ function MatchDetailPanel({
               <div className="mt-0.5 text-xs text-muted">{REMOTE_LABELS[t.remotePreference] ?? t.remotePreference}</div>
             )}
             <div className="mt-1.5">
-              <SkillChips main={t.mainSkills} all={t.skills} />
+              <SkillChips main={t.mainSkills} all={t.skills} years={t.skillYears} />
             </div>
           </div>
         </div>

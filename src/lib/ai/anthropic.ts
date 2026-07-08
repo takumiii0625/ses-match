@@ -10,6 +10,7 @@ import type {
   MatchCandidateInput,
   RankedCandidate,
   ParsedSkillSheet,
+  SkillYear,
 } from "./types";
 import {
   DEFAULT_MATCH_PROMPT,
@@ -88,6 +89,30 @@ function logUsage(tag: string, usage: UsageLike | undefined, items = 0): void {
     .catch(() => {});
 }
 
+/** スキル名に経験年数を併記する（例: "Java(3年), TypeScript(10年), React"）。
+ *  必須「◯年以上」に対する充足をLLMが判定できるよう、分かる言語は年数を付ける。 */
+function formatSkillsWithYears(
+  skills: string[],
+  skillYears?: SkillYear[] | null,
+): string {
+  const years = new Map<string, number>();
+  for (const sy of skillYears ?? []) {
+    if (sy?.skill) years.set(sy.skill.trim().toLowerCase(), sy.years);
+  }
+  const shown = new Set(skills.map((s) => s.trim().toLowerCase()));
+  const parts = skills.map((s) => {
+    const y = years.get(s.trim().toLowerCase());
+    return y != null ? `${s}(${y}年)` : s;
+  });
+  // skills に無い経験年数（別表記等）も末尾に追加する。
+  for (const sy of skillYears ?? []) {
+    if (sy?.skill && !shown.has(sy.skill.trim().toLowerCase())) {
+      parts.push(`${sy.skill}(${sy.years}年)`);
+    }
+  }
+  return parts.join(", ");
+}
+
 // マッチ判定の1リクエストあたり候補数。小さいほど1回の出力が短く、件数が多くても
 // max_tokens で打ち切られない。バッチは並列・独立なので1つ失敗しても他は残る。
 const MATCH_BATCH_SIZE = 5;
@@ -134,6 +159,22 @@ const TALENT_SCHEMA = {
     },
     skills: { type: "array", items: { type: "string" } },
     mainSkills: { type: "array", items: { type: "string" } },
+    skillYears: {
+      type: "array",
+      description:
+        "経歴書/スキル一覧から、主要な言語・技術ごとの経験年数を抽出する。" +
+        "例: [{\"skill\":\"Java\",\"years\":3},{\"skill\":\"TypeScript\",\"years\":10}]。" +
+        "年数が明記または経歴から妥当に読み取れるものだけを入れる（言語・主要FW/DB/クラウドを優先）。skills と重複してよい。不明・記載なしは空配列。",
+      items: {
+        type: "object",
+        properties: {
+          skill: { type: "string" },
+          years: { type: "number" },
+        },
+        required: ["skill", "years"],
+        additionalProperties: false,
+      },
+    },
     desiredRateMin: nullableInt,
     desiredRateMax: nullableInt,
     remotePreference: nullableRemote,
@@ -161,6 +202,7 @@ const TALENT_SCHEMA = {
     "gender",
     "skills",
     "mainSkills",
+    "skillYears",
     "desiredRateMin",
     "desiredRateMax",
     "remotePreference",
@@ -633,7 +675,7 @@ export class AnthropicAIService implements AIService {
         [
           `- talentId: ${c.talentId}`,
           `  氏名: ${c.name} / 年齢: ${c.age ?? "?"} / 国籍: ${c.nationality ?? "?"} / 区分: ${c.talentType ?? "?"} / 所属: ${c.affiliation ?? "?"}`,
-          `  スキル: ${c.skills.join(", ") || "(不明)"}`,
+          `  スキル: ${formatSkillsWithYears(c.skills, c.skillYears) || "(不明)"}`,
           `  希望単価: ${c.desiredRateMin ?? "?"}〜${c.desiredRateMax ?? "?"}万`,
           `  リモート希望: ${c.remotePreference ?? "?"}`,
           `  稼働開始: ${c.availabilityText ?? "?"}`,

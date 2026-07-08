@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import type { SkillYear } from "@/lib/ai";
 import type { MatchVM } from "./matches-list";
 
 /** talentId#projectId → 指定種別メールの最新送信日時(ISO) のマップを作る（送信済みバッジ用）。 */
@@ -50,6 +51,7 @@ export const matchVmSelect = {
       affiliation: true,
       mainSkills: true,
       skills: true,
+      skillYears: true,
       desiredRateMin: true,
       desiredRateMax: true,
       remotePreference: true,
@@ -98,6 +100,7 @@ export function toMatchVM(
       affiliation: m.talent.affiliation,
       mainSkills: m.talent.mainSkills,
       skills: m.talent.skills,
+      skillYears: (m.talent.skillYears as SkillYear[] | null) ?? null,
       desiredRateMin: m.talent.desiredRateMin,
       desiredRateMax: m.talent.desiredRateMax,
       remotePreference: m.talent.remotePreference,

@@ -243,6 +243,7 @@ async function ingestEmails(
             gender: toGender(p.gender),
             skills: p.skills ?? [],
             mainSkills: p.mainSkills ?? [],
+            skillYears: p.skillYears ?? undefined, // 言語別の経験年数（分かるものだけ）
             desiredRateMin: p.desiredRateMin ?? null,
             desiredRateMax: p.desiredRateMax ?? null,
             remotePreference: toRemote(p.remotePreference),
