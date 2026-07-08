@@ -4,7 +4,7 @@ import { Resend } from "resend";
 const FROM = process.env.MAIL_FROM ?? "OBFall 営業 <sales@obfall.co.jp>";
 const REPLY_TO = process.env.MAIL_REPLY_TO ?? "sales@obfall.co.jp";
 
-const SIGNATURE = `-----------------------------------------
+const SIGNATURE = `-------
 OBFall株式会社
 営業共通：sales@obfall.co.jp
 
@@ -14,7 +14,7 @@ TEL：070-9225-9510
 　　　03-5403-5904
 
 URL：https://obfall.com
------------------------------------------`;
+-------`;
 
 export interface SendMailInput {
   to: string;
@@ -307,8 +307,9 @@ export function buildProjectEmail(input: ProjectEmailInput): {
     `${input.talentName}様宛に下記案件はいかがでしょうか。`,
     `ご検討いただけますと幸いです。`,
     ``,
-    `-----------------------------------------`,
+    `-------`,
     block,
+    `-------`,
     ``,
     `何卒よろしくお願い致します。`,
     SIGNATURE,
