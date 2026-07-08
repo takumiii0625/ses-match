@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { formatRate, daysAgo } from "@/lib/utils";
+import { formatRate, daysAgo, fmtDateTime } from "@/lib/utils";
 import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
 import { REMOTE_LABELS } from "@/lib/enums";
@@ -24,6 +24,7 @@ export interface MatchVM {
   proposable: boolean;
   channelNote: string | null;
   locationOk: boolean | null; // 勤務地・勤務形態OKか（true=OKラベル表示、null=未評価）
+  createdAt: string; // マッチした日時（ISO）
   sentInfoAt: string | null; // 案件案内メールを送信済みの日時（未送信なら null）
   sentTalentAt: string | null; // 要員提案メールを送信済みの日時（未送信なら null。自社マッチで使用）
   talent: {
@@ -92,11 +93,11 @@ function splitReasons(reasons: string[]): { strengths: string[]; concerns: strin
 }
 
 const DAYS_OPTIONS = [
-  { value: "1", label: "配信: 直近1日" },
-  { value: "3", label: "配信: 直近3日" },
-  { value: "7", label: "配信: 直近7日" },
-  { value: "30", label: "配信: 直近30日" },
-  { value: "all", label: "配信: 全期間" },
+  { value: "1", label: "マッチ: 直近1日" },
+  { value: "3", label: "マッチ: 直近3日" },
+  { value: "7", label: "マッチ: 直近7日" },
+  { value: "30", label: "マッチ: 直近30日" },
+  { value: "all", label: "マッチ: 全期間" },
 ];
 
 function SkillChips({
@@ -148,6 +149,7 @@ function MatchRowContent({ m, dupes, show }: { m: MatchVM; dupes: number; show: 
             ✉ {fmtSentDate(m.sentInfoAt)}
           </span>
         )}
+        <span className="ml-auto text-xs text-muted whitespace-nowrap">マッチ {fmtDateTime(m.createdAt)}</span>
       </div>
       {show === "talent" ? (
         <>

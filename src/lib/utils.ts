@@ -26,3 +26,16 @@ export function daysAgo(d?: Date | string | null): string {
   if (days === 1) return "1日前";
   return `${days}日前`;
 }
+
+/** 日時を「M/D HH:mm」で表す（JST）。マッチした日時の表示用。 */
+export function fmtDateTime(d?: Date | string | null): string {
+  if (!d) return "-";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "-";
+  const jst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+  const M = jst.getUTCMonth() + 1;
+  const D = jst.getUTCDate();
+  const h = String(jst.getUTCHours()).padStart(2, "0");
+  const m = String(jst.getUTCMinutes()).padStart(2, "0");
+  return `${M}/${D} ${h}:${m}`;
+}

@@ -21,6 +21,7 @@ function mk(p: {
     proposable: p.proposable ?? true,
     channelNote: null,
     locationOk: null,
+    createdAt: new Date().toISOString(),
     sentInfoAt: null,
     sentTalentAt: null,
     talent: {

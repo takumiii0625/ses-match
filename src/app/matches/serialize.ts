@@ -43,6 +43,7 @@ export const matchVmSelect = {
   proposable: true,
   channelNote: true,
   locationOk: true,
+  createdAt: true, // マッチした日時（一覧に「M/D HH:mm」で表示）
   talent: {
     select: {
       id: true,
@@ -91,6 +92,7 @@ export function toMatchVM(
     proposable: m.proposable,
     channelNote: m.channelNote,
     locationOk: m.locationOk,
+    createdAt: m.createdAt.toISOString(),
     sentInfoAt,
     sentTalentAt,
     talent: {

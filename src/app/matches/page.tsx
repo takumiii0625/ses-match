@@ -17,21 +17,27 @@ export default async function MatchesPage(props: {
 }) {
   const sp = await props.searchParams;
   const daysParam = (Array.isArray(sp.days) ? sp.days[0] : sp.days) ?? "1";
-  // 配信日の窓: 既定は直近1日。"all" は全期間。
+  // マッチ日時の窓: 既定は直近1日（マッチした分を丸1日残す）。"all" は全期間。
   const days = daysParam === "all" ? 0 : Number(daysParam) || 1;
   const org = await getCurrentOrg();
 
-  const projectWhere =
-    days > 0
-      ? { orgId: org.id, receivedDate: { gte: new Date(Date.now() - days * DAY) } }
-      : { orgId: org.id };
+  // マッチした日時(Match.createdAt)で絞る。取込(createdAt)基準でマッチしているため、
+  // 配信日ではなくマッチ日時で残すと「今日マッチした分が丸1日残る」挙動になる。
+  const matchWindow =
+    days > 0 ? { createdAt: { gte: new Date(Date.now() - days * DAY) } } : {};
 
   const [matches, sentMap] = await Promise.all([
     prisma.match.findMany({
-      // 提案不可（商流オーバー等）・差し戻し済みはマッチ一覧に出さない。配信日で絞る。
-      where: { project: projectWhere, score: { gte: 70 }, proposable: true, rejectedAt: null },
+      // 提案不可（商流オーバー等）・差し戻し済みはマッチ一覧に出さない。マッチ日時で絞る。
+      where: {
+        project: { orgId: org.id },
+        score: { gte: 70 },
+        proposable: true,
+        rejectedAt: null,
+        ...matchWindow,
+      },
       select: matchVmSelect,
-      orderBy: { score: "desc" },
+      orderBy: [{ createdAt: "desc" }, { score: "desc" }],
     }),
     buildSentInfoMap(org.id),
   ]);
@@ -49,8 +55,8 @@ export default async function MatchesPage(props: {
         <div>
           <h1 className="text-xl font-semibold text-foreground">マッチ一覧</h1>
           <p className="mt-1 text-sm text-muted">
-            案件ごとのマッチ結果。既定は<span className="font-medium">配信が直近1日</span>の案件のみ。
-            過去日は右の「配信日」で広げられます。
+            案件ごとのマッチ結果。既定は<span className="font-medium">マッチが直近1日</span>の分のみ（丸1日残ります）。
+            過去分は右の「マッチ日時」で広げられます。
           </p>
         </div>
         <Link

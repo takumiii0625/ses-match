@@ -107,6 +107,8 @@ export default async function ProposalsPage(props: {
     .map((x) => x.row)
     .filter((r) => matchQ(r.projectTitle, r.clientName, r.talentName))
     .filter((r) => {
+      // メールを送ったものだけ表示（案内 or 提案のどちらも未送信なら除外）。
+      if (!r.sentInfoAt && !r.sentTalentAt) return false;
       // 進捗フィルタ
       if (stageParam === "none") {
         if (STAGE_KEYS.some((k) => r.stages[k])) return false;
