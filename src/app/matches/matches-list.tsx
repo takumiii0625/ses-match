@@ -690,6 +690,7 @@ function MatchDetailPanel({
             差し戻し理由（記録に残ります。送信対象・一覧から除外されます）
           </label>
           <textarea
+            autoFocus
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             rows={2}
