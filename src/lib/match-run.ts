@@ -337,13 +337,16 @@ export async function runMatchingForOrg(
   opts: {
     offset?: number;
     limit?: number;
-    scope?: "all" | "inhouse";
+    // all=自社+他社 / inhouse=自社のみ / registered=自社登録案件(REGISTER)×直近人材（手動の自社案件マッチ）
+    scope?: "all" | "inhouse" | "registered";
     sinceDays?: number; // 対象とする配信日の幅（1=今日のみ。例 3=今日含む直近3日）
   } = {},
 ): Promise<RematchPageResult> {
   const offset = Math.max(0, opts.offset ?? 0);
   const limit = opts.limit && opts.limit > 0 ? opts.limit : Number.MAX_SAFE_INTEGER;
   const inhouseOnly = opts.scope === "inhouse";
+  // registered: 自社登録案件(dataFrom=REGISTER)を、取込日に関係なく全件、直近の人材と突き合わせる。
+  const registeredOnly = opts.scope === "registered";
   // 「新規」境界(createdAt)。既定は今日(JST)取込分。sinceDays>1 で過去に遡る（復旧用）。
   // 窓の基準は createdAt(取込日)。配信日(receivedDate)はバックログ取込で過去日付になり
   // 当日取込でも窓から外れるため使わない。
@@ -363,9 +366,11 @@ export async function runMatchingForOrg(
     : talentWindowWhere(orgId, poolSince);
 
   const [projectsRaw, talents, prompts, ngDomains] = await Promise.all([
-    // プール窓の案件を作成日昇順で取得（ページング安定のため）。必要列のみ取得（転送量削減）。
+    // registered は自社登録案件(REGISTER)を全件。それ以外はプール窓(createdAt)の案件。作成日昇順で安定ページング。
     prisma.project.findMany({
-      where: { orgId, createdAt: { gte: poolSince } },
+      where: registeredOnly
+        ? { orgId, dataFrom: "REGISTER" as const }
+        : { orgId, createdAt: { gte: poolSince } },
       orderBy: { createdAt: "asc" },
       select: PROJECT_MATCH_SELECT,
     }) as unknown as Promise<Project[]>,
@@ -389,17 +394,22 @@ export async function runMatchingForOrg(
   const newTalentIds = new Set(
     talents.filter((t) => t.createdAt >= newSince).map((t) => t.id),
   );
-  const targets = projectsPool
-    .map((project) => {
-      const projectIsNew = project.createdAt >= newSince;
-      const pool = projectIsNew
-        ? talents
-        : talents.filter((t) => newTalentIds.has(t.id));
-      return { project, projectIsNew, pool };
-    })
-    .filter(({ pool }) => pool.length > 0)
-    // 新規案件を先に処理する（最も関連が高く、ページング途中で打ち切られても優先的に判定済みになる）。
-    .sort((a, b) => Number(b.projectIsNew) - Number(a.projectIsNew));
+  // registered は「自社登録案件すべて × 直近のプール人材すべて」を対象にする（新規差分ロジックは使わない）。
+  const targets = registeredOnly
+    ? projectsPool
+        .map((project) => ({ project, projectIsNew: true, pool: talents }))
+        .filter(({ pool }) => pool.length > 0)
+    : projectsPool
+        .map((project) => {
+          const projectIsNew = project.createdAt >= newSince;
+          const pool = projectIsNew
+            ? talents
+            : talents.filter((t) => newTalentIds.has(t.id));
+          return { project, projectIsNew, pool };
+        })
+        .filter(({ pool }) => pool.length > 0)
+        // 新規案件を先に処理する（最も関連が高く、ページング途中で打ち切られても優先的に判定済みになる）。
+        .sort((a, b) => Number(b.projectIsNew) - Number(a.projectIsNew));
 
   // マッチは「追記(upsert)のみ」。再実行で既存マッチを削除しない。
   // 理由: マッチには手動の営業パイプライン状態(stTalent/stAccept/stClient/stInterview/

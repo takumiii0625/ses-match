@@ -24,7 +24,9 @@ async function handle(req: Request) {
     const offset = Number(url.searchParams.get("offset") ?? "0") || 0;
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw ? Number(limitRaw) : undefined;
-    const scope = url.searchParams.get("scope") === "inhouse" ? "inhouse" : "all";
+    const scopeRaw = url.searchParams.get("scope");
+    const scope =
+      scopeRaw === "inhouse" ? "inhouse" : scopeRaw === "registered" ? "registered" : "all";
     // ?days=N で対象期間を指定（1=今日のみ・既定。過去のマッチ復旧時に 3 等を指定）。
     const daysRaw = url.searchParams.get("days");
     const sinceDays = daysRaw ? Number(daysRaw) : undefined;

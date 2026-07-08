@@ -282,6 +282,22 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2);
   });
 
+  it("scope=registered は古い案件・古い人材でも全案件×全人材を対象にする", async () => {
+    const old = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), createdAt: old },
+      { ...project("p2"), createdAt: old },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), createdAt: old },
+      { ...talent("t2"), createdAt: old },
+    ]);
+    // 通常(all)なら「古い案件×古い人材」は新規が絡まず対象0だが、registeredは全件対象。
+    const res = await runMatchingForOrg("org1", { scope: "registered", offset: 0 });
+    expect(rankMock).toHaveBeenCalledTimes(2); // 2案件とも対象
+    expect(res.saved).toBe(4); // 2案件 × 2人材
+  });
+
   it("提案不可(channelOk=false)も保存するが proposable=false で記録", async () => {
     rankMock.mockImplementation(async (_p: unknown, candidates: { talentId: string }[]) =>
       candidates.map((c) => ({

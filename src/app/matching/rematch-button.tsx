@@ -35,7 +35,7 @@ export function RematchButton({
   scope = "all",
   label,
 }: {
-  scope?: "all" | "inhouse";
+  scope?: "all" | "inhouse" | "registered";
   label?: string;
 } = {}) {
   const router = useRouter();
