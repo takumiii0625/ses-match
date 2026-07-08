@@ -107,13 +107,28 @@ function isOwnOnlyChannel(channelText: string | null): boolean {
 }
 
 /**
+ * 送信元から見て「1社先」以上の他社人材か。affiliation に「N社先/N社下」
+ * （例「1社先」「1社先正社員」「一社先フリーランス」「2社先」「2社下」）が含まれる人材は、
+ * 送信元から1社先以上＝我々が仲介すると2社先以上になるため提案不可（一律NG）。
+ * 送信元自身のプロパー/正社員/自社所属（=我々から見て1社先）や、自社保有(INHOUSE)は対象外。
+ */
+function isTooDeepPartner(t: Talent): boolean {
+  if (t.talentType === "INHOUSE") return false;
+  return /社先|社下/.test((t.affiliation ?? "").replace(/\s/g, ""));
+}
+
+/**
  * 商流による候補の事前足切り。
+ * - 送信元から見て「1社先」以上の他社人材（affiliationにN社先/N社下）は一律除外
+ *   （我々が仲介すると2社先以上になり提案不可）。
  * - 「貴社社員/貴社まで」案件 → 自社保有人材のうち「貴社チェック(kishaOk)」が付いた人材のみ。
  *   （貴社まで案件は貴社レベルの人材しか提案できないため、対象人材を明示的に絞る）
  * - 「エンド直/プロパー/直のみ」案件で支援費の記載なし → 弊社が挟まると提案不可なので
  *   他社人材を除外し自社保有人材のみ（支援費ありなら商流を飛ばせるので全員残す）。
  */
 function restrictCandidatesByChannel(candidates: Talent[], project: Project): Talent[] {
+  // 送信元から1社先以上（=自社仲介で2社先以上）の他社人材は常に除外。
+  candidates = candidates.filter((t) => !isTooDeepPartner(t));
   const ownOnly = isOwnOnlyChannel(project.channelText);
   if (ownOnly) {
     return candidates.filter((t) => t.talentType === "INHOUSE" && t.kishaOk === true);
