@@ -186,11 +186,11 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // t1, t3
   });
 
-  it("他社人材は案件単価−5万のマージンが無いと除外（自社保有は対象外）", async () => {
+  it("他社人材は案件>人材ならOK・同額は除外（自社保有は対象外）", async () => {
     db.project.findMany.mockResolvedValue([{ ...project("p1"), rateMax: 50 }]);
     db.talent.findMany.mockResolvedValue([
-      { ...talent("t1"), desiredRateMin: 50 }, // 他社・マージン0 → 除外
-      { ...talent("t2"), desiredRateMin: 45 }, // 他社・マージン5万 → 残す
+      { ...talent("t1"), desiredRateMin: 50 }, // 他社・同額(粗利0) → 除外
+      { ...talent("t2"), desiredRateMin: 49 }, // 他社・差益1万 → 残す
       { ...talent("t3"), talentType: "INHOUSE", desiredRateMin: 50 }, // 自社 → 残す
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });

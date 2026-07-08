@@ -127,14 +127,14 @@ describe("prefilterCandidates", () => {
     expect(prefilterCandidates(p, many, 3)).toHaveLength(3);
   });
 
-  it("金額足切り(他社人材): 案件単価−5万のマージンが無い候補は除外", () => {
+  it("金額足切り(他社人材): 案件>人材ならOK・同額/超過は除外（マージン幅は問わない）", () => {
     const p = project({ requiredSkills: ["Java"], rateMax: 100 });
-    const ok = talent({ id: "ok", skills: ["Java"], desiredRateMin: 95 } as Partial<Talent>); // マージン5万 → 残す
-    const thin = talent({ id: "thin", skills: ["Java"], desiredRateMin: 98 } as Partial<Talent>); // マージン2万 → 除外
-    const over = talent({ id: "over", skills: ["Java"], desiredRateMin: 100 } as Partial<Talent>); // マージン0 → 除外
-    const ids = prefilterCandidates(p, [ok, thin, over]).map((h) => h.talent.id);
-    expect(ids).toContain("ok");
-    expect(ids).not.toContain("thin");
+    const thin = talent({ id: "thin", skills: ["Java"], desiredRateMin: 99 } as Partial<Talent>); // 差益1万 → 残す
+    const equal = talent({ id: "equal", skills: ["Java"], desiredRateMin: 100 } as Partial<Talent>); // 粗利0 → 除外
+    const over = talent({ id: "over", skills: ["Java"], desiredRateMin: 120 } as Partial<Talent>); // 超過 → 除外
+    const ids = prefilterCandidates(p, [thin, equal, over]).map((h) => h.talent.id);
+    expect(ids).toContain("thin");
+    expect(ids).not.toContain("equal");
     expect(ids).not.toContain("over");
   });
 
