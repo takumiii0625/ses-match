@@ -294,8 +294,18 @@ const MATCH_SCHEMA = {
             type: "string",
             enum: ["STRONG", "POSSIBLE", "WEAK", "UNFIT"],
           },
-          strengths: { type: "array", items: { type: "string" } },
-          concerns: { type: "array", items: { type: "string" } },
+          strengths: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "案件の必須スキルのうち人材が満たすものを、必須スキルごとに具体的に書く（人材の一般的な強みではない）。年数が分かれば併記。例『必須Javaを5年で充足』『必須AWSを実務経験ありで充足』。",
+          },
+          concerns: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "案件の必須スキルのうち満たさない/年数が足りない/経歴に見当たらないものを具体的に書く。年数不足は数字で。例『必須Javaは5年以上だが人材は1年で不足』『必須Reactの経験が見当たらない』『必須スキルXの年数が不明』。",
+          },
           reason: { type: "string" },
           channelOk: { type: "boolean" },
           channelNote: { type: "string" },
