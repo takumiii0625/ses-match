@@ -195,8 +195,11 @@ export interface PrefilterHit {
  * the LLM to re-rank. This is what makes "Java engineer for a PHP-only project"
  * get dropped instead of matching on a shared "開発" tag.
  */
-// 金額足切りの許容マージン（万円）。交渉余地を考慮し、これ以内の超過は通す。
+// 金額足切りの許容マージン（万円）。交渉余地を考慮し、これ以内の超過は通す（自社保有の予算超過判定用）。
 const RATE_MARGIN_MAN = 10;
+// 他社人材(PARTNER)の必要利益マージン（万円）。「案件単価 − 人材単価」がこれ未満だと利益にならないため除外。
+// 例: 既定5万なら 50万の人材は 55万以上の案件でないと通らない（50万×50万の粗利0を防ぐ）。env で調整可。
+const PARTNER_MARGIN_MAN = Number(process.env.MATCH_PARTNER_MARGIN_MAN ?? "5") || 5;
 // スキル/言語の最低カバー率。必須スキルのこの割合以上を満たす候補だけLLM判定に通す（足切り）。
 // ※0.6に上げたらSES案件は必須+歓迎で多数スキルを列挙するため、ほぼ全候補が落ちてマッチ激減した
 //   （597案件×706人材で saved=0）。実証済みの 0.5 に戻す。強めるとしても 0.55 程度まで。
@@ -277,13 +280,17 @@ export function prefilterCandidates(
 
   const hits: PrefilterHit[] = [];
   for (const talent of talents) {
-    // 金額足切り: 人材の希望下限が案件上限＋マージンを超えるなら予算不一致で除外。
-    if (
-      project.rateMax != null &&
-      talent.desiredRateMin != null &&
-      talent.desiredRateMin > project.rateMax + RATE_MARGIN_MAN
-    ) {
-      continue;
+    // 金額足切り:
+    //  他社人材(PARTNER)は「案件単価 − 人材単価」が利益。最低マージン(PARTNER_MARGIN_MAN)を
+    //  確保できない（人材の希望下限が 案件上限 − マージン を超える）なら利益にならないため除外。
+    //  例: 人材50万 × 案件50万 → 粗利0で除外（55万以上の案件でないと不可）。
+    //  自社保有(INHOUSE)は自社人材なのでマージン規則の対象外。予算を明確超過するときのみ除外。
+    if (project.rateMax != null && talent.desiredRateMin != null) {
+      const cutoff =
+        talent.talentType === "INHOUSE"
+          ? project.rateMax + RATE_MARGIN_MAN
+          : project.rateMax - PARTNER_MARGIN_MAN;
+      if (talent.desiredRateMin > cutoff) continue;
     }
 
     const owned = expandSkills([...talent.skills, ...talent.mainSkills]);

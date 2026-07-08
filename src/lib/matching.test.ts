@@ -127,13 +127,15 @@ describe("prefilterCandidates", () => {
     expect(prefilterCandidates(p, many, 3)).toHaveLength(3);
   });
 
-  it("金額足切り: 希望下限が案件上限＋マージン(10万)を超える候補は除外", () => {
+  it("金額足切り(他社人材): 案件単価−5万のマージンが無い候補は除外", () => {
     const p = project({ requiredSkills: ["Java"], rateMax: 100 });
-    const over = talent({ id: "over", skills: ["Java"], desiredRateMin: 120 } as Partial<Talent>);
-    const within = talent({ id: "within", skills: ["Java"], desiredRateMin: 108 } as Partial<Talent>);
-    const ids = prefilterCandidates(p, [over, within]).map((h) => h.talent.id);
-    expect(ids).toContain("within"); // 108 <= 100+10
-    expect(ids).not.toContain("over"); // 120 > 110
+    const ok = talent({ id: "ok", skills: ["Java"], desiredRateMin: 95 } as Partial<Talent>); // マージン5万 → 残す
+    const thin = talent({ id: "thin", skills: ["Java"], desiredRateMin: 98 } as Partial<Talent>); // マージン2万 → 除外
+    const over = talent({ id: "over", skills: ["Java"], desiredRateMin: 100 } as Partial<Talent>); // マージン0 → 除外
+    const ids = prefilterCandidates(p, [ok, thin, over]).map((h) => h.talent.id);
+    expect(ids).toContain("ok");
+    expect(ids).not.toContain("thin");
+    expect(ids).not.toContain("over");
   });
 
   it("カバー率0.5未満は除外（3スキル中1つは落ちる・2つは通る）", () => {
