@@ -157,6 +157,14 @@ const TALENT_SCHEMA = {
       description:
         "性別。男性/男→MALE、女性/女→FEMALE、それ以外→OTHER。記載が無ければ null。",
     },
+    nationality: {
+      type: "string",
+      enum: ["JAPAN", "OTHER"],
+      description:
+        "国籍。外国籍が読み取れる場合は OTHER。判断材料: 『国籍：中国/韓国/ベトナム…』等の非日本国籍の明記、『外国籍』『◯◯籍』、" +
+        "『帰化』『在日』（帰化していても元外国籍なので OTHER）、日本語が母語でない旨の記載。" +
+        "『日本』『日本国籍』と明記、または国籍の記載が一切無い場合は JAPAN（日本人は国籍を書かないことが多いため、未記載は日本人とみなす）。",
+    },
     skills: { type: "array", items: { type: "string" } },
     mainSkills: { type: "array", items: { type: "string" } },
     skillYears: {
@@ -200,6 +208,7 @@ const TALENT_SCHEMA = {
     "name",
     "age",
     "gender",
+    "nationality",
     "skills",
     "mainSkills",
     "skillYears",

@@ -70,6 +70,11 @@ function toGender(v?: string): "MALE" | "FEMALE" | "OTHER" | null {
   return v && GENDER_VALUES.has(v) ? (v as "MALE" | "FEMALE" | "OTHER") : null;
 }
 
+// 国籍。抽出は JAPAN/OTHER を返す（未記載は日本人扱いで JAPAN）。OTHER 以外・不明は JAPAN。
+function toNationality(v?: string): "JAPAN" | "OTHER" {
+  return v === "OTHER" ? "OTHER" : "JAPAN";
+}
+
 /** Extract the bare email address from a From header ("名前 <a@b.com>" → a@b.com). */
 function parseFromEmail(from?: string | null): string | null {
   if (!from) return null;
@@ -241,6 +246,7 @@ async function ingestEmails(
             name: p.name ?? mail.from ?? "（氏名不明）",
             age: p.age ?? null,
             gender: toGender(p.gender),
+            nationality: toNationality(p.nationality),
             skills: p.skills ?? [],
             mainSkills: p.mainSkills ?? [],
             skillYears: p.skillYears ?? undefined, // 言語別の経験年数（分かるものだけ）

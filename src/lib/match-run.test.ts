@@ -186,6 +186,24 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // t1, t3
   });
 
+  it("外国籍不可の案件は外国籍(OTHER)を除外し、日本籍・未記載は残す", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "外国籍不可" }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), nationality: "OTHER" }, // 外国籍 → 除外
+      { ...talent("t2"), nationality: "JAPAN" }, // 日本籍 → 残す
+      { ...talent("t3") }, // 未記載(null) → 日本人扱いで残す
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(2); // t2, t3
+  });
+
+  it("外国籍『可』の案件は外国籍でも除外しない", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), description: "外国籍可" }]);
+    db.talent.findMany.mockResolvedValue([{ ...talent("t1"), nationality: "OTHER" }]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(1); // 除外されず候補として残る
+  });
+
   it("NG企業の他社人材は除外し、自社人材とNG以外の他社人材は残す", async () => {
     db.ngCompany.findMany.mockResolvedValue([{ domain: "ng.co.jp" }]);
     db.project.findMany.mockResolvedValue([{ ...project("p1"), sourceEmail: "x@client.co.jp" }]);

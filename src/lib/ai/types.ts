@@ -11,6 +11,7 @@ export interface ParsedTalent {
   name?: string;
   age?: number;
   gender?: string; // MALE | FEMALE | OTHER
+  nationality?: string; // JAPAN | OTHER（外国籍不可案件の足切りに使用。記載なしは日本人扱い）
   skills: string[];
   mainSkills: string[];
   skillYears?: SkillYear[]; // 言語/技術ごとの経験年数（分かるものだけ）

@@ -162,6 +162,23 @@ function restrictCandidatesByChannel(candidates: Talent[], project: Project): Ta
   );
 }
 
+/** 案件が「外国籍不可（日本国籍のみ）」を明示しているか。可/歓迎/不問はNG制限ではない。 */
+function requiresJapaneseOnly(project: Project): boolean {
+  const t = `${project.channelText ?? ""}\n${project.description ?? ""}`.replace(/[ 　]/g, "");
+  if (/(外国籍|外国人|国籍)(は|も|の方も)?(可|歓迎|不問|問わず|相談|OK|ok)/.test(t)) return false;
+  return /外国籍(不可|不採用|NG|ng|お断り|以外|の方は不可)|日本国籍(のみ|限定|必須)|日本人(のみ|限定)/.test(t);
+}
+
+/**
+ * 国籍による候補の除外。案件が「外国籍不可（日本国籍のみ）」を明示している場合、
+ * 外国籍(nationality=OTHER)の人材を除外する（自社保有(INHOUSE)含む・帰化者も抽出時にOTHER）。
+ * 日本籍(JAPAN)・未記載(=日本人扱いでJAPAN)は残す。
+ */
+function restrictCandidatesByNationality(candidates: Talent[], project: Project): Talent[] {
+  if (!requiresJapaneseOnly(project)) return candidates;
+  return candidates.filter((t) => t.nationality !== "OTHER");
+}
+
 /**
  * 取引NG企業による候補の除外。
  * - 自社保有人材(INHOUSE)はNG企業でも提案対象に含める（NG企業の案件にも自社人材は出す）。
@@ -395,12 +412,15 @@ export async function runMatchingForOrg(
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
     slice.map(async ({ project, pool }) => {
-      const candidates = restrictCandidatesByNg(
-        restrictCandidatesByChannel(
-          pool.filter((t) => !isSameCompany(t, project)),
-          project,
+      const candidates = restrictCandidatesByNationality(
+        restrictCandidatesByNg(
+          restrictCandidatesByChannel(
+            pool.filter((t) => !isSameCompany(t, project)),
+            project,
+          ),
+          ngDomains,
         ),
-        ngDomains,
+        project,
       );
       const r = await rankAndSave(project, candidates, systemPrompt);
       return { projectId: project.id, ...r };
@@ -499,12 +519,15 @@ export async function runMatchingForNew(
 
   const settled = await Promise.allSettled(
     targets.map(async ({ project, pool }) => {
-      const candidates = restrictCandidatesByNg(
-        restrictCandidatesByChannel(
-          pool.filter((t) => !isSameCompany(t, project)),
-          project,
+      const candidates = restrictCandidatesByNationality(
+        restrictCandidatesByNg(
+          restrictCandidatesByChannel(
+            pool.filter((t) => !isSameCompany(t, project)),
+            project,
+          ),
+          ngDomains,
         ),
-        ngDomains,
+        project,
       );
       const r = await rankAndSave(project, candidates, systemPrompt);
       return { projectId: project.id, ...r };
