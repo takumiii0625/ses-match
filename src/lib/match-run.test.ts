@@ -162,17 +162,28 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // t1,t2 とも候補
   });
 
-  it("affiliationが「1社先」以上の他社人材は一律除外（自社仲介で2社先以上）", async () => {
-    db.project.findMany.mockResolvedValue([project("p1")]);
+  it("商流未指定の案件は1社先以上の他社人材を除外（既定=送信元プロパーまで）", async () => {
+    db.project.findMany.mockResolvedValue([project("p1")]); // channelText なし
     db.talent.findMany.mockResolvedValue([
-      { ...talent("t1"), affiliation: "1社先正社員" }, // 送信元1社先 → 除外
+      { ...talent("t1"), affiliation: "1社先正社員" }, // 自社視点2社先 → 除外
       { ...talent("t2"), affiliation: "2社先" }, // 除外
-      { ...talent("t3"), affiliation: "プロパー" }, // 送信元自身(=自社1社先) → 残す
-      { ...talent("t4"), affiliation: "自社所属フリーランス" }, // 送信元自身 → 残す
+      { ...talent("t3"), affiliation: "プロパー" }, // 自社視点1社先 → 残す
+      { ...talent("t4"), affiliation: "自社所属フリーランス" }, // 残す
       { ...talent("t5"), talentType: "INHOUSE", affiliation: "1社先" }, // 自社保有は対象外 → 残す
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(res.saved).toBe(3); // t3, t4, t5
+  });
+
+  it("案件が「2社先まで可」なら1社先人材は通す・2社先人材は除外", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "2社先まで可" }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), affiliation: "1社先正社員" }, // 自社視点2社先 ≤ 2 → 残す
+      { ...talent("t2"), affiliation: "2社先" }, // 自社視点3社先 > 2 → 除外
+      { ...talent("t3"), affiliation: "プロパー" }, // 自社視点1社先 → 残す
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(2); // t1, t3
   });
 
   it("NG企業の他社人材は除外し、自社人材とNG以外の他社人材は残す", async () => {

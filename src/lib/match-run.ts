@@ -106,29 +106,45 @@ function isOwnOnlyChannel(channelText: string | null): boolean {
   return /(貴社|御社)の?(正?社員|プロパー|所属|要員|フリーランス|直|まで|迄|のみ)/.test(t);
 }
 
-/**
- * 送信元から見て「1社先」以上の他社人材か。affiliation に「N社先/N社下」
- * （例「1社先」「1社先正社員」「一社先フリーランス」「2社先」「2社下」）が含まれる人材は、
- * 送信元から1社先以上＝我々が仲介すると2社先以上になるため提案不可（一律NG）。
- * 送信元自身のプロパー/正社員/自社所属（=我々から見て1社先）や、自社保有(INHOUSE)は対象外。
- */
-function isTooDeepPartner(t: Talent): boolean {
-  if (t.talentType === "INHOUSE") return false;
-  return /社先|社下/.test((t.affiliation ?? "").replace(/\s/g, ""));
+const KANJI_NUM: Record<string, number> = {
+  一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
+};
+/** 1文字の数字（半角/全角/漢数字）→ 数値。判定不能は NaN。 */
+function charToNum(ch: string): number {
+  if (/[0-9]/.test(ch)) return Number(ch);
+  if (/[０-９]/.test(ch)) return ch.charCodeAt(0) - "０".charCodeAt(0);
+  return KANJI_NUM[ch] ?? NaN;
+}
+
+/** 案件の商流制限(channelText)が許容する「自社視点での深さ（N社先まで）」。
+ *  「2社先まで/2社先可/貴社の2社先まで」→2。明示が無ければ null（未指定）。 */
+function allowedDepthFromChannel(channelText: string | null): number | null {
+  if (!channelText) return null;
+  const m = channelText.replace(/\s/g, "").match(/([0-9０-９一二三四五六七八九])社(先|下)/);
+  if (!m) return null;
+  const n = charToNum(m[1]);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** 他社人材の「自社視点の商流の深さ」。送信元プロパー=1社先、送信元「1社先」=2社先…。
+ *  affiliation の「N社先/N社下」の N（無ければ0＝送信元自身）に、自社が仲介する +1 を足す。
+ *  自社保有(INHOUSE)は自社人材=0。 */
+function talentDepthFromUs(t: Talent): number {
+  if (t.talentType === "INHOUSE") return 0;
+  const m = (t.affiliation ?? "").replace(/\s/g, "").match(/([0-9０-９一二三四五六七八九])社(先|下)/);
+  const hops = m ? charToNum(m[1]) : 0;
+  return (Number.isFinite(hops) ? hops : 0) + 1;
 }
 
 /**
  * 商流による候補の事前足切り。
- * - 送信元から見て「1社先」以上の他社人材（affiliationにN社先/N社下）は一律除外
- *   （我々が仲介すると2社先以上になり提案不可）。
+ * - 商流の深さ制限: 他社人材の「自社視点の深さ」が案件の許容（channelTextの「N社先まで」）を
+ *   超えるなら除外。案件が深さを明示していなければ既定は「自社から1社先（=送信元プロパー）」まで＝
+ *   送信元から1社先以上の人材（自社視点2社先以上）は除外。支援費ありなら1段緩める。
  * - 「貴社社員/貴社まで」案件 → 自社保有人材のうち「貴社チェック(kishaOk)」が付いた人材のみ。
- *   （貴社まで案件は貴社レベルの人材しか提案できないため、対象人材を明示的に絞る）
- * - 「エンド直/プロパー/直のみ」案件で支援費の記載なし → 弊社が挟まると提案不可なので
- *   他社人材を除外し自社保有人材のみ（支援費ありなら商流を飛ばせるので全員残す）。
+ * - 「エンド直/プロパー/直のみ」案件で支援費の記載なし → 他社人材を除外し自社保有人材のみ。
  */
 function restrictCandidatesByChannel(candidates: Talent[], project: Project): Talent[] {
-  // 送信元から1社先以上（=自社仲介で2社先以上）の他社人材は常に除外。
-  candidates = candidates.filter((t) => !isTooDeepPartner(t));
   const ownOnly = isOwnOnlyChannel(project.channelText);
   if (ownOnly) {
     return candidates.filter((t) => t.talentType === "INHOUSE" && t.kishaOk === true);
@@ -137,7 +153,13 @@ function restrictCandidatesByChannel(candidates: Talent[], project: Project): Ta
   if (strictDirect) {
     return candidates.filter((t) => t.talentType === "INHOUSE");
   }
-  return candidates;
+  // 商流の深さ: 案件の許容（N社先まで）を超える他社人材は除外。未指定は既定=1社先まで。
+  // 支援費ありは1段深くても可（商流を飛ばせる）。自社保有(INHOUSE)は常に対象。
+  const allowed = allowedDepthFromChannel(project.channelText);
+  const cap = (allowed ?? 1) + (project.supportFee ? 1 : 0);
+  return candidates.filter(
+    (t) => t.talentType === "INHOUSE" || talentDepthFromUs(t) <= cap,
+  );
 }
 
 /**
