@@ -120,6 +120,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if ("kishaOk" in body) {
       data.kishaOk = body.kishaOk === true;
     }
+    if ("affiliation" in body) {
+      const v = body.affiliation;
+      data.affiliation = typeof v === "string" && v.trim() ? v.trim() : null;
+    }
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: "更新する項目がありません" }, { status: 400 });
     }

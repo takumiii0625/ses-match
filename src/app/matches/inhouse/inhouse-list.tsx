@@ -12,6 +12,58 @@ import { formatRate, daysAgo } from "@/lib/utils";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { inhouseChannelStatus } from "@/lib/channel";
 import { fetchJson } from "@/lib/http";
+
+/** 人材の所属（商流上の立場）をその場で編集する。保存で PATCH /api/talents/[id]。 */
+function AffiliationEdit({ talentId, initial }: { talentId: string; initial: string | null }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(initial ?? "");
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await fetch(`/api/talents/${talentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ affiliation: val }),
+      });
+      setEditing(false);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setVal(initial ?? ""); setEditing(true); }}
+        className="text-xs text-muted hover:text-primary hover:underline"
+        title="所属を編集"
+      >
+        所属: {initial ?? "-"} ✎
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-xs text-muted">所属:</span>
+      <Input
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="h-6 w-44 text-xs"
+        placeholder="例: 1社先正社員 / プロパー"
+        autoFocus
+      />
+      <button type="button" onClick={save} disabled={busy} className="text-xs text-primary hover:underline disabled:opacity-50">保存</button>
+      <button type="button" onClick={() => setEditing(false)} className="text-xs text-muted hover:underline">×</button>
+    </span>
+  );
+}
 import { ProposalButton } from "../../matching/proposal-button";
 import { SendProjectButton } from "../../matching/send-project-button";
 import { SendTalentButton } from "../../matching/send-talent-button";
@@ -257,7 +309,10 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                     {talent.name}
                   </Link>
                   <Badge tone="slate">{rows.length}件の案件にマッチ</Badge>
-                  <span className="text-xs text-muted">所属: {talent.affiliation ?? "-"}</span>
+                  <AffiliationEdit talentId={talent.id} initial={talent.affiliation} />
+                  <Badge tone={talent.talentType === "INHOUSE" ? "green" : "slate"}>
+                    {talent.talentType === "INHOUSE" ? "自社" : "他社"}
+                  </Badge>
                   {(talent.desiredRateMin != null || talent.desiredRateMax != null) && (
                     <span className="text-xs text-muted">
                       希望単価: {formatRate(talent.desiredRateMin, talent.desiredRateMax)}
