@@ -54,6 +54,7 @@ const PROJECT_MATCH_SELECT = {
   sourceEmail: true,
   emailSubject: true,
   receivedDate: true,
+  requiredSkillYears: true,
   createdAt: true, // 「新規（当日取込）」判定に使う。
 } satisfies Prisma.ProjectSelect;
 
@@ -209,6 +210,7 @@ function toProjectInput(p: Project): MatchProjectInput {
     title: p.title,
     clientName: p.clientName,
     requiredSkills: p.requiredSkills,
+    requiredSkillYears: (p.requiredSkillYears as unknown as SkillYear[] | null) ?? undefined,
     rateMin: p.rateMin,
     rateMax: p.rateMax,
     remotePreference: p.remotePreference,

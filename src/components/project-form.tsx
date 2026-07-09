@@ -70,6 +70,8 @@ export function ProjectForm({ users, initial, mode }: Props) {
         if (p.supportFee === true && !prev.supportFee) next.supportFee = true;
         if (!prev.requiredSkills.trim() && Array.isArray(p.requiredSkills) && p.requiredSkills.length)
           next.requiredSkills = (p.requiredSkills as string[]).join(", ");
+        if (!prev.requiredSkillYears && Array.isArray(p.requiredSkillYears) && p.requiredSkillYears.length)
+          next.requiredSkillYears = p.requiredSkillYears as { skill: string; years: number }[];
         return next;
       });
       setParseMsg("AI解析で空欄を補完しました。内容を確認してください。");
@@ -90,6 +92,8 @@ export function ProjectForm({ users, initial, mode }: Props) {
     assigneeId: initial?.assigneeId ?? "",
     description: initial?.description ?? "",
     requiredSkills: (initial?.requiredSkills ?? []).join(", "),
+    requiredSkillYears:
+      (initial?.requiredSkillYears as { skill: string; years: number }[] | null) ?? null,
     tags: (initial?.tags ?? []).join(", "),
     rateMin: initial?.rateMin != null ? String(initial.rateMin) : "",
     rateMax: initial?.rateMax != null ? String(initial.rateMax) : "",
@@ -124,6 +128,7 @@ export function ProjectForm({ users, initial, mode }: Props) {
       assigneeId: form.assigneeId || null,
       description: form.description || null,
       requiredSkills: splitComma(form.requiredSkills),
+      requiredSkillYears: form.requiredSkillYears,
       tags: splitComma(form.tags),
       rateMin: form.rateMin !== "" ? Number(form.rateMin) : null,
       rateMax: form.rateMax !== "" ? Number(form.rateMax) : null,

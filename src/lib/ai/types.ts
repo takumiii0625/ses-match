@@ -29,6 +29,7 @@ export interface ParsedProject {
   title?: string;
   clientName?: string;
   requiredSkills: string[];
+  requiredSkillYears?: SkillYear[]; // 必須スキルの必要経験年数（分かるものだけ。例 Java 5年以上）
   rateMin?: number;
   rateMax?: number;
   remotePreference?: string;
@@ -78,6 +79,7 @@ export interface MatchProjectInput {
   title: string;
   clientName?: string | null;
   requiredSkills: string[];
+  requiredSkillYears?: SkillYear[] | null; // 必須スキルの必要経験年数（例 Java 5年以上）
   rateMin?: number | null;
   rateMax?: number | null;
   remotePreference?: string | null;

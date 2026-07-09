@@ -234,6 +234,7 @@ model Project {
   formattedBody String? // 案内メール用に整形済みの案件本文（LLM整形結果のキャッシュ。再生成で更新）
 
   requiredSkills String[] @default([])
+  requiredSkillYears Json? // 必須スキルの必要経験年数 [{skill,years}]（例 Java 5年以上）
   tags           String[] @default([])
 
   rateMin Int?

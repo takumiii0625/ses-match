@@ -47,6 +47,7 @@ export interface MatchVM {
     rateMin: number | null;
     rateMax: number | null;
     requiredSkills: string[];
+    requiredSkillYears: { skill: string; years: number }[] | null; // 必須スキルの必要経験年数
     receivedDate: string | null;
     channelText: string | null;
     supportFee: boolean;
@@ -105,11 +106,13 @@ function SkillChips({
   all,
   limit = 8,
   years,
+  yearSuffix = "年",
 }: {
   main: string[];
   all: string[];
   limit?: number;
   years?: { skill: string; years: number }[] | null;
+  yearSuffix?: string;
 }) {
   const extra = all.filter((s) => !main.includes(s));
   const shown = [...main, ...extra].slice(0, limit);
@@ -123,7 +126,7 @@ function SkillChips({
         const y = yearMap.get(s.trim().toLowerCase());
         return (
           <Badge key={s} tone={main.includes(s) ? "blue" : "slate"} className="text-xs">
-            {y != null ? `${s}（${y}年）` : s}
+            {y != null ? `${s}（${y}${yearSuffix}）` : s}
           </Badge>
         );
       })}
@@ -174,7 +177,7 @@ function MatchRowContent({ m, dupes, show, sentAt }: { m: MatchVM; dupes: number
             {p.channelText && <span>商流: {p.channelText}</span>}
           </div>
           <div className="mt-1.5">
-            <SkillChips main={p.requiredSkills} all={[]} limit={5} />
+            <SkillChips main={p.requiredSkills} all={[]} limit={5} years={p.requiredSkillYears} yearSuffix="年以上" />
           </div>
           {/* 人材ごと表示では各案件行から案件メール本文を開ける（行選択とは独立） */}
           <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
@@ -574,6 +577,10 @@ export function MatchesList({
                             <span className="text-xs text-muted">{REMOTE_LABELS[talent.remotePreference] ?? talent.remotePreference}</span>
                           )}
                           <span className="ml-auto text-xs text-muted">配信: {daysAgo(talent.receivedDate)}</span>
+                          {/* 人材の言語別経験年数付きスキル */}
+                          <div className="w-full">
+                            <SkillChips main={talent.mainSkills} all={talent.skills} limit={8} years={talent.skillYears} />
+                          </div>
                         </>
                       ) : null}
                     </div>
@@ -798,7 +805,7 @@ function MatchDetailPanel({
             {p.channelText && <div className="mt-0.5 text-xs text-muted">商流: {p.channelText}{p.supportFee ? "（支援費あり）" : ""}</div>}
             {p.requiredSkills.length > 0 && (
               <div className="mt-1.5">
-                <SkillChips main={p.requiredSkills} all={[]} />
+                <SkillChips main={p.requiredSkills} all={[]} years={p.requiredSkillYears} yearSuffix="年以上" />
               </div>
             )}
           </div>

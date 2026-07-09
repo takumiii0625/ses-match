@@ -44,6 +44,7 @@ function mk(p: {
       rateMin: null,
       rateMax: null,
       requiredSkills: [],
+      requiredSkillYears: null,
       receivedDate: p.projectReceived ?? null,
       channelText: null,
       supportFee: false,

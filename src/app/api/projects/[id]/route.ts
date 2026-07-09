@@ -76,6 +76,7 @@ export async function PUT(
         assigneeId: body.assigneeId ?? null,
         description: body.description ?? null,
         requiredSkills: splitComma(body.requiredSkills),
+        requiredSkillYears: body.requiredSkillYears ?? undefined,
         tags: splitComma(body.tags),
         rateMin: toInt(body.rateMin),
         rateMax: toInt(body.rateMax),

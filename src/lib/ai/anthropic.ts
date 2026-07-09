@@ -94,6 +94,7 @@ function logUsage(tag: string, usage: UsageLike | undefined, items = 0): void {
 function formatSkillsWithYears(
   skills: string[],
   skillYears?: SkillYear[] | null,
+  suffix = "年",
 ): string {
   const years = new Map<string, number>();
   for (const sy of skillYears ?? []) {
@@ -102,12 +103,12 @@ function formatSkillsWithYears(
   const shown = new Set(skills.map((s) => s.trim().toLowerCase()));
   const parts = skills.map((s) => {
     const y = years.get(s.trim().toLowerCase());
-    return y != null ? `${s}(${y}年)` : s;
+    return y != null ? `${s}(${y}${suffix})` : s;
   });
   // skills に無い経験年数（別表記等）も末尾に追加する。
   for (const sy of skillYears ?? []) {
     if (sy?.skill && !shown.has(sy.skill.trim().toLowerCase())) {
-      parts.push(`${sy.skill}(${sy.years}年)`);
+      parts.push(`${sy.skill}(${sy.years}${suffix})`);
     }
   }
   return parts.join(", ");
@@ -230,6 +231,22 @@ const PROJECT_SCHEMA = {
     title: nullableString,
     clientName: nullableString,
     requiredSkills: { type: "array", items: { type: "string" } },
+    requiredSkillYears: {
+      type: "array",
+      description:
+        "必須スキルのうち『◯年以上』等の必要経験年数が明記/読み取れる言語・技術を抽出する。" +
+        "例: 『Java5年以上・TypeScript3年以上』→ [{\"skill\":\"Java\",\"years\":5},{\"skill\":\"TypeScript\",\"years\":3}]。" +
+        "years は必要な最低年数。年数の指定が無いスキルは含めない。無ければ空配列。",
+      items: {
+        type: "object",
+        properties: {
+          skill: { type: "string" },
+          years: { type: "number" },
+        },
+        required: ["skill", "years"],
+        additionalProperties: false,
+      },
+    },
     rateMin: nullableInt,
     rateMax: nullableInt,
     remotePreference: nullableRemote,
@@ -255,6 +272,7 @@ const PROJECT_SCHEMA = {
     "title",
     "clientName",
     "requiredSkills",
+    "requiredSkillYears",
     "rateMin",
     "rateMax",
     "remotePreference",
@@ -670,7 +688,7 @@ export class AnthropicAIService implements AIService {
       `# 案件`,
       `タイトル: ${project.title}`,
       project.clientName ? `クライアント/商流: ${project.clientName}` : "",
-      `必須スキル: ${project.requiredSkills.join(", ") || "(指定なし)"}`,
+      `必須スキル: ${formatSkillsWithYears(project.requiredSkills, project.requiredSkillYears, "年以上") || "(指定なし)"}`,
       `想定単価: ${project.rateMin ?? "?"}〜${project.rateMax ?? "?"}万`,
       project.remotePreference ? `リモート: ${project.remotePreference}` : "",
       project.location ? `勤務地/最寄り: ${project.location}` : "",

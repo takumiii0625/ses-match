@@ -282,6 +282,7 @@ async function ingestEmails(
             title: p.title ?? mail.subject ?? "（件名なし）",
             clientName: p.clientName ?? null,
             requiredSkills: p.requiredSkills ?? [],
+            requiredSkillYears: p.requiredSkillYears ?? undefined,
             rateMin: p.rateMin ?? null,
             rateMax: p.rateMax ?? null,
             remotePreference: toRemote(p.remotePreference),

@@ -28,9 +28,11 @@ export default async function MatchesPage(props: {
 
   const [matches, sentMap] = await Promise.all([
     prisma.match.findMany({
-      // 提案不可（商流オーバー等）・差し戻し済みはマッチ一覧に出さない。マッチ日時で絞る。
+      // 提案不可・差し戻し済みは出さない。自社保有人材(INHOUSE)は「自社保有人材マッチ」、
+      // 自社保有案件(REGISTER)は「自社保有案件マッチ」で表示するため、マッチ一覧からは除外する。
       where: {
-        project: { orgId: org.id },
+        project: { orgId: org.id, dataFrom: { not: "REGISTER" } },
+        talent: { talentType: "PARTNER" },
         score: { gte: 70 },
         proposable: true,
         rejectedAt: null,
