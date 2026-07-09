@@ -108,7 +108,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
   const [summaryText, setSummaryText] = useState(initial?.summaryText ?? "");
 
   // スキルシート（サマリ文）AI処理の状態。
-  const [aiLoading, setAiLoading] = useState<"generate" | "improve" | null>(null);
+  const [aiLoading, setAiLoading] = useState<"generate" | "improve" | "parse" | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploadedName, setUploadedName] = useState<string | null>(null);
@@ -122,6 +122,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
     };
     setIfEmpty(name, t.name, setName);
     setIfEmpty(age, t.age, setAge);
+    setIfEmpty(affiliation, t.affiliation, setAffiliation);
     setIfEmpty(availabilityText, t.availabilityText, setAvailabilityText);
     setIfEmpty(desiredRateMin, t.desiredRateMin, setDesiredRateMin);
     setIfEmpty(desiredRateMax, t.desiredRateMax, setDesiredRateMax);
@@ -199,6 +200,27 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
       if (data.summary) setSummaryText(data.summary);
     } catch (e) {
       setAiError(e instanceof Error ? e.message : "AI改善に失敗しました");
+    } finally {
+      setAiLoading(null);
+    }
+  }
+
+  /** サマリテキスト（貼り付けたメール/経歴）をAI解析し、空欄のフォーム項目だけ埋める。 */
+  async function handleParseText() {
+    if (!summaryText.trim() || aiLoading !== null) return;
+    setAiError(null);
+    setAiLoading("parse");
+    try {
+      const res = await fetch("/api/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "talent", rawEmail: summaryText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI解析に失敗しました");
+      if (data.parsed) prefill(data.parsed as Record<string, unknown>);
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : "AI解析に失敗しました");
     } finally {
       setAiLoading(null);
     }
@@ -326,17 +348,28 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
 
         {/* サマリテキスト */}
         <div>
-          <div className="mb-1 flex items-center justify-between">
+          <div className="mb-1 flex items-center justify-between gap-2">
             <Label htmlFor="summaryText">サマリテキスト</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleImprove}
-              disabled={aiLoading !== null || !summaryText.trim()}
-            >
-              {aiLoading === "improve" ? "AIで作成中…" : "テキストを改善しAIで作成"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleParseText}
+                disabled={aiLoading !== null || !summaryText.trim()}
+              >
+                {aiLoading === "parse" ? "AI解析中…" : "AIで解析して空欄を埋める"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleImprove}
+                disabled={aiLoading !== null || !summaryText.trim()}
+              >
+                {aiLoading === "improve" ? "AIで作成中…" : "テキストを改善しAIで作成"}
+              </Button>
+            </div>
           </div>
           <Textarea
             id="summaryText"

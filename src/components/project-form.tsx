@@ -33,8 +33,50 @@ export function ProjectForm({ users, initial, mode }: Props) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [parseMsg, setParseMsg] = useState<string | null>(null);
 
   const userOptions = users.map((u) => ({ value: u.id, label: u.name }));
+
+  /** メール本文をAI解析し、空欄のフォーム項目だけ埋める（入力済みは尊重）。 */
+  async function handleParse() {
+    if (!form.emailBody.trim() || parsing) return;
+    setParsing(true);
+    setParseMsg(null);
+    try {
+      const res = await fetch("/api/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "project", rawEmail: form.emailBody }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI解析に失敗しました");
+      const p = (data.parsed ?? {}) as Record<string, unknown>;
+      setForm((prev) => {
+        const next = { ...prev };
+        const fill = (k: keyof typeof prev, v: unknown) => {
+          if (!String(prev[k] ?? "").trim() && v != null && String(v) !== "")
+            (next as Record<string, string>)[k] = String(v);
+        };
+        fill("title", p.title);
+        fill("clientName", p.clientName);
+        fill("description", p.description);
+        fill("rateMin", p.rateMin);
+        fill("rateMax", p.rateMax);
+        fill("remotePreference", p.remotePreference);
+        fill("location", p.location);
+        fill("startText", p.startText);
+        if (!prev.requiredSkills.trim() && Array.isArray(p.requiredSkills) && p.requiredSkills.length)
+          next.requiredSkills = (p.requiredSkills as string[]).join(", ");
+        return next;
+      });
+      setParseMsg("AI解析で空欄を補完しました。内容を確認してください。");
+    } catch (e) {
+      setParseMsg(e instanceof Error ? e.message : "AI解析に失敗しました");
+    } finally {
+      setParsing(false);
+    }
+  }
 
   const [form, setForm] = useState({
     title: initial?.title ?? "",
@@ -224,14 +266,25 @@ export function ProjectForm({ users, initial, mode }: Props) {
           />
         </div>
         <div>
-          <Label htmlFor="emailBody">案件メール本文（貼り付け）</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="emailBody">案件メール本文（貼り付け）</Label>
+            <button
+              type="button"
+              onClick={handleParse}
+              disabled={parsing || !form.emailBody.trim()}
+              className="rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-50"
+            >
+              {parsing ? "AI解析中…" : "AIで解析して空欄を埋める"}
+            </button>
+          </div>
           <Textarea
             id="emailBody"
             rows={8}
             value={form.emailBody}
             onChange={set("emailBody")}
-            placeholder="受け取った案件メールの本文をそのまま貼り付け。マッチ一覧の「案件メール本文」や案件案内メールの整形に使われます。"
+            placeholder="受け取った案件メールの本文をそのまま貼り付け → 「AIで解析して空欄を埋める」で案件名・スキル・単価・勤務地などを自動入力。マッチ一覧の「案件メール本文」や案件案内メールの整形にも使われます。"
           />
+          {parseMsg && <p className="mt-1 text-xs text-slate-600">{parseMsg}</p>}
         </div>
 
         {/* Row 5: 必須スキル + タグ */}
