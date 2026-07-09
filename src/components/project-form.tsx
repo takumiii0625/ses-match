@@ -56,7 +56,7 @@ export function ProjectForm({ users, initial, mode }: Props) {
         const next = { ...prev };
         const fill = (k: keyof typeof prev, v: unknown) => {
           if (!String(prev[k] ?? "").trim() && v != null && String(v) !== "")
-            (next as Record<string, string>)[k] = String(v);
+            (next as Record<string, unknown>)[k] = String(v);
         };
         fill("title", p.title);
         fill("clientName", p.clientName);
@@ -66,6 +66,8 @@ export function ProjectForm({ users, initial, mode }: Props) {
         fill("remotePreference", p.remotePreference);
         fill("location", p.location);
         fill("startText", p.startText);
+        fill("channelText", p.channelText);
+        if (p.supportFee === true && !prev.supportFee) next.supportFee = true;
         if (!prev.requiredSkills.trim() && Array.isArray(p.requiredSkills) && p.requiredSkills.length)
           next.requiredSkills = (p.requiredSkills as string[]).join(", ");
         return next;
@@ -95,6 +97,8 @@ export function ProjectForm({ users, initial, mode }: Props) {
     location: initial?.location ?? "",
     nearestStation: initial?.nearestStation ?? "",
     startText: initial?.startText ?? "",
+    channelText: initial?.channelText ?? "",
+    supportFee: initial?.supportFee ?? false,
     sourceEmail: initial?.sourceEmail ?? "",
     emailBody: initial?.emailBody ?? "",
   });
@@ -127,6 +131,8 @@ export function ProjectForm({ users, initial, mode }: Props) {
       location: form.location || null,
       nearestStation: form.nearestStation || null,
       startText: form.startText || null,
+      channelText: form.channelText || null,
+      supportFee: !!form.supportFee,
       sourceEmail: form.sourceEmail || null,
       emailBody: form.emailBody || null,
     };
@@ -188,10 +194,10 @@ export function ProjectForm({ users, initial, mode }: Props) {
           </div>
         </div>
 
-        {/* Row 2: クライアント + 商流 */}
+        {/* Row 2: クライアント + 商流制限（マッチの商流判定に使う） */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="clientName">エンド/商流元</Label>
+            <Label htmlFor="clientName">エンド/クライアント</Label>
             <Input
               id="clientName"
               value={form.clientName}
@@ -200,57 +206,73 @@ export function ProjectForm({ users, initial, mode }: Props) {
             />
           </div>
           <div>
-            <Label htmlFor="businessFlow">商流</Label>
+            <Label htmlFor="channelText">商流制限</Label>
             <Input
-              id="businessFlow"
-              value={form.businessFlow}
-              onChange={set("businessFlow")}
-              placeholder="例: 直案件 / 1社挟む"
+              id="channelText"
+              value={form.channelText}
+              onChange={set("channelText")}
+              placeholder="例: 貴社まで / 2社先まで / エンド直のみ / 個人事業主不可"
             />
           </div>
         </div>
 
-        {/* Row 3: ステータス + データ元 + 担当者 */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <Label htmlFor="status">ステータス</Label>
-            <Select
-              id="status"
-              options={PROJECT_STATUS_OPTIONS}
-              value={form.status}
-              onChange={set("status")}
-            />
-          </div>
-          <div>
-            <Label htmlFor="dataFrom">データ元</Label>
-            <Select
-              id="dataFrom"
-              options={DATA_SOURCE_OPTIONS}
-              value={form.dataFrom}
-              onChange={set("dataFrom")}
-            />
-          </div>
-          <div>
-            <Label htmlFor="assigneeId">担当者</Label>
-            <Select
-              id="assigneeId"
-              options={userOptions}
-              placeholder="未設定"
-              value={form.assigneeId}
-              onChange={set("assigneeId")}
-            />
-          </div>
-        </div>
+        {/* 支援費（商流を1段飛ばせる） */}
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-slate-300"
+            checked={form.supportFee}
+            onChange={(e) => setForm((prev) => ({ ...prev, supportFee: e.target.checked }))}
+          />
+          支援費あり（商流を1段飛ばせる）
+        </label>
 
-        {/* Row 4: 案件概要 */}
+        {/* その他の設定（任意）: ステータス・データ元・担当者 */}
+        <details className="rounded-lg border border-border">
+          <summary className="cursor-pointer px-4 py-2 text-sm font-medium text-slate-600">
+            その他の設定（任意）
+          </summary>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 px-4 pb-4 pt-2">
+            <div>
+              <Label htmlFor="status">ステータス</Label>
+              <Select
+                id="status"
+                options={PROJECT_STATUS_OPTIONS}
+                value={form.status}
+                onChange={set("status")}
+              />
+            </div>
+            <div>
+              <Label htmlFor="dataFrom">データ元</Label>
+              <Select
+                id="dataFrom"
+                options={DATA_SOURCE_OPTIONS}
+                value={form.dataFrom}
+                onChange={set("dataFrom")}
+              />
+            </div>
+            <div>
+              <Label htmlFor="assigneeId">担当者</Label>
+              <Select
+                id="assigneeId"
+                options={userOptions}
+                placeholder="未設定"
+                value={form.assigneeId}
+                onChange={set("assigneeId")}
+              />
+            </div>
+          </div>
+        </details>
+
+        {/* Row 4: 案件概要（任意・AI解析で自動入力） */}
         <div>
-          <Label htmlFor="description">案件概要</Label>
+          <Label htmlFor="description">案件概要（任意・AI解析で自動入力）</Label>
           <Textarea
             id="description"
-            rows={4}
+            rows={3}
             value={form.description}
             onChange={set("description")}
-            placeholder="案件の詳細内容..."
+            placeholder="案件メール本文を貼り付けてAI解析すれば自動入力されます。手入力は不要です。"
           />
         </div>
 

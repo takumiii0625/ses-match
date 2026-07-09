@@ -66,6 +66,8 @@ export async function POST(req: NextRequest) {
         location: body.location ?? null,
         nearestStation: body.nearestStation ?? null,
         startText: body.startText ?? null,
+        channelText: body.channelText ?? null,
+        supportFee: body.supportFee ?? false,
         sourceEmail: body.sourceEmail ?? null,
         emailBody: body.emailBody ?? null,
       },
