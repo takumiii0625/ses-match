@@ -65,9 +65,11 @@ function fmtDate(d?: Date | string | null): string {
 export function ProjectDrawer({
   project,
   onClose,
+  basePath = "/projects",
 }: {
   project: ProjectDrawerData;
   onClose: () => void;
+  basePath?: string;
 }) {
   const hasEmail = !!(project.emailBody || project.emailFrom || project.emailSubject);
   const [tab, setTab] = useState<"mail" | "detail">(hasEmail ? "mail" : "detail");
@@ -174,7 +176,7 @@ export function ProjectDrawer({
         </div>
 
         <div className="flex gap-2 border-t border-border px-5 py-3">
-          <Link href={`/projects/${project.id}`} className="flex-1">
+          <Link href={`${basePath}/${project.id}`} className="flex-1">
             <Button variant="outline" size="sm" className="w-full">詳細・編集</Button>
           </Link>
           <Link href={`/matching?projectId=${project.id}`} className="flex-1">

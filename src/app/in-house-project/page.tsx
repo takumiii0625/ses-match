@@ -57,6 +57,7 @@ export default async function InHouseProjectPage(props: {
         projects={projects}
         total={projects.length}
         favoriteProjectIds={favoriteProjectIds}
+        basePath="/in-house-project"
       />
     </div>
   );

@@ -22,9 +22,10 @@ interface Props {
   projects: ProjectWithAssignee[];
   total: number;
   favoriteProjectIds?: Set<string>;
+  basePath?: string; // 詳細・編集の遷移先ベース（既定 /projects。自社保有案件は /in-house-project）
 }
 
-export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }: Props) {
+export function ProjectTable({ projects, total, favoriteProjectIds = new Set(), basePath = "/projects" }: Props) {
   const [openProject, setOpenProject] = useState<ProjectWithAssignee | null>(null);
   const stop = (e: React.MouseEvent) => e.stopPropagation();
   return (
@@ -148,7 +149,7 @@ export function ProjectTable({ projects, total, favoriteProjectIds = new Set() }
       </div>
 
       {openProject && (
-        <ProjectDrawer project={openProject} onClose={() => setOpenProject(null)} />
+        <ProjectDrawer project={openProject} onClose={() => setOpenProject(null)} basePath={basePath} />
       )}
     </Card>
   );

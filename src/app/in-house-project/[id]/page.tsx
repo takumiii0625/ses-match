@@ -3,7 +3,7 @@ import { getCurrentOrg, getOrgUsers } from "@/lib/current-org";
 import { prisma } from "@/lib/prisma";
 import { ProjectDetailView } from "@/components/project-detail-view";
 
-export default async function ProjectDetailPage(props: {
+export default async function InHouseProjectDetailPage(props: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await props.params;
@@ -28,8 +28,8 @@ export default async function ProjectDetailPage(props: {
     <ProjectDetailView
       project={project}
       users={users}
-      backHref="/projects"
-      backLabel="案件一覧"
+      backHref="/in-house-project"
+      backLabel="自社保有案件"
     />
   );
 }
