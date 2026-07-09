@@ -182,14 +182,68 @@ function MatchRowContent({ m, dupes, show }: { m: MatchVM; dupes: number; show: 
   );
 }
 
+/** 人材の所属（商流上の立場）をその場で編集する。保存で PATCH /api/talents/[id]。 */
+function AffiliationEdit({ talentId, initial }: { talentId: string; initial: string | null }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(initial ?? "");
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await fetch(`/api/talents/${talentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ affiliation: val }),
+      });
+      setEditing(false);
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setVal(initial ?? ""); setEditing(true); }}
+        className="text-xs text-muted hover:text-primary hover:underline"
+        title="所属を編集"
+      >
+        所属: {initial ?? "-"} ✎
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+      <span className="text-xs text-muted">所属:</span>
+      <Input
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="h-6 w-44 text-xs"
+        placeholder="例: 1社先正社員 / プロパー"
+        autoFocus
+      />
+      <button type="button" onClick={save} disabled={busy} className="text-xs text-primary hover:underline disabled:opacity-50">保存</button>
+      <button type="button" onClick={() => setEditing(false)} className="text-xs text-muted hover:underline">×</button>
+    </span>
+  );
+}
+
 export function MatchesList({
   matches,
   scope = "all",
   days = "1",
+  defaultGroupMode = "project",
 }: {
   matches: MatchVM[];
   scope?: "all" | "inhouse";
   days?: string;
+  defaultGroupMode?: "project" | "talent";
 }) {
   const inhouseOnly = scope === "inhouse";
   const router = useRouter();
@@ -199,7 +253,7 @@ export function MatchesList({
   const [minScore, setMinScore] = useState("75");
   const [talentType, setTalentType] = useState("ALL");
   // 起点（グルーピング）: 案件ごと / 人材ごと。
-  const [groupMode, setGroupMode] = useState<"project" | "talent">("project");
+  const [groupMode, setGroupMode] = useState<"project" | "talent">(defaultGroupMode);
   // 右ペインに出す選択中マッチ（行クリックで設定。チェックボックスとは別概念）。
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   // 差し戻し済みマッチID。再フェッチ（router.refresh）で一覧が並び替わって見づらくなるのを避け、
@@ -505,7 +559,7 @@ export function MatchesList({
                         <>
                           <span className="font-semibold text-foreground">{talent.name}</span>
                           <Badge tone="slate">{g.rows.length}件</Badge>
-                          {talent.affiliation && <span className="text-xs text-muted">所属: {talent.affiliation}</span>}
+                          <AffiliationEdit talentId={talent.id} initial={talent.affiliation} />
                           {(talent.desiredRateMin != null || talent.desiredRateMax != null) && (
                             <span className="text-xs text-muted">希望: {formatRate(talent.desiredRateMin, talent.desiredRateMax)}</span>
                           )}

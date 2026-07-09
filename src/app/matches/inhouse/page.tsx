@@ -2,17 +2,27 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { Card } from "@/components/ui/card";
-import { InhouseMatchesList } from "./inhouse-list";
+import { MatchesList } from "../matches-list";
 import { toMatchVM, matchVmSelect, buildSentInfoMap, buildSentTalentMap } from "../serialize";
 import { RematchButton } from "../../matching/rematch-button";
 
 export const metadata = { title: "自社保有人材マッチ（手動） — Caduceus" };
 export const dynamic = "force-dynamic";
 
-export default async function InhouseMatchesPage() {
+const DAY = 24 * 60 * 60 * 1000;
+
+export default async function InhouseMatchesPage(props: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await props.searchParams;
+  const daysParam = (Array.isArray(sp.days) ? sp.days[0] : sp.days) ?? "all";
+  const days = daysParam === "all" ? 0 : Number(daysParam) || 0;
   const org = await getCurrentOrg();
 
-  // 自社保有人材(INHOUSE)が絡むマッチだけ・70点以上。
+  const window =
+    days > 0 ? { createdAt: { gte: new Date(Date.now() - days * DAY) } } : {};
+
+  // 自社保有人材(INHOUSE)が絡むマッチだけ・70点以上。既定は全期間表示。
   const [matches, sentMap, sentTalentMap] = await Promise.all([
     prisma.match.findMany({
       where: {
@@ -20,6 +30,7 @@ export default async function InhouseMatchesPage() {
         talent: { orgId: org.id, talentType: "INHOUSE" },
         score: { gte: 70 },
         rejectedAt: null,
+        ...window,
       },
       select: matchVmSelect,
       orderBy: [{ createdAt: "desc" }, { score: "desc" }],
@@ -57,7 +68,7 @@ export default async function InhouseMatchesPage() {
         <RematchButton scope="inhouse" defaultDays="3" label="自社保有人材マッチを実行" />
       </Card>
 
-      <InhouseMatchesList matches={vm} />
+      <MatchesList matches={vm} scope="inhouse" defaultGroupMode="talent" days={daysParam} />
     </div>
   );
 }
