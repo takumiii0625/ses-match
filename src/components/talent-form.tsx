@@ -123,6 +123,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
     setIfEmpty(name, t.name, setName);
     setIfEmpty(age, t.age, setAge);
     setIfEmpty(affiliation, t.affiliation, setAffiliation);
+    setIfEmpty(nationality, t.nationality, setNationality);
     setIfEmpty(availabilityText, t.availabilityText, setAvailabilityText);
     setIfEmpty(desiredRateMin, t.desiredRateMin, setDesiredRateMin);
     setIfEmpty(desiredRateMax, t.desiredRateMax, setDesiredRateMax);
@@ -617,9 +618,9 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
       {/* Languages & Nationality */}
       <div className="rounded-xl border border-border bg-white p-5 space-y-4">
         <h2 className="text-sm font-semibold text-slate-700 border-b border-border pb-2">
-          言語・国籍
+          国籍・語学
         </h2>
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="nationality">国籍</Label>
             <Select
@@ -630,27 +631,34 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
               onChange={(e) => setNationality(e.target.value)}
             />
           </div>
-          <div>
-            <Label htmlFor="japaneseLevel">日本語レベル</Label>
-            <Select
-              id="japaneseLevel"
-              options={LANGUAGE_OPTIONS}
-              placeholder="未設定"
-              value={japaneseLevel}
-              onChange={(e) => setJapaneseLevel(e.target.value)}
-            />
-          </div>
-          <div>
-            <Label htmlFor="englishLevel">英語レベル</Label>
-            <Select
-              id="englishLevel"
-              options={LANGUAGE_OPTIONS}
-              placeholder="未設定"
-              value={englishLevel}
-              onChange={(e) => setEnglishLevel(e.target.value)}
-            />
-          </div>
         </div>
+        <details className="rounded-lg border border-border">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-slate-600">
+            語学レベル（任意）
+          </summary>
+          <div className="grid grid-cols-2 gap-4 px-3 pb-3 pt-1">
+            <div>
+              <Label htmlFor="japaneseLevel">日本語レベル</Label>
+              <Select
+                id="japaneseLevel"
+                options={LANGUAGE_OPTIONS}
+                placeholder="未設定"
+                value={japaneseLevel}
+                onChange={(e) => setJapaneseLevel(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="englishLevel">英語レベル</Label>
+              <Select
+                id="englishLevel"
+                options={LANGUAGE_OPTIONS}
+                placeholder="未設定"
+                value={englishLevel}
+                onChange={(e) => setEnglishLevel(e.target.value)}
+              />
+            </div>
+          </div>
+        </details>
       </div>
 
       {/* Skills */}
@@ -676,24 +684,31 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
             onChange={(e) => setSkills(e.target.value)}
           />
         </div>
-        <div>
-          <Label htmlFor="qualifications">資格（カンマ区切り）</Label>
-          <Input
-            id="qualifications"
-            placeholder="AWS認定ソリューションアーキテクト, 応用情報技術者"
-            value={qualifications}
-            onChange={(e) => setQualifications(e.target.value)}
-          />
-        </div>
-        <div>
-          <Label htmlFor="tags">タグ（カンマ区切り）</Label>
-          <Input
-            id="tags"
-            placeholder="即日, 英語可, リモート歓迎"
-            value={tags}
-            onChange={(e) => setTags(e.target.value)}
-          />
-        </div>
+        <details className="rounded-lg border border-border">
+          <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-slate-600">
+            資格・タグ（任意）
+          </summary>
+          <div className="space-y-3 px-3 pb-3 pt-1">
+            <div>
+              <Label htmlFor="qualifications">資格（カンマ区切り）</Label>
+              <Input
+                id="qualifications"
+                placeholder="AWS認定ソリューションアーキテクト, 応用情報技術者"
+                value={qualifications}
+                onChange={(e) => setQualifications(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label htmlFor="tags">タグ（カンマ区切り）</Label>
+              <Input
+                id="tags"
+                placeholder="即日, 英語可, リモート歓迎"
+                value={tags}
+                onChange={(e) => setTags(e.target.value)}
+              />
+            </div>
+          </div>
+        </details>
       </div>
 
       {/* Note */}
