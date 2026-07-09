@@ -34,9 +34,11 @@ const CHUNK = 3;
 export function RematchButton({
   scope = "all",
   label,
+  defaultDays = "1",
 }: {
   scope?: "all" | "inhouse" | "registered";
   label?: string;
+  defaultDays?: string;
 } = {}) {
   const router = useRouter();
   const runLabel =
@@ -45,7 +47,7 @@ export function RematchButton({
   const [percent, setPercent] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
-  const [days, setDays] = useState("1"); // 既定は今日のみ（過去復旧時に変更）
+  const [days, setDays] = useState(defaultDays); // 既定日数（手動マッチ画面では 3 を渡す）
 
   async function handleRun() {
     if (running) return;

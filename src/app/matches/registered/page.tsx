@@ -53,7 +53,7 @@ export default async function RegisteredMatchesPage(props: {
         <p className="mb-2 text-xs text-muted">
           自社登録案件すべてを、自社＋直近3日に取り込んだ人材と突き合わせてマッチを計算・保存します（手動実行）。
         </p>
-        <RematchButton scope="registered" label="自社案件マッチを実行" />
+        <RematchButton scope="registered" defaultDays="3" label="自社案件マッチを実行" />
       </Card>
 
       <MatchesList matches={vm} days={daysParam} />

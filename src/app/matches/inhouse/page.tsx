@@ -52,9 +52,9 @@ export default async function InhouseMatchesPage() {
 
       <Card className="p-5">
         <p className="mb-2 text-xs text-muted">
-          自社保有人材だけを候補に、手動でマッチを計算して保存します（他社人材のマッチは保持されます）。
+          自社保有人材だけを候補に、直近3日の案件と手動でマッチを計算して保存します（既定は過去3日。他社人材のマッチは保持されます）。
         </p>
-        <RematchButton scope="inhouse" label="自社保有人材マッチを実行" />
+        <RematchButton scope="inhouse" defaultDays="3" label="自社保有人材マッチを実行" />
       </Card>
 
       <InhouseMatchesList matches={vm} />
