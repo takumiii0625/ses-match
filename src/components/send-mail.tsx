@@ -59,7 +59,12 @@ const EMPTY_MAIL: MailState = {
   sentTo: null,
 };
 
-export function useSendController(): SendController {
+export function useSendController(
+  mode: "project" | "talent" = "project",
+): SendController {
+  // project=案件案内メール(人材の紹介元へ) / talent=要員提案メール(案件元＝クライアントへ)。
+  const base = mode === "talent" ? "/api/send-talent" : "/api/send-project";
+  const kindLabel = mode === "talent" ? "要員提案メール" : "案件案内メール";
   const [mails, setMails] = useState<Map<string, MailState>>(new Map());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkSending, setBulkSending] = useState(false);
@@ -77,7 +82,7 @@ export function useSendController(): SendController {
     const key = pairKey(pair);
     patchMail(key, { loading: true, error: null });
     try {
-      const res = await fetch("/api/send-project", {
+      const res = await fetch(base, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...pair, preview: true, regenerate }),
@@ -107,7 +112,7 @@ export function useSendController(): SendController {
     if (targets.length === 0) return;
     for (const p of targets) patchMail(pairKey(p), { loading: true, error: null });
     try {
-      const res = await fetch("/api/send-project/preview-batch", {
+      const res = await fetch(`${base}/preview-batch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pairs: targets }),
@@ -162,10 +167,10 @@ export function useSendController(): SendController {
     const key = pairKey(pair);
     const m = mails.get(key);
     if (!m || m.lastSentAt || m.sentTo) return;
-    if (!window.confirm(`${m.to} 宛に案件案内メールを送信します。よろしいですか？`)) return;
+    if (!window.confirm(`${m.to} 宛に${kindLabel}を送信します。よろしいですか？`)) return;
     patchMail(key, { loading: true, error: null });
     try {
-      const res = await fetch("/api/send-project", {
+      const res = await fetch(base, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...pair, subject: m.subject, text: m.text }),
@@ -209,7 +214,7 @@ export function useSendController(): SendController {
     if (bulkSending || selected.size === 0) return;
     const pairs = allPairs.filter((p) => selected.has(pairKey(p)));
     if (pairs.length === 0) return;
-    if (!window.confirm(`選択した ${pairs.length} 件の案件案内メールを送信します。よろしいですか？`)) return;
+    if (!window.confirm(`選択した ${pairs.length} 件の${kindLabel}を送信します。よろしいですか？`)) return;
     setBulkSending(true);
     setBulkMsg(null);
     const payloadPairs = pairs.map((p) => {
@@ -217,7 +222,7 @@ export function useSendController(): SendController {
       return m ? { ...p, subject: m.subject, text: m.text } : p;
     });
     try {
-      const res = await fetch("/api/send-project/bulk", {
+      const res = await fetch(`${base}/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pairs: payloadPairs }),

@@ -132,7 +132,7 @@ function SkillChips({
 }
 
 /** 行の中身（起点に応じて「相手側」＝人材 or 案件 を表示）。 */
-function MatchRowContent({ m, dupes, show }: { m: MatchVM; dupes: number; show: "talent" | "project" }) {
+function MatchRowContent({ m, dupes, show, sentAt }: { m: MatchVM; dupes: number; show: "talent" | "project"; sentAt?: string | null }) {
   const cs = channelStatus(m.proposable, m.channelNote);
   const t = m.talent;
   const p = m.project;
@@ -144,9 +144,9 @@ function MatchRowContent({ m, dupes, show }: { m: MatchVM; dupes: number; show: 
         {cs && <Badge tone={cs.tone}>{cs.label}</Badge>}
         {m.locationOk === true && <Badge tone="green">勤務地OK</Badge>}
         {dupes > 1 && <Badge tone="slate">同一{dupes}</Badge>}
-        {m.sentInfoAt && (
+        {sentAt && (
           <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-            ✉ {fmtSentDate(m.sentInfoAt)}
+            ✉ {fmtSentDate(sentAt)}
           </span>
         )}
         <span className="ml-auto text-xs text-muted whitespace-nowrap">マッチ {fmtDateTime(m.createdAt)}</span>
@@ -264,7 +264,8 @@ export function MatchesList({
   // クライアント側でその行だけ隠す（他の行の並びは保持）。サーバ側も rejectedAt で除外済み。
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
   // メール編集・単体/一斉送信を統括する共有コントローラ。
-  const ctrl = useSendController();
+  // 自社保有人材マッチ(inhouse)は要員提案メール(案件側へ)、それ以外は案件案内メール。
+  const ctrl = useSendController(inhouseOnly ? "talent" : "project");
 
   function changeDays(v: string) {
     const params = new URLSearchParams();
@@ -376,7 +377,9 @@ export function MatchesList({
   const shownCount = flatRows.length;
 
   const keyOf = (m: MatchVM) => pairKey({ talentId: m.talent.id, projectId: m.project.id });
-  const isSent = (m: MatchVM) => !!m.sentInfoAt || !!ctrl.get(keyOf(m))?.sentTo;
+  // 送信済み判定は送信種別に合わせる（inhouse=要員提案 / それ以外=案件案内）。
+  const sentAtOf = (m: MatchVM) => (inhouseOnly ? m.sentTalentAt : m.sentInfoAt);
+  const isSent = (m: MatchVM) => !!sentAtOf(m) || !!ctrl.get(keyOf(m))?.sentTo;
   const selectedMatch = flatRows.find((m) => keyOf(m) === selectedKey) ?? null;
 
   // 差し戻し後: その行だけ隠し、並びは変えずに「次の行」へ選択を進める（最後なら直前へ）。
@@ -611,7 +614,7 @@ export function MatchesList({
                               {Math.round(m.score)}
                             </div>
                           </div>
-                          <MatchRowContent m={m} dupes={dupes} show={rowShow} />
+                          <MatchRowContent m={m} dupes={dupes} show={rowShow} sentAt={sentAtOf(m)} />
                         </div>
                       );
                     })}
@@ -625,7 +628,7 @@ export function MatchesList({
           <div className="min-w-0">
             <div className="lg:sticky lg:top-4">
               {selectedMatch ? (
-                <MatchDetailPanel m={selectedMatch} controller={ctrl} sent={isSent(selectedMatch)} groupMode={groupMode} onRejected={handleRejected} />
+                <MatchDetailPanel m={selectedMatch} controller={ctrl} sent={isSent(selectedMatch)} groupMode={groupMode} inhouse={inhouseOnly} onRejected={handleRejected} />
               ) : (
                 <Card className="flex items-center justify-center p-12 text-center text-sm text-muted">
                   左の一覧から人材を選ぶと、ここに案件・人材の詳細とメール内容が表示され、そのまま送信できます。
@@ -669,12 +672,14 @@ function MatchDetailPanel({
   controller,
   sent,
   groupMode,
+  inhouse = false,
   onRejected,
 }: {
   m: MatchVM;
   controller: ReturnType<typeof useSendController>;
   sent: boolean;
   groupMode: "project" | "talent";
+  inhouse?: boolean;
   onRejected: (matchId: string) => void;
 }) {
   const t = m.talent;
@@ -849,7 +854,9 @@ function MatchDetailPanel({
 
         {/* メール（編集して送信） */}
         <div className="border-t border-border pt-3">
-          <div className="mb-2 text-xs font-semibold text-slate-500">送信メール（編集可）</div>
+          <div className="mb-2 text-xs font-semibold text-slate-500">
+            {inhouse ? "要員提案メール（案件元へ送信・雛形固定）" : "送信メール（編集可）"}
+          </div>
           {/* key=pair で人材切替時にパネルを作り直し、確実に再読込する。 */}
           <SendPanel key={`${t.id}:${p.id}`} pair={pair} controller={controller} />
         </div>
