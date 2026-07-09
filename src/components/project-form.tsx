@@ -53,6 +53,8 @@ export function ProjectForm({ users, initial, mode }: Props) {
     location: initial?.location ?? "",
     nearestStation: initial?.nearestStation ?? "",
     startText: initial?.startText ?? "",
+    sourceEmail: initial?.sourceEmail ?? "",
+    emailBody: initial?.emailBody ?? "",
   });
 
   const set = (k: keyof typeof form) => (
@@ -83,6 +85,8 @@ export function ProjectForm({ users, initial, mode }: Props) {
       location: form.location || null,
       nearestStation: form.nearestStation || null,
       startText: form.startText || null,
+      sourceEmail: form.sourceEmail || null,
+      emailBody: form.emailBody || null,
     };
 
     try {
@@ -205,6 +209,28 @@ export function ProjectForm({ users, initial, mode }: Props) {
             value={form.description}
             onChange={set("description")}
             placeholder="案件の詳細内容..."
+          />
+        </div>
+
+        {/* 案件元メールアドレス（要員提案メールの宛先）＋ 案件メール本文（貼り付け） */}
+        <div>
+          <Label htmlFor="sourceEmail">案件元メールアドレス</Label>
+          <Input
+            id="sourceEmail"
+            type="email"
+            value={form.sourceEmail}
+            onChange={set("sourceEmail")}
+            placeholder="例: sales@client.co.jp（要員提案メールの宛先に使われます）"
+          />
+        </div>
+        <div>
+          <Label htmlFor="emailBody">案件メール本文（貼り付け）</Label>
+          <Textarea
+            id="emailBody"
+            rows={8}
+            value={form.emailBody}
+            onChange={set("emailBody")}
+            placeholder="受け取った案件メールの本文をそのまま貼り付け。マッチ一覧の「案件メール本文」や案件案内メールの整形に使われます。"
           />
         </div>
 

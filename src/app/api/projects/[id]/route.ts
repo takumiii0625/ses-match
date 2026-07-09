@@ -83,6 +83,8 @@ export async function PUT(
         location: body.location ?? null,
         nearestStation: body.nearestStation ?? null,
         startText: body.startText ?? null,
+        sourceEmail: body.sourceEmail ?? null,
+        emailBody: body.emailBody ?? null,
       },
     });
 
