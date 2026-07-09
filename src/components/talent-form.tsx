@@ -452,10 +452,10 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="affiliation">所属</Label>
+            <Label htmlFor="affiliation">所属（商流区分）</Label>
             <Input
               id="affiliation"
-              placeholder="弊社個人事業主"
+              placeholder="例: 自社所属 / プロパー / 弊社個人事業主 / 1社先正社員"
               value={affiliation}
               onChange={(e) => setAffiliation(e.target.value)}
             />

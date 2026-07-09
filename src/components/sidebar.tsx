@@ -77,6 +77,7 @@ const groups: { title: string; items: NavItem[] }[] = [
     title: "検索",
     items: [
       { href: "/in-house-talent", label: "自社保有人材", icon: UserSearch },
+      { href: "/in-house-project", label: "自社保有案件", icon: Briefcase },
       { href: "/partner-talent", label: "他社人材", icon: Building2 },
       { href: "/projects", label: "案件", icon: Briefcase },
       { href: "/partners", label: "提携先会社", icon: Handshake },
@@ -88,8 +89,8 @@ const groups: { title: string; items: NavItem[] }[] = [
     items: [
       { href: "/matching", label: "マッチング", icon: GitCompareArrows },
       { href: "/matches", label: "マッチ一覧", icon: ListChecks },
-      { href: "/matches/inhouse", label: "人材マッチ（手動）", icon: UserCheck },
-      { href: "/matches/registered", label: "自社案件マッチ（手動）", icon: UserCheck },
+      { href: "/matches/inhouse", label: "自社保有人材マッチ（手動）", icon: UserCheck },
+      { href: "/matches/registered", label: "自社保有案件マッチ（手動）", icon: UserCheck },
       { href: "/ingest", label: "メール取り込み", icon: Mail },
       { href: "/mail", label: "メール自動取込", icon: MailCheck },
       { href: "/proposals", label: "提案管理", icon: FileText },

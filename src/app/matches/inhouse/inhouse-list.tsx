@@ -310,9 +310,6 @@ export function InhouseMatchesList({ matches }: { matches: MatchVM[] }) {
                   </Link>
                   <Badge tone="slate">{rows.length}件の案件にマッチ</Badge>
                   <AffiliationEdit talentId={talent.id} initial={talent.affiliation} />
-                  <Badge tone={talent.talentType === "INHOUSE" ? "green" : "slate"}>
-                    {talent.talentType === "INHOUSE" ? "自社" : "他社"}
-                  </Badge>
                   {(talent.desiredRateMin != null || talent.desiredRateMax != null) && (
                     <span className="text-xs text-muted">
                       希望単価: {formatRate(talent.desiredRateMin, talent.desiredRateMax)}

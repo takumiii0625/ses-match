@@ -5,7 +5,7 @@ import { MatchesList } from "../matches-list";
 import { toMatchVM, matchVmSelect, buildSentInfoMap } from "../serialize";
 import { RematchButton } from "../../matching/rematch-button";
 
-export const metadata = { title: "自社案件マッチ（手動） — Caduceus" };
+export const metadata = { title: "自社保有案件マッチ（手動） — Caduceus" };
 export const dynamic = "force-dynamic";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -43,9 +43,9 @@ export default async function RegisteredMatchesPage(props: {
   return (
     <div className="space-y-6 p-8">
       <div>
-        <h1 className="text-xl font-semibold text-foreground">自社案件マッチ（手動）</h1>
+        <h1 className="text-xl font-semibold text-foreground">自社保有案件マッチ（手動）</h1>
         <p className="mt-1 text-sm text-muted">
-          自分たちで登録した案件（自社案件）を、直近3日の人材と手動でマッチします。定期マッチには含まれません。
+          「自社保有案件」タブで登録した案件を、直近3日の人材と手動でマッチします。定期マッチには含まれません。
         </p>
       </div>
 
