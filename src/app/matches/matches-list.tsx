@@ -176,6 +176,10 @@ function MatchRowContent({ m, dupes, show }: { m: MatchVM; dupes: number; show: 
           <div className="mt-1.5">
             <SkillChips main={p.requiredSkills} all={[]} limit={5} />
           </div>
+          {/* 人材ごと表示では各案件行から案件メール本文を開ける（行選択とは独立） */}
+          <div className="mt-1.5" onClick={(e) => e.stopPropagation()}>
+            <ProjectSourceDisclosure projectId={p.id} />
+          </div>
         </>
       )}
     </div>
