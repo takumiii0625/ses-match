@@ -393,7 +393,14 @@ export class AnthropicAIService implements AIService {
 
   constructor() {
     // Reads ANTHROPIC_API_KEY from the environment.
-    this.client = new Anthropic();
+    // 1呼び出しあたりの上限を明示する。SDK既定は timeout=600秒/maxRetries=2 のため、
+    // 過負荷(529)や巨大スキャンPDFのdocument送信で1回の呼び出しが長時間ハングし、
+    // 取込エンドポイントの maxDuration=300 を超えて関数ごと落ちる（→ページ打ち切り）事故を防ぐ。
+    // 1メール=分類+解析の2回直列 × ページ内の複数メールでも300秒に収まるよう短めに設定。
+    this.client = new Anthropic({
+      timeout: Number(process.env.ANTHROPIC_TIMEOUT_MS ?? "45000") || 45000,
+      maxRetries: Number(process.env.ANTHROPIC_MAX_RETRIES ?? "2") || 2,
+    });
   }
 
   /** Build a user-content array: email text + any PDF attachments as document blocks. */

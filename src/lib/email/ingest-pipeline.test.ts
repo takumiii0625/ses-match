@@ -27,7 +27,20 @@ vi.mock("./gmail", () => ({
   fetchEmails: vi.fn(),
 }));
 
-import { runMailIngestPage } from "./ingest-pipeline";
+import { runMailIngestPage, isTransientDbError } from "./ingest-pipeline";
+
+describe("isTransientDbError — 一時的DB接続エラーの判定", () => {
+  it("Neon/Postgres接続系のエラーは true（次回再試行させる）", () => {
+    expect(isTransientDbError("Error occurred during query execution: ConnectorError(ConnectorError { kind: QueryError(PostgresError")).toBe(true);
+    expect(isTransientDbError("Can't reach database server")).toBe(true);
+    expect(isTransientDbError("Timed out fetching a new connection from the connection pool")).toBe(true);
+    expect(isTransientDbError("read ECONNRESET")).toBe(true);
+  });
+  it("内容起因の恒久的エラーは false（ERRORとして確定記録）", () => {
+    expect(isTransientDbError("Unique constraint failed on the fields: (messageId)")).toBe(false);
+    expect(isTransientDbError("Invalid value for argument age")).toBe(false);
+  });
+});
 
 function mail(id: string) {
   return { messageId: id, gmailId: id, subject: "s", from: "a@x.com", to: "", text: "本文", date: new Date(), attachments: [] };

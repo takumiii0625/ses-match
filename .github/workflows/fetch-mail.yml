@@ -30,7 +30,9 @@ jobs:
           days="${{ github.event.inputs.days }}"
           fails=0
           for i in $(seq 1 800); do
-            url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=10"
+            # pageSize は小さめ(4)にして1ページ処理を300秒(maxDuration)内に収める。
+            # 1メール=添付抽出+AI2回のため、10件だと重いページで300秒超過→関数ごと打ち切りの原因になっていた。
+            url="https://sesmatch.encore-biz.com/api/cron/fetch-mail?pageSize=4"
             [ -n "$days" ] && url="$url&days=$days"
             # 1ページ目で算出された after(ウォーターマーク)を以降のページへ引き継ぎ、クエリを固定。
             [ -n "$after" ] && url="$url&after=$after"

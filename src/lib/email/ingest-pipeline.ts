@@ -48,6 +48,17 @@ async function computeIngestAfterEpoch(orgId: string): Promise<number | undefine
   return afterEpochFrom(agg._max.receivedAt ?? null);
 }
 
+/**
+ * DB書き込みの一時的失敗（接続切れ・プール枯渇・タイムアウト等）かを判定する。
+ * これらは「そのメールが不正」なのではなく実行環境の一過性の問題なので、
+ * ERROR として確定記録せず次回に再試行させる。恒久的な失敗（バリデーション等）は false。
+ */
+export function isTransientDbError(message: string): boolean {
+  return /ConnectorError|PostgresError|Can't reach database|connection|Connection|pool|Timed out|timeout|ETIMEDOUT|ECONNRESET|terminating connection|server closed|P1001|P1017|P2024/.test(
+    message,
+  );
+}
+
 const REMOTE_VALUES = new Set<RemotePreference>([
   "FULL_REMOTE",
   "MOSTLY_REMOTE",
@@ -331,6 +342,19 @@ async function ingestEmails(
     } catch (e) {
       result.errors++;
       const message = e instanceof Error ? e.message : String(e);
+      // 一時的なDB接続エラー（Neonの接続切れ・プール枯渇等）は「登録失敗」であって
+      // メール内容の問題ではない。ここでERROR行(gmailId付き)を残すと次回のID事前除外で
+      // 永久にスキップされ、人材/案件が恒久ロストする。そのため一時エラー時はERROR行を
+      // 残さず（gmailId未記録のまま）、次回実行で拾い直せるようにする。
+      if (isTransientDbError(message)) {
+        result.items.push({
+          subject: mail.subject,
+          from: mail.from,
+          kind: "ERROR",
+          reason: `一時エラー（次回再試行）: ${message}`,
+        });
+        continue;
+      }
       await prisma.ingestedEmail
         .create({
           data: {
