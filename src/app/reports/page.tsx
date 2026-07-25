@@ -208,6 +208,7 @@ export default async function ReportsPage() {
     contactMonthly,
     companyMonthly,
     contactStatusAgg,
+    partnerContactEmails,
   ] = await Promise.all([
       // All talent lightweight fields
       prisma.talent.findMany({
@@ -313,6 +314,11 @@ export default async function ReportsPage() {
         where: { orgId },
         _count: { _all: true },
       }),
+      // 既存配信先のメール（ドメイン照合用）。送信元が配信先に登録済みかの判定に使う。
+      prisma.partnerContact.findMany({
+        where: { orgId },
+        select: { email: true },
+      }),
     ]);
 
   // -- AI cost aggregates --
@@ -415,6 +421,41 @@ export default async function ReportsPage() {
       count,
       isNg: ngDomainSet.has(domain),
     }));
+
+  // -- 未登録の送信元会社（受信メールの差出人ドメインのうち、配信先に未登録のもの） --
+  // 配信先に「登録済み」とみなすドメイン集合を作る:
+  //  ・提携先会社の domain 列
+  //  ・既存配信先(連絡先)メールから導出したドメイン（会社にdomainが無い分を補う）
+  const registeredDomains = new Set<string>();
+  for (const c of partnerCompanies) {
+    const d = (c.domain ?? "").toLowerCase();
+    if (d) registeredDomains.add(d);
+  }
+  for (const e of partnerContactEmails) {
+    const d = companyDomain(e.email);
+    if (d) registeredDomains.add(d);
+  }
+  // 差出人を件数の多い順に見て、ドメイン単位で「未登録」だけ集約（代表アドレスは最多の差出人）。
+  const sendersSorted = [...sendersAll].sort((a, b) => b._count._all - a._count._all);
+  const unregMap = new Map<string, { count: number; sample: string }>();
+  for (const r of sendersSorted) {
+    const d = companyDomain(r.fromAddr);
+    if (!d || registeredDomains.has(d)) continue; // 会社ドメインでない/登録済みは除外
+    const cur = unregMap.get(d);
+    if (cur) cur.count += r._count._all;
+    else unregMap.set(d, { count: r._count._all, sample: r.fromAddr ?? d });
+  }
+  const unregisteredSenders = [...unregMap.entries()]
+    .map(([domain, v]) => ({
+      domain,
+      sample: v.sample,
+      count: v.count,
+      isNg: ngDomainSet.has(domain),
+    }))
+    .sort((a, b) => b.count - a.count);
+  const unregisteredCount = unregisteredSenders.length;
+  const unregisteredEmails = unregisteredSenders.reduce((s, x) => s + x.count, 0);
+  const topUnregistered = unregisteredSenders.slice(0, 30);
 
   // -- 配信先（連絡先）の増加：初期(CSV一括取込) と その後の月別増加 --
   // JSTの当月キー（当月行のハイライト・当月の新規数に使う）。当月は途中でも必ず表示する。
@@ -788,6 +829,59 @@ export default async function ReportsPage() {
             ※ 差出人メールのドメインで会社を識別（フリーメールは会社数に含めません）。
           </p>
         </div>
+      </Section>
+
+      {/* 未登録の送信元会社（配信先の候補） */}
+      <Section title="未登録の送信元会社（配信先の候補）">
+        <div className="flex flex-wrap gap-x-8 gap-y-2">
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">
+              {unregisteredCount.toLocaleString("ja-JP")}
+            </div>
+            <div className="mt-1 text-xs text-muted">
+              配信先に未登録の送信元会社数
+            </div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">
+              {unregisteredEmails.toLocaleString("ja-JP")}
+            </div>
+            <div className="mt-1 text-xs text-muted">その会社から届いたメール総数</div>
+          </div>
+        </div>
+        {topUnregistered.length === 0 ? (
+          <p className="py-2 text-sm text-muted">
+            未登録の送信元会社はありません（受信のある会社はすべて配信先に登録済みです）。
+          </p>
+        ) : (
+          <div>
+            <div className="mb-2 text-xs font-medium text-slate-500">
+              メールが多い未登録会社 Top30（ドメイン＝会社で名寄せ）
+            </div>
+            <ul className="divide-y divide-border">
+              {topUnregistered.map((s) => (
+                <li key={s.domain} className="flex items-center gap-3 py-2 text-sm">
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="font-medium text-slate-800">{s.domain}</span>
+                    <span className="ml-2 font-mono text-xs text-slate-500">{s.sample}</span>
+                    {s.isNg && (
+                      <span className="ml-2 inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-700">
+                        NG
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 tabular-nums font-semibold text-slate-700">
+                    {s.count.toLocaleString("ja-JP")}通
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="mt-2 text-xs text-muted">
+          ※ 案件/人材メールを送ってきた差出人のうち、まだ「提携先会社（配信先）」に登録していない会社です。
+          一斉案内を送りたい相手はここから拾って、提携先会社に追加してください（フリーメール・NGは対象外／NGは印付き）。
+        </p>
       </Section>
 
       {/* 配信先の増加（初期取込＋その後の月別） */}
