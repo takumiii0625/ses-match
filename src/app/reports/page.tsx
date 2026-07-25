@@ -417,11 +417,17 @@ export default async function ReportsPage() {
     }));
 
   // -- 配信先（連絡先）の月別増加 --
+  // JSTの当月キー（当月行のハイライト・当月の新規数に使う）。当月は途中でも必ず表示する。
+  const jstNowForMonth = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const currentMonthKey = `${jstNowForMonth.getUTCFullYear()}-${String(
+    jstNowForMonth.getUTCMonth() + 1,
+  ).padStart(2, "0")}`;
   // 連絡先と会社の月別追加数を月キーでマージし、古い順に累計を積む（表示は新しい順）。
   const contactByMonth = new Map(contactMonthly.map((r) => [r.month, r]));
   const companyByMonth = new Map(companyMonthly.map((r) => [r.month, r.added]));
+  // 追加が0でも当月は行を出す（月途中でも「7月：0社」と分かるように currentMonthKey を必ず含める）。
   const allMonths = [
-    ...new Set([...contactByMonth.keys(), ...companyByMonth.keys()]),
+    ...new Set([...contactByMonth.keys(), ...companyByMonth.keys(), currentMonthKey]),
   ].sort(); // 昇順
   let cumulativeContacts = 0;
   const contactGrowthAsc = allMonths.map((month) => {
@@ -437,11 +443,6 @@ export default async function ReportsPage() {
     };
   });
   const contactGrowth = [...contactGrowthAsc].reverse(); // 表示は新しい月が上
-  // JSTの当月キー（当月行のハイライト・当月の新規数に使う）。
-  const jstNowForMonth = new Date(Date.now() + 9 * 60 * 60 * 1000);
-  const currentMonthKey = `${jstNowForMonth.getUTCFullYear()}-${String(
-    jstNowForMonth.getUTCMonth() + 1,
-  ).padStart(2, "0")}`;
   const contactStatusTotal = (s: string) =>
     contactStatusAgg.find((g) => g.status === s)?._count._all ?? 0;
   const totalContacts = contactStatusAgg.reduce((s, g) => s + g._count._all, 0);
@@ -821,7 +822,7 @@ export default async function ReportsPage() {
                         {fmtMonth(r.month)}
                         {isCurrent && (
                           <span className="ml-2 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
-                            今月
+                            今月・途中経過
                           </span>
                         )}
                       </td>
@@ -847,6 +848,7 @@ export default async function ReportsPage() {
         <p className="text-xs text-muted">
           ※ 登録日（連絡先が最初に追加された日）をJSTの月で集計。「うち配信中」は登録時点で配信中だった数。
           CSV再取込で既存の連絡先が更新されても新規にはカウントしません（純増のみ）。
+          当月は月途中でも表示し、まだ増える可能性があります（途中経過）。
         </p>
       </Section>
 
