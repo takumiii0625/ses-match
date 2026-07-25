@@ -179,6 +179,11 @@ function fmtDay(ymd: string): string {
   const dow = ["日", "月", "火", "水", "木", "金", "土"][new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   return `${m}/${d}(${dow})`;
 }
+/** 年月 YYYY-MM → 「YYYY年M月」。 */
+function fmtMonth(ym: string): string {
+  const [y, m] = ym.split("-");
+  return `${y}年${Number(m)}月`;
+}
 
 export default async function ReportsPage() {
   const org = await getCurrentOrg();
@@ -200,6 +205,9 @@ export default async function ReportsPage() {
     aiDaily,
     ingestToday,
     matchCreatedToday,
+    contactMonthly,
+    companyMonthly,
+    contactStatusAgg,
   ] = await Promise.all([
       // All talent lightweight fields
       prisma.talent.findMany({
@@ -278,6 +286,32 @@ export default async function ReportsPage() {
       // 今日作成されたマッチ件数（マッチ処理が流れた結果）。
       prisma.match.count({
         where: { createdAt: { gte: todayStart }, talent: { orgId } },
+      }),
+      // 月別の新規配信先（連絡先）数。createdAt(登録日)をJST月で集計。
+      // added=その月に登録された連絡先、activeAdded=うち登録時ACTIVE（現ステータスではなく登録時）。
+      prisma.$queryRaw<{ month: string; added: number; activeAdded: number }[]>`
+        SELECT to_char("createdAt" AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM') AS month,
+               COUNT(*)::int AS added,
+               COUNT(*) FILTER (WHERE status = 'ACTIVE')::int AS "activeAdded"
+        FROM "PartnerContact"
+        WHERE "orgId" = ${orgId}
+        GROUP BY month
+        ORDER BY month ASC
+      `,
+      // 月別の新規提携先会社数（同じくJST月で集計）。
+      prisma.$queryRaw<{ month: string; added: number }[]>`
+        SELECT to_char("createdAt" AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM') AS month,
+               COUNT(*)::int AS added
+        FROM "PartnerCompany"
+        WHERE "orgId" = ${orgId}
+        GROUP BY month
+        ORDER BY month ASC
+      `,
+      // 配信先の現在のステータス内訳（配信中/不達/停止の総数）。
+      prisma.partnerContact.groupBy({
+        by: ["status"],
+        where: { orgId },
+        _count: { _all: true },
       }),
     ]);
 
@@ -381,6 +415,39 @@ export default async function ReportsPage() {
       count,
       isNg: ngDomainSet.has(domain),
     }));
+
+  // -- 配信先（連絡先）の月別増加 --
+  // 連絡先と会社の月別追加数を月キーでマージし、古い順に累計を積む（表示は新しい順）。
+  const contactByMonth = new Map(contactMonthly.map((r) => [r.month, r]));
+  const companyByMonth = new Map(companyMonthly.map((r) => [r.month, r.added]));
+  const allMonths = [
+    ...new Set([...contactByMonth.keys(), ...companyByMonth.keys()]),
+  ].sort(); // 昇順
+  let cumulativeContacts = 0;
+  const contactGrowthAsc = allMonths.map((month) => {
+    const c = contactByMonth.get(month);
+    const added = c?.added ?? 0;
+    cumulativeContacts += added;
+    return {
+      month,
+      added,
+      activeAdded: c?.activeAdded ?? 0,
+      companiesAdded: companyByMonth.get(month) ?? 0,
+      cumulative: cumulativeContacts,
+    };
+  });
+  const contactGrowth = [...contactGrowthAsc].reverse(); // 表示は新しい月が上
+  // JSTの当月キー（当月行のハイライト・当月の新規数に使う）。
+  const jstNowForMonth = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const currentMonthKey = `${jstNowForMonth.getUTCFullYear()}-${String(
+    jstNowForMonth.getUTCMonth() + 1,
+  ).padStart(2, "0")}`;
+  const contactStatusTotal = (s: string) =>
+    contactStatusAgg.find((g) => g.status === s)?._count._all ?? 0;
+  const totalContacts = contactStatusAgg.reduce((s, g) => s + g._count._all, 0);
+  const activeContacts = contactStatusTotal("ACTIVE");
+  const newContactsThisMonth =
+    contactGrowth.find((r) => r.month === currentMonthKey)?.added ?? 0;
 
   // -- KPI aggregates --
 
@@ -704,6 +771,83 @@ export default async function ReportsPage() {
             ※ 差出人メールのドメインで会社を識別（フリーメールは会社数に含めません）。
           </p>
         </div>
+      </Section>
+
+      {/* 配信先の増加（月別） */}
+      <Section title="配信先の増加（月別）">
+        <div className="flex flex-wrap gap-x-8 gap-y-2">
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">
+              {totalContacts.toLocaleString("ja-JP")}
+            </div>
+            <div className="mt-1 text-xs text-muted">配信先 総数（連絡先）</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold leading-none text-emerald-600">
+              {activeContacts.toLocaleString("ja-JP")}
+            </div>
+            <div className="mt-1 text-xs text-muted">うち配信中（送信対象）</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">
+              +{newContactsThisMonth.toLocaleString("ja-JP")}
+            </div>
+            <div className="mt-1 text-xs text-muted">今月の新規配信先</div>
+          </div>
+        </div>
+        {contactGrowth.length === 0 ? (
+          <p className="py-2 text-sm text-muted">データなし</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-slate-500">
+                  <th className="px-3 py-2 text-left font-medium">月</th>
+                  <th className="px-3 py-2 text-right font-medium">新規配信先</th>
+                  <th className="px-3 py-2 text-right font-medium">うち配信中</th>
+                  <th className="px-3 py-2 text-right font-medium">新規提携先会社</th>
+                  <th className="px-3 py-2 text-right font-medium">累計配信先</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {contactGrowth.map((r) => {
+                  const isCurrent = r.month === currentMonthKey;
+                  return (
+                    <tr
+                      key={r.month}
+                      className={isCurrent ? "bg-emerald-50" : "hover:bg-slate-50"}
+                    >
+                      <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+                        {fmtMonth(r.month)}
+                        {isCurrent && (
+                          <span className="ml-2 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                            今月
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-800">
+                        +{r.added.toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
+                        +{r.activeAdded.toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                        +{r.companiesAdded.toLocaleString("ja-JP")}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                        {r.cumulative.toLocaleString("ja-JP")}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="text-xs text-muted">
+          ※ 登録日（連絡先が最初に追加された日）をJSTの月で集計。「うち配信中」は登録時点で配信中だった数。
+          CSV再取込で既存の連絡先が更新されても新規にはカウントしません（純増のみ）。
+        </p>
       </Section>
 
       {/* Status breakdowns */}
