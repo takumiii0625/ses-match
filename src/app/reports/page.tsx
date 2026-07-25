@@ -416,21 +416,35 @@ export default async function ReportsPage() {
       isNg: ngDomainSet.has(domain),
     }));
 
-  // -- 配信先（連絡先）の月別増加 --
+  // -- 配信先（連絡先）の増加：初期(CSV一括取込) と その後の月別増加 --
   // JSTの当月キー（当月行のハイライト・当月の新規数に使う）。当月は途中でも必ず表示する。
   const jstNowForMonth = new Date(Date.now() + 9 * 60 * 60 * 1000);
   const currentMonthKey = `${jstNowForMonth.getUTCFullYear()}-${String(
     jstNowForMonth.getUTCMonth() + 1,
   ).padStart(2, "0")}`;
-  // 連絡先と会社の月別追加数を月キーでマージし、古い順に累計を積む（表示は新しい順）。
   const contactByMonth = new Map(contactMonthly.map((r) => [r.month, r]));
   const companyByMonth = new Map(companyMonthly.map((r) => [r.month, r.added]));
-  // 追加が0でも当月は行を出す（月途中でも「7月：0社」と分かるように currentMonthKey を必ず含める）。
-  const allMonths = [
-    ...new Set([...contactByMonth.keys(), ...companyByMonth.keys(), currentMonthKey]),
-  ].sort(); // 昇順
-  let cumulativeContacts = 0;
-  const contactGrowthAsc = allMonths.map((month) => {
+  // データがある月（昇順）。最初の月＝CSV一括取込の「初期」とみなし、増加集計から切り出す。
+  const dataMonths = [
+    ...new Set([...contactByMonth.keys(), ...companyByMonth.keys()]),
+  ].sort();
+  const initialMonth = dataMonths[0] ?? null;
+  const initialContact = initialMonth ? contactByMonth.get(initialMonth) : undefined;
+  // 初期(CSV分)＝最初の月の一括取込。増加の行には出さず、ベースラインとして別枠表示する。
+  const baseline = {
+    month: initialMonth,
+    contacts: initialContact?.added ?? 0,
+    activeContacts: initialContact?.activeAdded ?? 0,
+    companies: initialMonth ? companyByMonth.get(initialMonth) ?? 0 : 0,
+  };
+  // 「その後の増加」＝初期月より後の月。当月は途中でも必ず1行出す（初期月と同月なら出さない）。
+  const growthMonthSet = new Set(
+    dataMonths.filter((m) => !initialMonth || m > initialMonth),
+  );
+  if (!initialMonth || currentMonthKey > initialMonth) growthMonthSet.add(currentMonthKey);
+  const growthMonths = [...growthMonthSet].sort(); // 昇順
+  let cumulativeContacts = baseline.contacts; // 累計は初期分から積み上げる
+  const growthAsc = growthMonths.map((month) => {
     const c = contactByMonth.get(month);
     const added = c?.added ?? 0;
     cumulativeContacts += added;
@@ -442,11 +456,13 @@ export default async function ReportsPage() {
       cumulative: cumulativeContacts,
     };
   });
-  const contactGrowth = [...contactGrowthAsc].reverse(); // 表示は新しい月が上
+  const contactGrowth = [...growthAsc].reverse(); // 表示は新しい月が上
   const contactStatusTotal = (s: string) =>
     contactStatusAgg.find((g) => g.status === s)?._count._all ?? 0;
   const totalContacts = contactStatusAgg.reduce((s, g) => s + g._count._all, 0);
   const activeContacts = contactStatusTotal("ACTIVE");
+  // 初期取込以降に増えた配信先の合計（＝総数 − 初期分）。
+  const grownSinceInitial = growthAsc.reduce((s, r) => s + r.added, 0);
   const newContactsThisMonth =
     contactGrowth.find((r) => r.month === currentMonthKey)?.added ?? 0;
 
@@ -774,8 +790,8 @@ export default async function ReportsPage() {
         </div>
       </Section>
 
-      {/* 配信先の増加（月別） */}
-      <Section title="配信先の増加（月別）">
+      {/* 配信先の増加（初期取込＋その後の月別） */}
+      <Section title="配信先の増加">
         <div className="flex flex-wrap gap-x-8 gap-y-2">
           <div>
             <div className="text-3xl font-bold leading-none text-foreground">
@@ -791,13 +807,63 @@ export default async function ReportsPage() {
           </div>
           <div>
             <div className="text-3xl font-bold leading-none text-foreground">
+              +{grownSinceInitial.toLocaleString("ja-JP")}
+            </div>
+            <div className="mt-1 text-xs text-muted">初期取込以降に増えた配信先</div>
+          </div>
+          <div>
+            <div className="text-3xl font-bold leading-none text-foreground">
               +{newContactsThisMonth.toLocaleString("ja-JP")}
             </div>
             <div className="mt-1 text-xs text-muted">今月の新規配信先</div>
           </div>
         </div>
+
+        {/* 初期（CSV一括取込）＝ベースライン */}
+        {initialMonth && (
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600">
+                初期取込
+              </span>
+              <span className="text-sm font-semibold text-slate-800">
+                CSV一括取込（{fmtMonth(initialMonth)}）
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-8 gap-y-1 text-sm text-slate-700">
+              <span>
+                配信先{" "}
+                <b className="tabular-nums text-slate-900">
+                  {baseline.contacts.toLocaleString("ja-JP")}
+                </b>{" "}
+                件
+              </span>
+              <span>
+                うち配信中{" "}
+                <b className="tabular-nums text-emerald-700">
+                  {baseline.activeContacts.toLocaleString("ja-JP")}
+                </b>{" "}
+                件
+              </span>
+              <span>
+                提携先会社{" "}
+                <b className="tabular-nums text-slate-900">
+                  {baseline.companies.toLocaleString("ja-JP")}
+                </b>{" "}
+                社
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* その後の増加（月別） */}
+        <div className="text-xs font-medium text-slate-500">
+          初期取込以降の増加（月別）
+        </div>
         {contactGrowth.length === 0 ? (
-          <p className="py-2 text-sm text-muted">データなし</p>
+          <p className="py-2 text-sm text-muted">
+            初期取込以降に増えた配信先はまだありません。
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -846,9 +912,9 @@ export default async function ReportsPage() {
           </div>
         )}
         <p className="text-xs text-muted">
-          ※ 登録日（連絡先が最初に追加された日）をJSTの月で集計。「うち配信中」は登録時点で配信中だった数。
-          CSV再取込で既存の連絡先が更新されても新規にはカウントしません（純増のみ）。
-          当月は月途中でも表示し、まだ増える可能性があります（途中経過）。
+          ※ 最初の月の一括取込（CSV）は「初期取込」として別枠にし、増加の行には含めません。
+          登録日（連絡先が最初に追加された日）をJSTの月で集計。CSV再取込で既存の連絡先が更新されても
+          新規にはカウントしません（純増のみ）。当月は月途中でも表示します（途中経過）。
         </p>
       </Section>
 
