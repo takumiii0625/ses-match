@@ -184,6 +184,11 @@ function fmtMonth(ym: string): string {
   const [y, m] = ym.split("-");
   return `${y}年${Number(m)}月`;
 }
+/** Date → JSTの年月キー YYYY-MM。 */
+function jstMonthKey(d: Date): string {
+  const j = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return `${j.getUTCFullYear()}-${String(j.getUTCMonth() + 1).padStart(2, "0")}`;
+}
 
 export default async function ReportsPage() {
   const org = await getCurrentOrg();
@@ -249,11 +254,13 @@ export default async function ReportsPage() {
         where: { createdAt: { gte: monthStart } },
         _sum: { cost: true },
       }),
-      // うち宛にメールを送ってきた送信元（全期間・差出人別の件数）。
+      // うち宛にメールを送ってきた送信元（全期間・差出人別の件数＋初回受信日）。
+      // _min.createdAt は「その会社が初めてメールを送ってきた月」の月別集計に使う。
       prisma.ingestedEmail.groupBy({
         by: ["fromAddr"],
         where: { orgId },
         _count: { _all: true },
+        _min: { createdAt: true },
       }),
       // 今日の送信元（差出人別）。
       prisma.ingestedEmail.groupBy({
@@ -506,6 +513,47 @@ export default async function ReportsPage() {
   const grownSinceInitial = growthAsc.reduce((s, r) => s + r.added, 0);
   const newContactsThisMonth =
     contactGrowth.find((r) => r.month === currentMonthKey)?.added ?? 0;
+
+  // -- 送信元会社の増加（月別）：受信メールの差出人を「初めて受信した月」で集計 --
+  // 各会社ドメインの初回受信日(_min.createdAt)を求め、そのJST月を「初出月」とする。
+  // 配信先(CSV)は静的でも、案件/人材メールを送ってくる会社は毎月増えるため、その実勢を月別に見せる。
+  const firstSeenByDomain = new Map<string, Date>();
+  for (const r of sendersAll) {
+    const d = companyDomain(r.fromAddr);
+    if (!d) continue; // フリーメール/不明は会社として数えない
+    const t = r._min?.createdAt;
+    if (!t) continue;
+    const cur = firstSeenByDomain.get(d);
+    if (!cur || t < cur) firstSeenByDomain.set(d, t);
+  }
+  // 初出月ごとに「新規送信元会社」と「うち未登録（＝配信先候補）」を数える。
+  const senderMonthMap = new Map<string, { total: number; unregistered: number }>();
+  for (const [domain, first] of firstSeenByDomain) {
+    const m = jstMonthKey(first);
+    const e = senderMonthMap.get(m) ?? { total: 0, unregistered: 0 };
+    e.total++;
+    if (!registeredDomains.has(domain)) e.unregistered++;
+    senderMonthMap.set(m, e);
+  }
+  // 当月は途中でも必ず表示。古い順に累計を積み、表示は新しい順。
+  const senderMonthKeys = [
+    ...new Set([...senderMonthMap.keys(), currentMonthKey]),
+  ].sort();
+  let cumulativeSenders = 0;
+  const senderGrowthAsc = senderMonthKeys.map((month) => {
+    const e = senderMonthMap.get(month);
+    const total = e?.total ?? 0;
+    cumulativeSenders += total;
+    return {
+      month,
+      total,
+      unregistered: e?.unregistered ?? 0,
+      cumulative: cumulativeSenders,
+    };
+  });
+  const senderGrowth = [...senderGrowthAsc].reverse();
+  const newSendersThisMonth =
+    senderGrowth.find((r) => r.month === currentMonthKey)?.total ?? 0;
 
   // -- KPI aggregates --
 
@@ -884,8 +932,8 @@ export default async function ReportsPage() {
         </p>
       </Section>
 
-      {/* 配信先の増加（初期取込＋その後の月別） */}
-      <Section title="配信先の増加">
+      {/* 配信先の増加（初期取込＋その後の月別）＋送信元会社の増加 */}
+      <Section title="配信先・送信元会社の増加">
         <div className="flex flex-wrap gap-x-8 gap-y-2">
           <div>
             <div className="text-3xl font-bold leading-none text-foreground">
@@ -1010,6 +1058,76 @@ export default async function ReportsPage() {
           登録日（連絡先が最初に追加された日）をJSTの月で集計。CSV再取込で既存の連絡先が更新されても
           新規にはカウントしません（純増のみ）。当月は月途中でも表示します（途中経過）。
         </p>
+
+        {/* 送信元会社の増加（受信ベース・月別） */}
+        <div className="mt-2 border-t border-border pt-4">
+          <div className="flex flex-wrap items-end gap-x-8 gap-y-2">
+            <div>
+              <div className="text-3xl font-bold leading-none text-foreground">
+                +{newSendersThisMonth.toLocaleString("ja-JP")}
+              </div>
+              <div className="mt-1 text-xs text-muted">
+                今月 初めてメールが来た会社
+              </div>
+            </div>
+            <p className="text-xs text-muted max-w-md">
+              配信先（CSV/手動）とは別に、案件・人材メールを送ってくる会社は毎月増えています。
+              各社を「初めて受信した月」で数え、うち<b>未登録</b>（＝配信先に追加できる候補）も表示します。
+            </p>
+          </div>
+          <div className="mt-3 text-xs font-medium text-slate-500">
+            送信元会社の増加（初めて受信した月で集計）
+          </div>
+          {senderGrowth.length === 0 ? (
+            <p className="py-2 text-sm text-muted">データなし</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs text-slate-500">
+                    <th className="px-3 py-2 text-left font-medium">月</th>
+                    <th className="px-3 py-2 text-right font-medium">新規送信元会社</th>
+                    <th className="px-3 py-2 text-right font-medium">うち未登録（配信先候補）</th>
+                    <th className="px-3 py-2 text-right font-medium">累計送信元会社</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {senderGrowth.map((r) => {
+                    const isCurrent = r.month === currentMonthKey;
+                    return (
+                      <tr
+                        key={r.month}
+                        className={isCurrent ? "bg-emerald-50" : "hover:bg-slate-50"}
+                      >
+                        <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+                          {fmtMonth(r.month)}
+                          {isCurrent && (
+                            <span className="ml-2 inline-flex items-center rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                              今月・途中経過
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-800">
+                          +{r.total.toLocaleString("ja-JP")}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-amber-700">
+                          +{r.unregistered.toLocaleString("ja-JP")}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-slate-700">
+                          {r.cumulative.toLocaleString("ja-JP")}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <p className="mt-2 text-xs text-muted">
+            ※ 差出人メールのドメイン＝会社で名寄せ。「初めて受信した月」で新規計上（フリーメールは対象外）。
+            「うち未登録」は現時点で提携先会社（配信先）に未登録の会社数＝一斉案内に追加できる候補。
+          </p>
+        </div>
       </Section>
 
       {/* Status breakdowns */}
