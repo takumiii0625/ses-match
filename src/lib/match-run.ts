@@ -13,7 +13,12 @@ import { pregenerateProjectBodies } from "@/lib/email/project-mail";
 import { loadNgDomains, isNgDomain } from "@/lib/ng-company";
 
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
+// 70-79 も保存はする（自動送信は80+のみ・一覧表示も80+のみ。70-79は将来の閾値調整の余地として残す）。
 export const MIN_SCORE = 70;
+
+// マッチ一覧・自社保有人材/案件マッチの各画面で「表示する」最低スコア。
+// 保存(MIN_SCORE=70)より高くして、確度の高い80点以上だけを一覧に出す。
+export const DISPLAY_MIN_SCORE = 80;
 
 // マッチ処理で実際に使う列だけ取得する。emailBody（フルのメール本文）等の重い列を
 // 読まないことで、Neonのネットワーク転送量を大幅に削減する（無料枠の超過対策）。

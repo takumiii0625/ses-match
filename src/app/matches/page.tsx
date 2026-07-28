@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { MatchesList } from "./matches-list";
 import { toMatchVM, matchVmSelect, buildSentInfoMap } from "./serialize";
+import { DISPLAY_MIN_SCORE } from "@/lib/match-run";
 
 export const metadata = { title: "マッチ一覧 — Caduceus" };
 export const dynamic = "force-dynamic";
@@ -33,7 +34,7 @@ export default async function MatchesPage(props: {
       where: {
         project: { orgId: org.id, dataFrom: { not: "REGISTER" } },
         talent: { talentType: "PARTNER" },
-        score: { gte: 70 },
+        score: { gte: DISPLAY_MIN_SCORE },
         proposable: true,
         rejectedAt: null,
         ...matchWindow,

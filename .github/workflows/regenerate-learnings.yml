@@ -1,0 +1,21 @@
+name: 差し戻し再分析（学習メモ再生成）
+
+# 差し戻し履歴を複数エージェントで分析し、マッチ判定に付加する学習メモを再生成する。
+# 手動(workflow_dispatch)で「今すぐ反映」したいときに実行する。
+on:
+  workflow_dispatch: {}
+
+concurrency:
+  group: regenerate-learnings
+  cancel-in-progress: false
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 差し戻しを再分析して学習メモを再生成
+        run: |
+          resp=$(curl -fsS --max-time 295 -X POST \
+            "https://sesmatch.encore-biz.com/api/cron/regenerate-learnings" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+          echo "$resp"

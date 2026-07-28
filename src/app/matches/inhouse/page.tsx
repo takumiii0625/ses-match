@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { MatchesList } from "../matches-list";
 import { toMatchVM, matchVmSelect, buildSentInfoMap, buildSentTalentMap } from "../serialize";
 import { RematchButton } from "../../matching/rematch-button";
+import { DISPLAY_MIN_SCORE } from "@/lib/match-run";
 
 export const metadata = { title: "自社保有人材マッチ（手動） — Caduceus" };
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export default async function InhouseMatchesPage(props: {
       where: {
         project: { orgId: org.id },
         talent: { orgId: org.id, talentType: "INHOUSE" },
-        score: { gte: 70 },
+        score: { gte: DISPLAY_MIN_SCORE },
         rejectedAt: null,
         ...window,
       },
