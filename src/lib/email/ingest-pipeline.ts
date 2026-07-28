@@ -59,6 +59,20 @@ export function isTransientDbError(message: string): boolean {
   );
 }
 
+/**
+ * In-Reply-To / References ヘッダから <message-id> トークンを取り出す（重複除去）。
+ * これらが「取込済みメール」の Message-ID を指す場合、そのメールは既存スレッドへの返信
+ * （提案への返信・やり取りの続き）であり、新規の案件/人材ではないと判定できる。
+ */
+export function referencedMessageIds(mail: {
+  inReplyTo?: string | null;
+  references?: string | null;
+}): string[] {
+  const raw = `${mail.inReplyTo ?? ""} ${mail.references ?? ""}`;
+  const ids = raw.match(/<[^<>\s]+>/g) ?? [];
+  return [...new Set(ids)];
+}
+
 const REMOTE_VALUES = new Set<RemotePreference>([
   "FULL_REMOTE",
   "MOSTLY_REMOTE",
@@ -140,6 +154,37 @@ async function ingestEmails(
     if (existing) {
       result.skipped++;
       continue;
+    }
+
+    // 返信スレッドの除外: In-Reply-To/References が「取込済みメール」を指す＝既存スレッドへの
+    // 返信（提案への返信メールや、その後のやり取り）。新規の案件/人材ではないので、LLMにかけず
+    // 取り込まない。これで「提案→返信メールが再びマッチ対象になる」ループを防ぐ。
+    const refIds = referencedMessageIds(mail);
+    if (refIds.length > 0) {
+      const inThread = await prisma.ingestedEmail.findFirst({
+        where: { orgId: org.id, messageId: { in: refIds } },
+        select: { id: true },
+      });
+      if (inThread) {
+        const reason = "既存スレッドへの返信（提案の返信など。新規ではないため取込しない）";
+        await prisma.ingestedEmail
+          .create({
+            data: {
+              orgId: org.id,
+              messageId: mail.messageId,
+              gmailId: mail.gmailId,
+              fromAddr: mail.from ?? null,
+              subject: mail.subject ?? null,
+              receivedAt: mail.date ?? null,
+              kind: "IGNORE",
+              reason,
+            },
+          })
+          .catch(() => {});
+        result.ignored++;
+        result.items.push({ subject: mail.subject, from: mail.from, kind: "IGNORE", reason });
+        continue;
+      }
     }
 
     const sourceEmail = parseFromEmail(mail.from);

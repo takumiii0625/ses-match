@@ -132,6 +132,9 @@ export interface FetchedEmail {
   subject?: string;
   date?: Date;
   text: string;
+  inReplyTo?: string; // In-Reply-To ヘッダ（返信元 Message-ID）
+  references?: string; // References ヘッダ（スレッドの Message-ID 連鎖）
+  threadId?: string; // Gmail スレッドID
   attachments: EmailAttachment[];
   // 軽量取得（fetchEmailByIdLight）時にセットされる未抽出の添付参照。
   // dedup通過後に extractAttachmentsFor で初めてダウンロード＆テキスト抽出する（再送で捨てる無駄を回避）。
@@ -346,6 +349,10 @@ async function parseMessageCommon(
       subject: header(headers, "Subject"),
       date: dateStr ? new Date(dateStr) : undefined,
       text,
+      // 返信スレッド判定用（In-Reply-To / References）。提案への返信メールを新規取込しないために使う。
+      inReplyTo: header(headers, "In-Reply-To"),
+      references: header(headers, "References"),
+      threadId: msg.data.threadId ?? undefined,
     },
     atts: acc.atts,
   };

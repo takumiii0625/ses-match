@@ -27,7 +27,22 @@ vi.mock("./gmail", () => ({
   fetchEmails: vi.fn(),
 }));
 
-import { runMailIngestPage, isTransientDbError } from "./ingest-pipeline";
+import { runMailIngestPage, isTransientDbError, referencedMessageIds } from "./ingest-pipeline";
+
+describe("referencedMessageIds — 返信スレッド判定用の参照Message-ID抽出", () => {
+  it("In-Reply-To と References から <id> を重複なく取り出す", () => {
+    expect(
+      referencedMessageIds({
+        inReplyTo: "<msg-A@mail>",
+        references: "<msg-A@mail> <msg-B@mail>",
+      }),
+    ).toEqual(["<msg-A@mail>", "<msg-B@mail>"]);
+  });
+  it("ヘッダが無ければ空配列（新規メール扱い）", () => {
+    expect(referencedMessageIds({ inReplyTo: null, references: null })).toEqual([]);
+    expect(referencedMessageIds({})).toEqual([]);
+  });
+});
 
 describe("isTransientDbError — 一時的DB接続エラーの判定", () => {
   it("Neon/Postgres接続系のエラーは true（次回再試行させる）", () => {

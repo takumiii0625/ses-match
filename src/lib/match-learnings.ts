@@ -31,7 +31,14 @@ export async function regenerateMatchLearnings(
     where: { orgId },
     orderBy: { createdAt: "desc" },
     take: 200,
-    select: { reason: true, projectTitle: true, talentName: true, score: true },
+    select: {
+      reason: true,
+      projectTitle: true,
+      talentName: true,
+      score: true,
+      projectId: true,
+      talentId: true,
+    },
   });
   if (rejections.length === 0) {
     // 履歴が無くなったら学習も消す。
@@ -41,10 +48,36 @@ export async function regenerateMatchLearnings(
     });
     return { ok: false, count: 0, error: "差し戻しの記録がありません" };
   }
+
+  // 商流起因の差し戻しを的確に分析できるよう、案件の商流制限(channelText/supportFee)と
+  // 人材の所属(affiliation/talentType)を id で引き当てて入力に併記する（案件/人材が現存する分）。
+  const projectIds = [...new Set(rejections.map((r) => r.projectId))];
+  const talentIds = [...new Set(rejections.map((r) => r.talentId))];
+  const [projects, talents] = await Promise.all([
+    prisma.project.findMany({
+      where: { id: { in: projectIds } },
+      select: { id: true, channelText: true, supportFee: true },
+    }),
+    prisma.talent.findMany({
+      where: { id: { in: talentIds } },
+      select: { id: true, affiliation: true, talentType: true },
+    }),
+  ]);
+  const projMap = new Map(projects.map((p) => [p.id, p]));
+  const talMap = new Map(talents.map((t) => [t.id, t]));
+
   const input = rejections
     .map((r, i) => {
       const score = r.score != null ? `${Math.round(r.score)}点` : "-";
-      return `${i + 1}. 案件「${r.projectTitle ?? "?"}」 × 人材「${r.talentName ?? "?"}」（${score}）\n   理由: ${r.reason}`;
+      const p = projMap.get(r.projectId);
+      const t = talMap.get(r.talentId);
+      const channel = p?.channelText
+        ? `商流制限:${p.channelText}${p.supportFee ? "／支援費あり" : ""}`
+        : "商流制限:記載なし";
+      const affil = t
+        ? `所属:${t.affiliation ?? "不明"}(${t.talentType === "INHOUSE" ? "自社保有" : "他社"})`
+        : "所属:不明";
+      return `${i + 1}. 案件「${r.projectTitle ?? "?"}」[${channel}] × 人材「${r.talentName ?? "?"}」[${affil}]（${score}）\n   理由: ${r.reason}`;
     })
     .join("\n");
 
