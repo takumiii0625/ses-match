@@ -388,6 +388,18 @@ function denull<T extends Record<string, unknown>>(obj: T): T {
   return out as T;
 }
 
+/**
+ * 単価を「万円」単位に正規化する。仕様上 rate は月額・万円単位の整数（50万→50）だが、
+ * LLM が「50万円まで」を 500000（円）と抽出してしまう誤りが散見される。
+ * 月額の万円単価は現実的に3桁以内（〜数百万）なので、1000以上は「円」で入ったと判断して
+ * 1/10000 に補正する（例: 500000→50, 800000→80, 1200000→120）。正常な万円値には触れない。
+ */
+export function normalizeManYen(v: number | null | undefined): number | null {
+  if (v == null || !Number.isFinite(v)) return null;
+  if (v >= 1000) return Math.round(v / 10000);
+  return v;
+}
+
 export class AnthropicAIService implements AIService {
   private client: Anthropic;
 
@@ -491,12 +503,16 @@ export class AnthropicAIService implements AIService {
     attachments?: EmailAttachment[],
     systemPrompt?: string,
   ): Promise<ParsedTalent> {
-    return this.extract<ParsedTalent>(
+    const t = await this.extract<ParsedTalent>(
       systemPrompt?.trim() || DEFAULT_TALENT_PROMPT,
       TALENT_SCHEMA,
       rawEmail,
       attachments,
     );
+    // 円で抽出された単価（例 500000）を万円（50）に補正する。
+    t.desiredRateMin = normalizeManYen(t.desiredRateMin) ?? undefined;
+    t.desiredRateMax = normalizeManYen(t.desiredRateMax) ?? undefined;
+    return t;
   }
 
   async parseProjectEmail(
@@ -504,12 +520,16 @@ export class AnthropicAIService implements AIService {
     attachments?: EmailAttachment[],
     systemPrompt?: string,
   ): Promise<ParsedProject> {
-    return this.extract<ParsedProject>(
+    const p = await this.extract<ParsedProject>(
       systemPrompt?.trim() || DEFAULT_PROJECT_PROMPT,
       PROJECT_SCHEMA,
       rawEmail,
       attachments,
     );
+    // 円で抽出された単価（例 500000）を万円（50）に補正する。
+    p.rateMin = normalizeManYen(p.rateMin) ?? undefined;
+    p.rateMax = normalizeManYen(p.rateMax) ?? undefined;
+    return p;
   }
 
   async generateProposal(input: ProposalInput, systemPrompt?: string): Promise<string> {
