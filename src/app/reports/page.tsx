@@ -425,18 +425,22 @@ export default async function ReportsPage() {
     const e = senderMonthMap.get(month);
     const total = e?.total ?? 0;
     cumulativeSenders += total;
+    const unregistered = e?.unregistered ?? 0;
     return {
       month,
       total,
-      unregistered: e?.unregistered ?? 0,
+      unregistered,
+      registered: total - unregistered, // うち配信先(CSV)にも登録済み
       cumulative: cumulativeSenders,
     };
   });
   const senderGrowth = [...senderGrowthAsc].reverse();
   const newSendersThisMonth =
     senderGrowth.find((r) => r.month === currentMonthKey)?.total ?? 0;
-  // 送信元会社の累計（これまでにメールをくれた会社数）と、うち未登録（配信先候補）。
+  // 送信元会社の累計（これまでにメールをくれた会社数）と、うち未登録（配信先候補）／うち登録済み。
   const totalSenderCompanies = firstSeenByDomain.size;
+  // うち「配信先(CSV取込)にも入っている＝登録済み」会社数。全送信元 − 未登録。
+  const registeredSenderCompanies = totalSenderCompanies - unregisteredCount;
 
   // -- KPI aggregates --
 
@@ -785,6 +789,12 @@ export default async function ReportsPage() {
             <div className="mt-1 text-xs text-muted">送信元会社 総数（累計）</div>
           </div>
           <div>
+            <div className="text-3xl font-bold leading-none text-emerald-600">
+              {registeredSenderCompanies.toLocaleString("ja-JP")}
+            </div>
+            <div className="mt-1 text-xs text-muted">うち登録済み（配信先にも有り）</div>
+          </div>
+          <div>
             <div className="text-3xl font-bold leading-none text-amber-600">
               {unregisteredCount.toLocaleString("ja-JP")}
             </div>
@@ -810,6 +820,7 @@ export default async function ReportsPage() {
                 <tr className="border-b border-border text-xs text-slate-500">
                   <th className="px-3 py-2 text-left font-medium">月</th>
                   <th className="px-3 py-2 text-right font-medium">新規送信元会社</th>
+                  <th className="px-3 py-2 text-right font-medium">うち登録済み</th>
                   <th className="px-3 py-2 text-right font-medium">うち未登録（配信先候補）</th>
                   <th className="px-3 py-2 text-right font-medium">累計送信元会社</th>
                 </tr>
@@ -833,6 +844,9 @@ export default async function ReportsPage() {
                       <td className="px-3 py-2 text-right tabular-nums font-semibold text-slate-800">
                         +{r.total.toLocaleString("ja-JP")}
                       </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
+                        +{r.registered.toLocaleString("ja-JP")}
+                      </td>
                       <td className="px-3 py-2 text-right tabular-nums text-amber-700">
                         +{r.unregistered.toLocaleString("ja-JP")}
                       </td>
@@ -848,8 +862,8 @@ export default async function ReportsPage() {
         )}
         <p className="text-xs text-muted">
           ※ 案件・人材メールを送ってくる会社を、差出人メールのドメイン＝会社で名寄せ。「初めて受信した月」で
-          新規計上（フリーメールは対象外）。「うち未登録」は現時点で提携先会社（配信先）に未登録の会社数＝
-          一斉案内に追加できる候補。当月は月途中でも表示します（途中経過）。
+          新規計上（フリーメールは対象外）。「うち登録済み」は配信先（CSV取込・提携先会社）にも入っている会社＝
+          メールをくれる取引先。「うち未登録」は配信先に未登録＝一斉案内に追加できる候補。当月は月途中でも表示します（途中経過）。
         </p>
       </Section>
 
