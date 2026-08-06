@@ -387,6 +387,9 @@ export async function runMatchingForOrg(
     // 判定済みペア（既にMatchがある）をLLMに再判定させない（コスト削減）。定時の日次rematchで有効化。
     // 手動フル再マッチ（プロンプト変更の反映やり直し等）は false で全件再評価する。
     skipExisting?: boolean;
+    // 「新規」境界を明示指定（マッチのウォーターマーク）。前回rematch以降に取り込んだ分だけを
+    // 新規として判定させる。未指定なら従来どおり today/sinceDays から算出（手動フル再マッチ用）。
+    newSince?: Date;
   } = {},
 ): Promise<RematchPageResult> {
   const offset = Math.max(0, opts.offset ?? 0);
@@ -400,8 +403,10 @@ export async function runMatchingForOrg(
   const sinceDays = opts.sinceDays && opts.sinceDays > 0 ? opts.sinceDays : 1;
   const dayMs = 24 * 60 * 60 * 1000;
   const todayStart = startOfTodayJst();
+  // ウォーターマーク指定（定時の増分マッチ）があればそれを新規境界に。無ければ today/sinceDays。
   const newSince =
-    sinceDays <= 1 ? todayStart : new Date(todayStart.getTime() - (sinceDays - 1) * dayMs);
+    opts.newSince ??
+    (sinceDays <= 1 ? todayStart : new Date(todayStart.getTime() - (sinceDays - 1) * dayMs));
   // 候補プールの窓: 新規境界からさらに MATCH_WINDOW_DAYS 日前まで取り込んだ分。
   // これで「新規案件 × 直近N日の人材」「新規人材 × 直近N日の案件」を両立できる。
   // 自社人材(INHOUSE)は取込日に関係なく常にプールに含む。

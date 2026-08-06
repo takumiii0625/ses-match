@@ -212,6 +212,24 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // t1,t2 とも再評価
   });
 
+  it("newSince(ウォーターマーク)以降の新規だけ判定し、既存×既存は再判定しない", async () => {
+    const wm = new Date("2026-08-06T02:00:00Z"); // 前回rematch時刻（=11時相当）
+    const before = new Date("2026-08-06T01:00:00Z"); // wm前=既存
+    const after = new Date("2026-08-06T03:00:00Z"); // wm後=新規（15時相当）
+    db.project.findMany.mockResolvedValue([
+      { ...project("p_old"), createdAt: before }, // 既存案件
+      { ...project("p_new"), createdAt: after }, // 新規案件
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t_old"), createdAt: before }, // 既存人材
+      { ...talent("t_new"), createdAt: after }, // 新規人材
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0, newSince: wm });
+    // p_new(新規)→全人材(t_old,t_new)、p_old(既存)→新規人材(t_new)のみ。
+    // p_old × t_old（既存×既存）は再判定しない → 判定は3ペアだけ。
+    expect(res.saved).toBe(3);
+  });
+
   it("「法人契約のみ」案件もフリーランス人材を除外", async () => {
     db.project.findMany.mockResolvedValue([
       { ...project("p1"), channelText: "法人契約のみ" },
