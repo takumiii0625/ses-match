@@ -361,6 +361,16 @@ export interface RematchPageResult {
   minScore: number;
 }
 
+/** 指定案件群について既にMatchがあるペア(projectId#talentId)の集合。判定済みスキップ用。 */
+async function loadExistingMatchPairs(projectIds: string[]): Promise<Set<string>> {
+  if (projectIds.length === 0) return new Set();
+  const rows = await prisma.match.findMany({
+    where: { projectId: { in: projectIds } },
+    select: { projectId: true, talentId: true },
+  });
+  return new Set(rows.map((r) => `${r.projectId}#${r.talentId}`));
+}
+
 /**
  * 組織内の全案件を LLM マッチング（手動「全件マッチ」/ rematch クロン用）。
  * offset/limit で案件を分割処理できる（1リクエストの時間を短く保ちタイムアウトを防ぐ）。
@@ -374,6 +384,9 @@ export async function runMatchingForOrg(
     // all=自社+他社 / inhouse=自社のみ / registered=自社登録案件(REGISTER)×直近人材（手動の自社案件マッチ）
     scope?: "all" | "inhouse" | "registered";
     sinceDays?: number; // 対象とする配信日の幅（1=今日のみ。例 3=今日含む直近3日）
+    // 判定済みペア（既にMatchがある）をLLMに再判定させない（コスト削減）。定時の日次rematchで有効化。
+    // 手動フル再マッチ（プロンプト変更の反映やり直し等）は false で全件再評価する。
+    skipExisting?: boolean;
   } = {},
 ): Promise<RematchPageResult> {
   const offset = Math.max(0, opts.offset ?? 0);
@@ -453,13 +466,23 @@ export async function runMatchingForOrg(
   // rankAndSave の upsert は update でパイプライン/差し戻し列に触れないので状態は保持される。
   const slice = targets.slice(offset, offset + limit);
 
+  // 判定済みペア（既にMatchあり）を再判定しない（コスト削減）。定時rematchで有効化。
+  // これで取込時の差分マッチ(runMatchingForNew)が既に判定したペアを日次rematchが再判定する無駄を省く。
+  const existingPairs = opts.skipExisting
+    ? await loadExistingMatchPairs(slice.map((s) => s.project.id))
+    : new Set<string>();
+
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
     slice.map(async ({ project, pool }) => {
       const candidates = restrictCandidatesByNationality(
         restrictCandidatesByNg(
           restrictCandidatesByChannel(
-            pool.filter((t) => !isSameCompany(t, project)),
+            pool.filter(
+              (t) =>
+                !isSameCompany(t, project) &&
+                !existingPairs.has(`${project.id}#${t.id}`),
+            ),
             project,
           ),
           ngDomains,
@@ -561,12 +584,19 @@ export async function runMatchingForNew(
     })
     .filter(({ pool }) => pool.length > 0);
 
+  // 判定済みペア（既にMatchあり）は再判定しない（取込差分マッチの再実行・重複起動でも無駄打ちしない）。
+  const existingPairs = await loadExistingMatchPairs(targets.map((t) => t.project.id));
+
   const settled = await Promise.allSettled(
     targets.map(async ({ project, pool }) => {
       const candidates = restrictCandidatesByNationality(
         restrictCandidatesByNg(
           restrictCandidatesByChannel(
-            pool.filter((t) => !isSameCompany(t, project)),
+            pool.filter(
+              (t) =>
+                !isSameCompany(t, project) &&
+                !existingPairs.has(`${project.id}#${t.id}`),
+            ),
             project,
           ),
           ngDomains,

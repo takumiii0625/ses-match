@@ -114,9 +114,10 @@ function formatSkillsWithYears(
   return parts.join(", ");
 }
 
-// マッチ判定の1リクエストあたり候補数。小さいほど1回の出力が短く、件数が多くても
-// max_tokens で打ち切られない。バッチは並列・独立なので1つ失敗しても他は残る。
-const MATCH_BATCH_SIZE = 5;
+// マッチ判定の1リクエストあたり候補数。大きいほど巨大な判定プロンプトの送信回数が減り安くなるが、
+// 1回の出力が長くなる（max_tokens=8192 に収まる範囲で）。8人なら30候補で4コール（5人だと6コール）。
+// env MATCH_BATCH_SIZE で調整可。バッチは並列・独立なので1つ失敗しても他は残る。
+const MATCH_BATCH_SIZE = Number(process.env.MATCH_BATCH_SIZE ?? "8") || 8;
 
 // マッチ判定のAnthropic同時リクエスト上限。案件を並列処理しても、全バッチ呼び出しは
 // このリミッタを通すので同時実行数はここで頭打ちになる（レート制限・タイムアウト対策）。

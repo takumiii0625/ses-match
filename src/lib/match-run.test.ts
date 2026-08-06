@@ -5,7 +5,7 @@ const db = vi.hoisted(() => ({
   project: { findMany: vi.fn() },
   talent: { findMany: vi.fn() },
   organization: { findUnique: vi.fn() },
-  match: { deleteMany: vi.fn(), upsert: vi.fn() },
+  match: { deleteMany: vi.fn(), upsert: vi.fn(), findMany: vi.fn() },
   ngCompany: { findMany: vi.fn() },
 }));
 const { rankMock } = vi.hoisted(() => ({ rankMock: vi.fn() }));
@@ -65,6 +65,7 @@ beforeEach(() => {
   db.organization.findUnique.mockResolvedValue({ matchPrompt: null });
   db.match.deleteMany.mockResolvedValue({ count: 0 });
   db.match.upsert.mockResolvedValue({});
+  db.match.findMany.mockResolvedValue([]); // 既定は判定済みペアなし
   db.ngCompany.findMany.mockResolvedValue([]); // 既定はNG企業なし
   // 全候補を80点（>=MIN_SCORE）で提案可に。
   rankMock.mockImplementation(async (_proj: unknown, candidates: { talentId: string }[]) =>
@@ -187,6 +188,28 @@ describe("runMatchingForOrg（ページング）", () => {
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(rankMock).toHaveBeenCalledTimes(1);
     expect(res.saved).toBe(1); // t4 のみ（フリーランス2名と2社先1名は除外）
+  });
+
+  it("skipExisting=true は判定済みペア（既にMatchあり）をLLMに再判定させない", async () => {
+    db.project.findMany.mockResolvedValue([project("p1")]);
+    db.talent.findMany.mockResolvedValue([talent("t1"), talent("t2")]);
+    // p1×t1 は既にMatch済み → 再判定しない。t2 だけ判定される。
+    db.match.findMany.mockResolvedValue([{ projectId: "p1", talentId: "t1" }]);
+    const res = await runMatchingForOrg("org1", { offset: 0, skipExisting: true });
+    expect(rankMock).toHaveBeenCalledTimes(1);
+    // LLMに渡した候補は t2 のみ（t1 はスキップ）。
+    const candidatesArg = rankMock.mock.calls[0][1] as { talentId: string }[];
+    expect(candidatesArg.map((c) => c.talentId)).toEqual(["t2"]);
+    expect(res.saved).toBe(1);
+  });
+
+  it("skipExisting=false（手動フル再マッチ）は判定済みペアも再評価する", async () => {
+    db.project.findMany.mockResolvedValue([project("p1")]);
+    db.talent.findMany.mockResolvedValue([talent("t1"), talent("t2")]);
+    db.match.findMany.mockResolvedValue([{ projectId: "p1", talentId: "t1" }]);
+    const res = await runMatchingForOrg("org1", { offset: 0 }); // skipExisting未指定=false
+    expect(db.match.findMany).not.toHaveBeenCalled(); // そもそも既存ペアを引かない
+    expect(res.saved).toBe(2); // t1,t2 とも再評価
   });
 
   it("「法人契約のみ」案件もフリーランス人材を除外", async () => {

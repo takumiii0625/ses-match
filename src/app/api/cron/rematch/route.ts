@@ -48,7 +48,15 @@ async function handle(req: Request) {
       });
     }
 
-    const result = await runMatchingForOrg(org.id, { offset, limit, scope, sinceDays });
+    // 定時（daily=1）は判定済みペアをスキップして再判定コストを省く。
+    // 手動（daily=0 / 画面の全件マッチ）はプロンプト変更の反映やり直しのため全件再評価する。
+    const result = await runMatchingForOrg(org.id, {
+      offset,
+      limit,
+      scope,
+      sinceDays,
+      skipExisting: daily,
+    });
 
     // 完了したら本日分を記録（次の定時発火はスキップされる）。
     if (daily && result.done) {
