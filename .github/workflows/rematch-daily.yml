@@ -32,15 +32,20 @@ jobs:
     steps:
       - name: マッチを実行（完了までページループ・遅いページはスキップして継続）
         run: |
-          # 取込完了トリガ＝当日分(days=1)を offset=0 からクリーン再生成。手動は入力値を使う。
+          # 取込完了トリガ＝当日分(days=1)を offset=0 から実行。手動(dispatch)は入力値を使う。
+          # daily=1: 取込は1日3回(11/15/17時)走り本ワークフローも3回発火するが、rematchは
+          # 「本日まだ実マッチしていない時だけ」実行する（org.lastRematchDate ガード）。これで
+          # 同じ日の案件を3〜4回LLM再判定していた無駄を排除する（2回目以降の発火は即スキップ）。
+          # 新規に取り込んだ分は取込時の差分マッチ(runMatchingForNew)が毎回カバーするため取りこぼさない。
+          # 手動(dispatch)は daily=0 で常に実行（プロンプト変更の反映やり直し等の強制再マッチ用）。
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            days="${{ github.event.inputs.days }}"; offset="${{ github.event.inputs.startOffset }}"
+            days="${{ github.event.inputs.days }}"; offset="${{ github.event.inputs.startOffset }}"; daily=0
           else
-            days=1; offset=0
+            days=1; offset=0; daily=1
           fi
           for i in $(seq 1 1000); do
             resp=$(curl -fsS --max-time 290 -X POST \
-              "https://sesmatch.encore-biz.com/api/cron/rematch?offset=$offset&limit=3&scope=all&days=$days" \
+              "https://sesmatch.encore-biz.com/api/cron/rematch?offset=$offset&limit=3&scope=all&days=$days&daily=$daily" \
               -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" || true)
             if [ -z "$resp" ]; then
               echo "page failed at offset=$offset — skip ahead"

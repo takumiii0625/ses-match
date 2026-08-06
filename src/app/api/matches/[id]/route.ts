@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { isStageKey } from "@/lib/pipeline";
-import { regenerateMatchLearnings } from "@/lib/match-learnings";
 
 /**
  * マッチの更新（提案管理）。
@@ -56,10 +55,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           },
         }),
       ]);
-      // 差し戻しのたびに学習を都度再生成（自動反映）。送信レスポンスはブロックしない。
-      void regenerateMatchLearnings(org.id).catch((e) =>
-        console.error("[reject] 学習の再生成に失敗:", e),
-      );
+      // 差し戻しは記録だけ残す。学習の再生成（複数エージェント分析）は自動では走らせず、
+      // 「今すぐ再分析して反映」ボタン／手動ワークフローで明示的に実行したときのみ行う（コスト削減）。
       return NextResponse.json({ ok: true });
     }
 
