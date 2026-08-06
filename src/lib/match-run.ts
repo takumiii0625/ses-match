@@ -28,6 +28,7 @@ const TALENT_MATCH_SELECT = {
   age: true,
   nationality: true,
   talentType: true,
+  employmentType: true, // 個人事業主不可の足切りに使う（未設定は所属テキストで判定）。
   kishaOk: true,
   affiliation: true,
   mainSkills: true,
@@ -100,8 +101,9 @@ function startOfTodayJst(): Date {
  *
  * 表現ゆれに強く判定する: 貴社/御社 の直後（間に「の」「様」が入る形も許容）に
  * 「正社員 / 社員 / プロパー / 所属 / 要員 / フリーランス / 直 / まで / 迄 / のみ」が続くものを「貴社止まり」とみなす。
+ * さらに「御社/貴社の方(かた)まで」＝御社所属の方まで、も貴社止まりとみなす（方針/方向/方法/方式/方面は除外）。
  * 例: 貴社まで・貴社迄・貴社のみ・貴社社員・貴社正社員(まで)・貴社プロパー・貴社直(まで)・貴社所属(まで)・
- *     貴社要員(まで)・貴社フリーランス(まで)・貴社の正社員様まで・御社の要員様まで。
+ *     貴社要員(まで)・貴社フリーランス(まで)・貴社の正社員様まで・御社の要員様まで・御社の方まで・貴社の方のみ。
  * 「貴社の2社先まで」「貴社から1社先」等（貴社の直後が『N社先』『から』）は対象外（誤検知しない）。
  */
 function isOwnOnlyChannel(channelText: string | null): boolean {
@@ -109,7 +111,9 @@ function isOwnOnlyChannel(channelText: string | null): boolean {
   const t = channelText.replace(/\s/g, "");
   // 貴社/御社 + (任意の「の」) + (任意の「N…」ではないこと) + 止まり語。
   // 「貴社の2社先」を誤検知しないため、『貴社(の)?』の直後が止まり語のときだけ真とする。
-  return /(貴社|御社)の?(正?社員|プロパー|所属|要員|フリーランス|直|まで|迄|のみ)/.test(t);
+  if (/(貴社|御社)の?(正?社員|プロパー|所属|要員|フリーランス|直|まで|迄|のみ)/.test(t)) return true;
+  // 「御社/貴社の方(かた)…」＝御社所属の方。方針/方向/方法/方式/方面 は貴社止まりではないので除外。
+  return /(貴社|御社)の方(?![針向法式面])/.test(t);
 }
 
 const KANJI_NUM: Record<string, number> = {
@@ -142,8 +146,26 @@ function talentDepthFromUs(t: Talent): number {
   return (Number.isFinite(hops) ? hops : 0) + 1;
 }
 
+/** 案件が「個人事業主/フリーランス不可（法人契約のみ）」を明示しているか（channelText＋概要で判定）。 */
+function projectDisallowsFreelance(project: Project): boolean {
+  const t = `${project.channelText ?? ""}\n${project.description ?? ""}`.replace(/[ 　]/g, "");
+  if (/(個人事業主|個人事業|フリーランス|ﾌﾘｰﾗﾝｽ)(は|の方)?(不可|不採用|NG|ng|お断り|除く|以外|禁止|不採用)/.test(t)) {
+    return true;
+  }
+  // 「法人のみ/法人契約のみ/法人限定」も個人事業主を除外する意味。
+  return /法人(契約)?(のみ|限定)/.test(t);
+}
+
+/** 人材が個人事業主/フリーランスか（雇用形態 or 所属テキストで判定）。取込人材は所属テキストが主。 */
+function isFreelanceTalent(t: Talent): boolean {
+  if (t.employmentType === "FREELANCE") return true;
+  return /(フリーランス|個人事業主|個人事業|ﾌﾘｰﾗﾝｽ)/.test((t.affiliation ?? "").replace(/\s/g, ""));
+}
+
 /**
  * 商流による候補の事前足切り。
+ * - 個人事業主不可: 案件が「個人事業主/フリーランス不可・法人契約のみ」なら、フリーランス人材を
+ *   除外（自社・他社問わず）。契約形態はLLM任せにせず構造的に落とす。
  * - 商流の深さ制限: 他社人材の「自社視点の深さ」が案件の許容（channelTextの「N社先まで」）を
  *   超えるなら除外。案件が深さを明示していなければ既定は「自社から1社先（=送信元プロパー）」まで＝
  *   送信元から1社先以上の人材（自社視点2社先以上）は除外。支援費ありなら1段緩める。
@@ -151,19 +173,24 @@ function talentDepthFromUs(t: Talent): number {
  * - 「エンド直/プロパー/直のみ」案件で支援費の記載なし → 他社人材を除外し自社保有人材のみ。
  */
 function restrictCandidatesByChannel(candidates: Talent[], project: Project): Talent[] {
+  // 個人事業主不可 → フリーランス人材を除外（自社・他社問わず。商流判定より前に落とす）。
+  let list = candidates;
+  if (projectDisallowsFreelance(project)) {
+    list = list.filter((t) => !isFreelanceTalent(t));
+  }
   const ownOnly = isOwnOnlyChannel(project.channelText);
   if (ownOnly) {
-    return candidates.filter((t) => t.talentType === "INHOUSE" && t.kishaOk === true);
+    return list.filter((t) => t.talentType === "INHOUSE" && t.kishaOk === true);
   }
   const strictDirect = isStrictDirectChannel(project.channelText) && !project.supportFee;
   if (strictDirect) {
-    return candidates.filter((t) => t.talentType === "INHOUSE");
+    return list.filter((t) => t.talentType === "INHOUSE");
   }
   // 商流の深さ: 案件の許容（N社先まで）を超える他社人材は除外。未指定は既定=1社先まで。
   // 支援費ありは1段深くても可（商流を飛ばせる）。自社保有(INHOUSE)は常に対象。
   const allowed = allowedDepthFromChannel(project.channelText);
   const cap = (allowed ?? 1) + (project.supportFee ? 1 : 0);
-  return candidates.filter(
+  return list.filter(
     (t) => t.talentType === "INHOUSE" || talentDepthFromUs(t) <= cap,
   );
 }

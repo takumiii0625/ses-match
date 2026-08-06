@@ -145,11 +145,23 @@ describe("runMatchingForOrg（ページング）", () => {
       { ...project("p5"), channelText: "貴社要員まで" }, // 「要員」も貴社止まり
       { ...project("p6"), channelText: "貴社フリーランスまで" }, // 「フリーランス」も貴社止まり
       { ...project("p7"), channelText: "貴社の正社員様まで" }, // 「の」「様」入りも貴社止まり
+      { ...project("p8"), channelText: "御社の方まで" }, // 「御社の方(かた)まで」も貴社止まり
+      { ...project("p9"), channelText: "御社の方のみ ※個人事業主不可" }, // 「御社の方のみ」も貴社止まり
     ]);
     // TALENTS は全員 PARTNER → 貴社止まり案件は候補0でLLM呼び出しなし（全件除外）。
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(rankMock).not.toHaveBeenCalled();
     expect(res.saved).toBe(0);
+  });
+
+  it("「御社の方針で決定」は貴社止まりではない（方針/方向等は誤検知しない）", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "御社の方針で決定・商流不問" },
+    ]);
+    // 「方針」の“方”を貴社止まりと誤検知しない → 他社人材も候補に残る。
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(rankMock).toHaveBeenCalledTimes(1);
+    expect(res.saved).toBe(2);
   });
 
   it("「貴社の2社先まで」は貴社止まりではない（誤検知しない）", async () => {
@@ -160,6 +172,33 @@ describe("runMatchingForOrg（ページング）", () => {
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(rankMock).toHaveBeenCalledTimes(1);
     expect(res.saved).toBe(2); // t1,t2 とも候補
+  });
+
+  it("「個人事業主不可」案件はフリーランス人材を除外（雇用形態/所属テキストで判定）", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "商流不問／個人事業主不可" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), affiliation: "弊社フリーランス" }, // 所属テキストで個人事業主 → 除外
+      { ...talent("t2"), employmentType: "FREELANCE" }, // 雇用形態で個人事業主 → 除外
+      { ...talent("t3"), affiliation: "1社先正社員" }, // ただし自社視点2社先で商流上除外される
+      { ...talent("t4"), affiliation: "プロパー" }, // 社員・自社視点1社先 → 残る
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(rankMock).toHaveBeenCalledTimes(1);
+    expect(res.saved).toBe(1); // t4 のみ（フリーランス2名と2社先1名は除外）
+  });
+
+  it("「法人契約のみ」案件もフリーランス人材を除外", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "法人契約のみ" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), affiliation: "個人事業主" }, // 除外
+      { ...talent("t2"), affiliation: "プロパー" }, // 残る
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(1); // t2 のみ
   });
 
   it("商流未指定の案件は1社先以上の他社人材を除外（既定=送信元プロパーまで）", async () => {
