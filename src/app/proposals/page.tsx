@@ -10,6 +10,7 @@ import { RejectedTable, type RejectedVM } from "./rejected-table";
 import { ProposalSearch } from "./proposal-search";
 import { PipelineFilters } from "./pipeline-filters";
 import { RejectionLearnings } from "./rejection-learnings";
+import { MatchAnalysisChart, type DailyMatchStat } from "./analysis-chart";
 
 export const metadata = { title: "提案管理 — Caduceus" };
 export const dynamic = "force-dynamic";
@@ -27,14 +28,16 @@ const PROPOSAL_STATUS_TONE: Record<ProposalStatus, "slate" | "blue" | "green" | 
   REJECTED: "red",
 };
 
-type Tab = "pipeline" | "rejected" | "proposals";
+type Tab = "pipeline" | "rejected" | "proposals" | "analysis";
 
 export default async function ProposalsPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await props.searchParams;
   const tabParam = (typeof sp.tab === "string" ? sp.tab : "") as Tab;
-  const tab: Tab = ["pipeline", "rejected", "proposals"].includes(tabParam) ? tabParam : "pipeline";
+  const tab: Tab = ["pipeline", "rejected", "proposals", "analysis"].includes(tabParam)
+    ? tabParam
+    : "pipeline";
   const q = (typeof sp.q === "string" ? sp.q : "").trim().toLowerCase();
   const matchQ = (...parts: (string | null | undefined)[]) =>
     !q || parts.filter(Boolean).join(" ").toLowerCase().includes(q);
@@ -164,10 +167,32 @@ export default async function ProposalsPage(props: {
     matchQ(p.project.title, p.project.clientName, p.talent.name),
   );
 
+  // --- 分析: 日別のマッチ件数と、その内訳（提案／差し戻し）---
+  // マッチ日(Match.createdAt・JST)で日別集計。proposed=差し戻しでなく、案内/提案メールを
+  // 送信済み（SentEmailにSENTがある）ペア。直近60日。
+  const dailyStats = await prisma.$queryRaw<DailyMatchStat[]>`
+    SELECT to_char(m."createdAt" AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD') AS day,
+           COUNT(*)::int AS total,
+           COUNT(*) FILTER (WHERE m."rejectedAt" IS NOT NULL)::int AS rejected,
+           COUNT(*) FILTER (
+             WHERE m."rejectedAt" IS NULL AND EXISTS (
+               SELECT 1 FROM "SentEmail" s
+               WHERE s."talentId" = m."talentId" AND s."projectId" = m."projectId"
+                 AND s.status = 'SENT' AND s.kind IN ('PROJECT_INFO', 'TALENT_PROPOSAL')
+             )
+           )::int AS proposed
+    FROM "Match" m
+    JOIN "Talent" t ON t.id = m."talentId"
+    WHERE t."orgId" = ${org.id} AND m."createdAt" >= NOW() - INTERVAL '60 days'
+    GROUP BY day
+    ORDER BY day ASC
+  `;
+
   const tabs: { value: Tab; label: string; count: number }[] = [
     { value: "pipeline", label: "パイプライン", count: pipelineRows.length },
     { value: "rejected", label: "差し戻し済み", count: rejectedRows.length },
     { value: "proposals", label: "提案文", count: proposals.length },
+    { value: "analysis", label: "分析", count: dailyStats.reduce((s, d) => s + d.total, 0) },
   ];
 
   return (
@@ -285,6 +310,15 @@ export default async function ProposalsPage(props: {
               </table>
             </Card>
           )}
+        </>
+      )}
+
+      {tab === "analysis" && (
+        <>
+          <p className="px-1 text-xs text-muted">
+            日別のマッチ件数と、その内訳（提案／差し戻し／未対応）。直近60日・マッチ日基準。
+          </p>
+          <MatchAnalysisChart data={dailyStats} />
         </>
       )}
     </div>
