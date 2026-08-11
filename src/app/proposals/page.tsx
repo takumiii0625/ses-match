@@ -11,6 +11,7 @@ import { ProposalSearch } from "./proposal-search";
 import { PipelineFilters } from "./pipeline-filters";
 import { RejectionLearnings } from "./rejection-learnings";
 import { MatchAnalysisChart, type DailyMatchStat } from "./analysis-chart";
+import { DISPLAY_MIN_SCORE } from "@/lib/match-run";
 
 export const metadata = { title: "提案管理 — Caduceus" };
 export const dynamic = "force-dynamic";
@@ -168,8 +169,10 @@ export default async function ProposalsPage(props: {
   );
 
   // --- 分析: 日別のマッチ件数と、その内訳（提案／差し戻し）---
-  // マッチ日(Match.createdAt・JST)で日別集計。proposed=差し戻しでなく、案内/提案メールを
-  // 送信済み（SentEmailにSENTがある）ペア。直近60日。
+  // 母数は「マッチ一覧」に出るものと揃える: 他社人材(PARTNER)・自社登録案件(REGISTER)を除く・
+  // 表示スコア以上(DISPLAY_MIN_SCORE=80)・商流提案可(proposable)。差し戻し済みも母数に含める
+  // （元々一覧に出ていて差し戻したもの）。マッチ日(Match.createdAt・JST)で日別集計。直近60日。
+  // proposed=差し戻しでなく、案内/提案メールを送信済み（SentEmailにSENTがある）ペア。
   const dailyStats = await prisma.$queryRaw<DailyMatchStat[]>`
     SELECT to_char(m."createdAt" AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD') AS day,
            COUNT(*)::int AS total,
@@ -183,7 +186,13 @@ export default async function ProposalsPage(props: {
            )::int AS proposed
     FROM "Match" m
     JOIN "Talent" t ON t.id = m."talentId"
-    WHERE t."orgId" = ${org.id} AND m."createdAt" >= NOW() - INTERVAL '60 days'
+    JOIN "Project" p ON p.id = m."projectId"
+    WHERE t."orgId" = ${org.id}
+      AND t."talentType"::text = 'PARTNER'
+      AND p."dataFrom"::text <> 'REGISTER'
+      AND m.score >= ${DISPLAY_MIN_SCORE}
+      AND m.proposable = true
+      AND m."createdAt" >= NOW() - INTERVAL '60 days'
     GROUP BY day
     ORDER BY day ASC
   `;
