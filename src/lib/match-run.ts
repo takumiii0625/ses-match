@@ -146,6 +146,31 @@ function talentDepthFromUs(t: Talent): number {
   return (Number.isFinite(hops) ? hops : 0) + 1;
 }
 
+/**
+ * 案件の商流が「弊社/当社(=案件の送信元)」を基準に書かれているか。
+ * 送信元(弊社)は自社(我々)の1つ上流なので、「弊社のN社先」は自社視点で N-1 になる。
+ * 例:「エンド→弊社（1社先様の場合は支援費）」「弊社まで」「弊社の2社先まで」「当社止まり」。
+ * ※「貴社/御社」(=受信会社=我々)基準は別物なので対象外（isOwnOnlyChannelで処理）。
+ */
+function isSenderAnchoredChannel(channelText: string | null): boolean {
+  if (!channelText) return false;
+  const t = channelText.replace(/\s/g, "");
+  return (
+    /(→|->|―>|ー>)(弊社|当社)/.test(t) ||
+    /(弊社|当社)(まで|迄|止まり|の|様|\(|（|直|プロパー|正?社員|所属|要員|フリーランス)/.test(t)
+  );
+}
+
+/**
+ * 弊社(送信元)基準の案件が許容する「自社視点の深さ」。
+ * 「弊社のN社先」は自社視点 N-1（弊社=自社の1つ上流）。N無しの弊社止まりは自社視点0(=自社保有INHOUSEのみ)。
+ * 例:「エンド→弊社（1社先様は支援費）」→ N=1 → 自社視点0 → 他社人材は不可（自社のみ）。
+ */
+function senderAnchoredAllowedDepth(channelText: string | null): number {
+  const n = allowedDepthFromChannel(channelText); // 弊社基準の「N社先」（無ければnull）
+  return n != null ? Math.max(0, n - 1) : 0;
+}
+
 /** 案件が「個人事業主/フリーランス不可（法人契約のみ）」を明示しているか（channelText＋概要で判定）。 */
 function projectDisallowsFreelance(project: Project): boolean {
   const t = `${project.channelText ?? ""}\n${project.description ?? ""}`.replace(/[ 　]/g, "");
@@ -181,6 +206,15 @@ function restrictCandidatesByChannel(candidates: Talent[], project: Project): Ta
   const ownOnly = isOwnOnlyChannel(project.channelText);
   if (ownOnly) {
     return list.filter((t) => t.talentType === "INHOUSE" && t.kishaOk === true);
+  }
+  // 弊社(送信元)基準の商流: 「弊社のN社先」は自社視点 N-1。弊社止まり(N無し)は自社保有のみ。
+  // 「1社先様は支援費」等の支援費は「弊社→自社」の1段を埋める条件で、他社をさらに深く許容しない
+  // （ここでは support費を加算しない）。例「エンド→弊社（1社先様は支援費）」→ 自社視点0=自社のみ。
+  if (isSenderAnchoredChannel(project.channelText)) {
+    const cap = senderAnchoredAllowedDepth(project.channelText);
+    return list.filter(
+      (t) => t.talentType === "INHOUSE" || talentDepthFromUs(t) <= cap,
+    );
   }
   const strictDirect = isStrictDirectChannel(project.channelText) && !project.supportFee;
   if (strictDirect) {

@@ -165,6 +165,41 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2);
   });
 
+  it("「エンド→弊社（1社先様は支援費）」は他社人材を除外（弊社基準の1社先=自社）", async () => {
+    db.project.findMany.mockResolvedValue([
+      {
+        ...project("p1"),
+        channelText: "エンド→弊社（1社先様の場合は支援費でのご対応）",
+        supportFee: true,
+      },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "PARTNER", affiliation: "1社先正社員" }, // 弊社基準2社先→不可
+      { ...talent("t2"), talentType: "PARTNER", affiliation: "1社先所属個人事業主" }, // 不可
+      { ...talent("t3"), talentType: "PARTNER", affiliation: "プロパー" }, // 自社視点1社先=弊社基準2社先→不可
+      { ...talent("t4"), talentType: "INHOUSE" }, // 自社保有=弊社基準1社先→支援費で可
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    // 他社は全除外、自社保有のみ候補（t4）。
+    const cand = (rankMock.mock.calls[0]?.[1] ?? []) as { talentId: string }[];
+    expect(cand.map((c) => c.talentId)).toEqual(["t4"]);
+    expect(res.saved).toBe(1);
+  });
+
+  it("「弊社の2社先まで」は自社視点1社先まで（他社プロパーは可・1社先所属は不可）", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "弊社の2社先まで可" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "PARTNER", affiliation: "プロパー" }, // 自社視点1社先 ≤1 → 可
+      { ...talent("t2"), talentType: "PARTNER", affiliation: "1社先正社員" }, // 自社視点2社先 >1 → 不可
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    const cand = (rankMock.mock.calls[0]?.[1] ?? []) as { talentId: string }[];
+    expect(cand.map((c) => c.talentId)).toEqual(["t1"]);
+    expect(res.saved).toBe(1);
+  });
+
   it("「貴社の2社先まで」は貴社止まりではない（誤検知しない）", async () => {
     db.project.findMany.mockResolvedValue([
       { ...project("p1"), channelText: "貴社の2社先まで可" },
