@@ -155,6 +155,21 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(0);
   });
 
+  it("「貴社個人まで」は貴社止まり＝他社人材を除外（自社視点1社下の弊社社員は不可）", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "貴社個人まで希望" },
+      { ...project("p2"), channelText: "貴社個人事業主まで" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "PARTNER", affiliation: "弊社社員" }, // 自社視点1社先 → 不可
+      { ...talent("t2"), talentType: "PARTNER", affiliation: "プロパー" }, // 不可
+    ]);
+    // 全員PARTNER → 貴社止まり案件は候補0でLLM未実行。
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(rankMock).not.toHaveBeenCalled();
+    expect(res.saved).toBe(0);
+  });
+
   it("「御社の方針で決定」は貴社止まりではない（方針/方向等は誤検知しない）", async () => {
     db.project.findMany.mockResolvedValue([
       { ...project("p1"), channelText: "御社の方針で決定・商流不問" },
