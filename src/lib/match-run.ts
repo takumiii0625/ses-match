@@ -193,6 +193,24 @@ function isFreelanceTalent(t: Talent): boolean {
 }
 
 /**
+ * 案件が「再委託不可/禁止」を明示しているか。再委託＝下請けに出すこと。禁止なら他社人材(PARTNER)は
+ * 出せない（自社直接保有のみ）。※「再委託：2社先まで可」等の“許可”表現は対象外（不可/禁止/NG等の明示だけ拾う）。
+ */
+function projectDisallowsSubcontract(project: Project): boolean {
+  const t = `${project.channelText ?? ""}\n${project.description ?? ""}`.replace(/[ 　]/g, "");
+  return /再委託(は|も)?(不可|禁止|NG|ng|お断り|なし|不可希望)/.test(t);
+}
+
+/**
+ * 案件が「派遣契約必須/派遣のみ/派遣限定」を要求しているか。我々は派遣免許が無く派遣できないため、
+ * 他社人材(PARTNER)は提案不可。※「派遣先」等の誤検知を避け、必須/のみ/限定の明示に限定する。
+ */
+function projectRequiresHaken(project: Project): boolean {
+  const t = `${project.channelText ?? ""}\n${project.description ?? ""}`.replace(/[ 　]/g, "");
+  return /派遣(契約)?(必須|のみ|限定)/.test(t);
+}
+
+/**
  * 商流による候補の事前足切り。
  * - 個人事業主不可: 案件が「個人事業主/フリーランス不可・法人契約のみ」なら、フリーランス人材を
  *   除外（自社・他社問わず）。契約形態はLLM任せにせず構造的に落とす。
@@ -207,6 +225,11 @@ function restrictCandidatesByChannel(candidates: Talent[], project: Project): Ta
   let list = candidates;
   if (projectDisallowsFreelance(project)) {
     list = list.filter((t) => !isFreelanceTalent(t));
+  }
+  // 再委託不可 → 他社人材(PARTNER)は出せない（自社直接のみ）。派遣必須 → 派遣できない我々は他社不可。
+  // どちらも「自社保有(INHOUSE)のみ」に絞る（以降の貴社止まり/商流深さ判定はINHOUSEを常に通す）。
+  if (projectDisallowsSubcontract(project) || projectRequiresHaken(project)) {
+    list = list.filter((t) => t.talentType === "INHOUSE");
   }
   const ownOnly = isOwnOnlyChannel(project.channelText);
   if (ownOnly) {

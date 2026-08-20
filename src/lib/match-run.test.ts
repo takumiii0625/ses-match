@@ -280,6 +280,46 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(3);
   });
 
+  it("「再委託不可」案件は他社人材(PARTNER)を全除外（自社直接のみ）", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "再委託不可", description: "" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "PARTNER", affiliation: "プロパー" }, // 除外
+      { ...talent("t2"), talentType: "PARTNER", affiliation: "弊社社員" }, // 除外
+      { ...talent("t3"), talentType: "INHOUSE" }, // 自社直接 → 残る
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    const cand = (rankMock.mock.calls[0]?.[1] ?? []) as { talentId: string }[];
+    expect(cand.map((c) => c.talentId)).toEqual(["t3"]);
+    expect(res.saved).toBe(1);
+  });
+
+  it("「再委託：2社先まで可」は再委託不可ではない（許可表現は誤検知しない）", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "再委託：2社先まで可", description: "" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "PARTNER", affiliation: "プロパー" }, // 自社視点1社先 ≤2 → 可
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(1);
+  });
+
+  it("「派遣契約必須」案件は他社人材(PARTNER)を除外（自社は派遣不可）", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "派遣契約必須", description: "" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "PARTNER", affiliation: "プロパー" }, // 除外
+      { ...talent("t2"), talentType: "INHOUSE" }, // 残る
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    const cand = (rankMock.mock.calls[0]?.[1] ?? []) as { talentId: string }[];
+    expect(cand.map((c) => c.talentId)).toEqual(["t2"]);
+    expect(res.saved).toBe(1);
+  });
+
   it("「法人契約のみ」案件もフリーランス人材を除外", async () => {
     db.project.findMany.mockResolvedValue([
       { ...project("p1"), channelText: "法人契約のみ" },
