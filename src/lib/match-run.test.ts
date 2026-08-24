@@ -332,6 +332,20 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(1); // t2 のみ
   });
 
+  it("「社員のみ/正社員限定」案件もフリーランス人材を除外", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), channelText: "社員のみ", description: "" },
+      { ...project("p2"), channelText: "正社員限定", description: "" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), affiliation: "弊社フリーランス" }, // 除外
+      { ...talent("t2"), affiliation: "プロパー" }, // 残る
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    // p1,p2 とも t2 のみ候補 → saved=2
+    expect(res.saved).toBe(2);
+  });
+
   it("商流未指定の案件は1社先以上の他社人材を除外（既定=送信元プロパーまで）", async () => {
     db.project.findMany.mockResolvedValue([project("p1")]); // channelText なし
     db.talent.findMany.mockResolvedValue([

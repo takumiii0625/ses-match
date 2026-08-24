@@ -176,14 +176,15 @@ function senderAnchoredAllowedDepth(channelText: string | null): number {
   return n != null ? Math.max(0, n - 1) : 0;
 }
 
-/** 案件が「個人事業主/フリーランス不可（法人契約のみ）」を明示しているか（channelText＋概要で判定）。 */
+/** 案件が「個人事業主/フリーランス不可（法人契約のみ・社員のみ）」を明示しているか（channelText＋概要で判定）。 */
 function projectDisallowsFreelance(project: Project): boolean {
   const t = `${project.channelText ?? ""}\n${project.description ?? ""}`.replace(/[ 　]/g, "");
   if (/(個人事業主|個人事業|フリーランス|ﾌﾘｰﾗﾝｽ)(は|の方)?(不可|不採用|NG|ng|お断り|除く|以外|禁止|不採用)/.test(t)) {
     return true;
   }
-  // 「法人のみ/法人契約のみ/法人限定」も個人事業主を除外する意味。
-  return /法人(契約)?(のみ|限定)/.test(t);
+  // 「法人のみ/法人契約のみ/法人限定」「社員のみ/正社員のみ/社員限定/正社員限定」も個人事業主を除外する意味。
+  // ※「貴社社員まで」等の貴社止まりは isOwnOnlyChannel で別処理（のみ/限定だけ拾う）。
+  return /法人(契約)?(のみ|限定)/.test(t) || /(正)?社員(のみ|限定)/.test(t);
 }
 
 /** 人材が個人事業主/フリーランスか（雇用形態 or 所属テキストで判定）。取込人材は所属テキストが主。 */
