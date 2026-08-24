@@ -5,6 +5,88 @@ import { getAI } from "@/lib/ai";
 // （デバウンス）。連続差し戻し時のLLMコストを抑える。手動「今すぐ反映」は force で即時実行。
 const DEBOUNCE_MS = (Number(process.env.MATCH_LEARNINGS_DEBOUNCE_MIN ?? "10") || 10) * 60 * 1000;
 
+type RejectionRow = {
+  reason: string;
+  projectTitle: string | null;
+  talentName: string | null;
+  score: number | null;
+  projectId: string;
+  talentId: string;
+};
+
+/** 差し戻し行 → 商流制限/所属を併記したLLM入力テキストにする（案件/人材が現存する分を引当）。 */
+async function buildRejectionInput(orgId: string, rejections: RejectionRow[]): Promise<string> {
+  const projectIds = [...new Set(rejections.map((r) => r.projectId))];
+  const talentIds = [...new Set(rejections.map((r) => r.talentId))];
+  const [projects, talents] = await Promise.all([
+    prisma.project.findMany({
+      where: { id: { in: projectIds } },
+      select: { id: true, channelText: true, supportFee: true },
+    }),
+    prisma.talent.findMany({
+      where: { id: { in: talentIds } },
+      select: { id: true, affiliation: true, talentType: true },
+    }),
+  ]);
+  const projMap = new Map(projects.map((p) => [p.id, p]));
+  const talMap = new Map(talents.map((t) => [t.id, t]));
+  return rejections
+    .map((r, i) => {
+      const score = r.score != null ? `${Math.round(r.score)}点` : "-";
+      const p = projMap.get(r.projectId);
+      const t = talMap.get(r.talentId);
+      const channel = p?.channelText
+        ? `商流制限:${p.channelText}${p.supportFee ? "／支援費あり" : ""}`
+        : "商流制限:記載なし";
+      const affil = t
+        ? `所属:${t.affiliation ?? "不明"}(${t.talentType === "INHOUSE" ? "自社保有" : "他社"})`
+        : "所属:不明";
+      return `${i + 1}. 案件「${r.projectTitle ?? "?"}」[${channel}] × 人材「${r.talentName ?? "?"}」[${affil}]（${score}）\n   理由: ${r.reason}`;
+    })
+    .join("\n");
+}
+
+const REJECTION_SELECT = {
+  reason: true,
+  projectTitle: true,
+  talentName: true,
+  score: true,
+  projectId: true,
+  talentId: true,
+} as const;
+
+/**
+ * まだ学習に取り込んでいない差し戻し（前回反映 matchLearningsAt 以降の新規）だけを分析する。
+ * 保存はしない（プレビュー）。取り込むかどうかを人が判断するための下見用。
+ */
+export async function previewNewRejections(
+  orgId: string,
+): Promise<{ ok: boolean; learnings?: string; count: number; since: string | null; error?: string }> {
+  const org = await prisma.organization.findUnique({
+    where: { id: orgId },
+    select: { matchLearningsAt: true },
+  });
+  const since = org?.matchLearningsAt ?? null;
+  const rejections = await prisma.matchRejection.findMany({
+    where: { orgId, ...(since ? { createdAt: { gt: since } } : {}) },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    select: REJECTION_SELECT,
+  });
+  if (rejections.length === 0) {
+    return {
+      ok: false,
+      count: 0,
+      since: since ? since.toISOString() : null,
+      error: since ? "前回反映以降の新しい差し戻しはありません" : "差し戻しの記録がありません",
+    };
+  }
+  const input = await buildRejectionInput(orgId, rejections);
+  const learnings = (await getAI().analyzeRejections(input)).trim();
+  // 保存しない（プレビューのみ）。
+  return { ok: true, learnings, count: rejections.length, since: since ? since.toISOString() : null };
+}
+
 /**
  * 差し戻し(送らない判断)の履歴(MatchRejection)をLLMで分析し、
  * 「避けるべきマッチ傾向」を org.matchLearnings に保存（再生成）する。
@@ -31,14 +113,7 @@ export async function regenerateMatchLearnings(
     where: { orgId },
     orderBy: { createdAt: "desc" },
     take: 200,
-    select: {
-      reason: true,
-      projectTitle: true,
-      talentName: true,
-      score: true,
-      projectId: true,
-      talentId: true,
-    },
+    select: REJECTION_SELECT,
   });
   if (rejections.length === 0) {
     // 履歴が無くなったら学習も消す。
@@ -49,38 +124,7 @@ export async function regenerateMatchLearnings(
     return { ok: false, count: 0, error: "差し戻しの記録がありません" };
   }
 
-  // 商流起因の差し戻しを的確に分析できるよう、案件の商流制限(channelText/supportFee)と
-  // 人材の所属(affiliation/talentType)を id で引き当てて入力に併記する（案件/人材が現存する分）。
-  const projectIds = [...new Set(rejections.map((r) => r.projectId))];
-  const talentIds = [...new Set(rejections.map((r) => r.talentId))];
-  const [projects, talents] = await Promise.all([
-    prisma.project.findMany({
-      where: { id: { in: projectIds } },
-      select: { id: true, channelText: true, supportFee: true },
-    }),
-    prisma.talent.findMany({
-      where: { id: { in: talentIds } },
-      select: { id: true, affiliation: true, talentType: true },
-    }),
-  ]);
-  const projMap = new Map(projects.map((p) => [p.id, p]));
-  const talMap = new Map(talents.map((t) => [t.id, t]));
-
-  const input = rejections
-    .map((r, i) => {
-      const score = r.score != null ? `${Math.round(r.score)}点` : "-";
-      const p = projMap.get(r.projectId);
-      const t = talMap.get(r.talentId);
-      const channel = p?.channelText
-        ? `商流制限:${p.channelText}${p.supportFee ? "／支援費あり" : ""}`
-        : "商流制限:記載なし";
-      const affil = t
-        ? `所属:${t.affiliation ?? "不明"}(${t.talentType === "INHOUSE" ? "自社保有" : "他社"})`
-        : "所属:不明";
-      return `${i + 1}. 案件「${r.projectTitle ?? "?"}」[${channel}] × 人材「${r.talentName ?? "?"}」[${affil}]（${score}）\n   理由: ${r.reason}`;
-    })
-    .join("\n");
-
+  const input = await buildRejectionInput(orgId, rejections);
   const learnings = (await getAI().analyzeRejections(input)).trim();
   await prisma.organization.update({
     where: { id: orgId },

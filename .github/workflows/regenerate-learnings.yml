@@ -3,7 +3,12 @@ name: 差し戻し再分析（学習メモ再生成）
 # 差し戻し履歴を複数エージェントで分析し、マッチ判定に付加する学習メモを再生成する。
 # 手動(workflow_dispatch)で「今すぐ反映」したいときに実行する。
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      preview:
+        description: "true=保存せず“未取込の差し戻し”だけ下見分析 / false=直近200件を分析して反映(保存)"
+        required: false
+        default: "false"
 
 concurrency:
   group: regenerate-learnings
@@ -13,9 +18,10 @@ jobs:
   regenerate:
     runs-on: ubuntu-latest
     steps:
-      - name: 差し戻しを再分析して学習メモを再生成
+      - name: 差し戻しを再分析（preview=下見のみ／既定=反映保存）
         run: |
+          if [ "${{ github.event.inputs.preview }}" = "true" ]; then q="?preview=1"; else q=""; fi
           resp=$(curl -fsS --max-time 295 -X POST \
-            "https://sesmatch.encore-biz.com/api/cron/regenerate-learnings" \
+            "https://sesmatch.encore-biz.com/api/cron/regenerate-learnings$q" \
             -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
           echo "$resp"
