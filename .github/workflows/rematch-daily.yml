@@ -6,8 +6,10 @@ name: 定時マッチ（取込完了後・今日のみ）
 # 取込は1日3回(11/15/17時 JST)走るので、本ワークフローもその完了ごとに3回実行される。
 # 手動(workflow_dispatch)は days(対象期間) と startOffset(再開位置)を指定可。
 on:
+  # 重要: 下の workflows: は fetch-mail.yml の `name:` と完全一致させること。
+  # 名前を変えるとこの workflow_run が発火せず、マッチが起動しなくなる（過去に停止事故あり）。
   workflow_run:
-    workflows: ["メール自動取込（11/15/17時 JST）"]
+    workflows: ["メール自動取込（平日 11/15/17時 JST）"]
     types: [completed]
   workflow_dispatch:
     inputs:
