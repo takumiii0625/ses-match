@@ -266,8 +266,11 @@ export default async function ReportsPage() {
       // NG企業ドメイン（送信元一覧でのNG表示用）。
       prisma.ngCompany.findMany({ where: { orgId }, select: { domain: true } }),
       // 日別のAIコスト（直近30日・JST日付で集計）。
+      // createdAt は timestamp(tzなし)＝UTC値。まず UTC とみなして timestamptz にし、
+      // それから Asia/Tokyo に変換する（2段変換）。単段の `AT TIME ZONE 'Asia/Tokyo'` は
+      // UTC値をJSTとみなす逆変換になり、JST午前(取込=UTC02/06/08時)の費用が前日にズレる不具合だった。
       prisma.$queryRaw<{ day: string; cost: number; calls: number }[]>`
-        SELECT to_char("createdAt" AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD') AS day,
+        SELECT to_char("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD') AS day,
                SUM(cost)::float8 AS cost,
                COUNT(*)::int AS calls
         FROM "AiUsage"

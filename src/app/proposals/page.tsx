@@ -173,8 +173,10 @@ export default async function ProposalsPage(props: {
   // 表示スコア以上(DISPLAY_MIN_SCORE=80)・商流提案可(proposable)。差し戻し済みも母数に含める
   // （元々一覧に出ていて差し戻したもの）。マッチ日(Match.createdAt・JST)で日別集計。直近60日。
   // proposed=差し戻しでなく、案内/提案メールを送信済み（SentEmailにSENTがある）ペア。
+  // createdAt は timestamp(tzなし)＝UTC値。UTCとみなしてからJSTへ2段変換する。
+  // 単段の `AT TIME ZONE 'Asia/Tokyo'` はUTC値をJSTとみなす逆変換になり、JST午前の件数が前日にズレる。
   const dailyStats = await prisma.$queryRaw<DailyMatchStat[]>`
-    SELECT to_char(m."createdAt" AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD') AS day,
+    SELECT to_char(m."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Tokyo', 'YYYY-MM-DD') AS day,
            COUNT(*)::int AS total,
            COUNT(*) FILTER (WHERE m."rejectedAt" IS NOT NULL)::int AS rejected,
            COUNT(*) FILTER (
