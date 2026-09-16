@@ -160,7 +160,8 @@ function jstBoundaries(): { todayStart: Date; monthStart: Date } {
 }
 
 const AI_TAG_LABELS: Record<string, string> = {
-  extract: "メール分類・抽出",
+  classify: "メール分類（OpenAI）",
+  extract: "メール抽出（人材/案件）",
   match: "マッチ判定",
   "project-email": "案件メール整形",
   proposal: "提案文生成",
@@ -210,6 +211,7 @@ export default async function ReportsPage() {
     ingestToday,
     matchCreatedToday,
     partnerContactEmails,
+    aiTodayByModel,
   ] = await Promise.all([
       // All talent lightweight fields
       prisma.talent.findMany({
@@ -293,6 +295,13 @@ export default async function ReportsPage() {
         where: { orgId },
         select: { email: true },
       }),
+      // 今日のAIコスト（モデル別）。プロバイダ別（OpenAI/Claude）内訳の集計に使う。
+      prisma.aiUsage.groupBy({
+        by: ["model"],
+        where: { createdAt: { gte: todayStart } },
+        _sum: { cost: true },
+        _count: { _all: true },
+      }),
     ]);
 
   // -- AI cost aggregates --
@@ -304,6 +313,22 @@ export default async function ReportsPage() {
       cost: g._sum.cost ?? 0,
       calls: g._count._all,
     }))
+    .sort((a, b) => b.cost - a.cost);
+
+  // -- 今日のプロバイダ別コスト（OpenAI / Claude）--
+  // モデル名からプロバイダを判定して合算する（gpt*→OpenAI、claude*→Claude）。
+  const providerOf = (model: string): string =>
+    /^gpt|^o[0-9]/i.test(model) ? "OpenAI" : /^claude/i.test(model) ? "Claude" : "その他";
+  const aiProviderMap = new Map<string, { cost: number; calls: number }>();
+  for (const g of aiTodayByModel) {
+    const key = providerOf(g.model);
+    const cur = aiProviderMap.get(key) ?? { cost: 0, calls: 0 };
+    cur.cost += g._sum.cost ?? 0;
+    cur.calls += g._count._all;
+    aiProviderMap.set(key, cur);
+  }
+  const aiProviderRows = [...aiProviderMap.entries()]
+    .map(([label, v]) => ({ label, cost: v.cost, calls: v.calls }))
     .sort((a, b) => b.cost - a.cost);
 
   // -- 今日の取込・マッチ処理 --
@@ -670,10 +695,24 @@ export default async function ReportsPage() {
         </p>
       </Section>
 
-      {/* 今日のAIコスト内訳（暴騰の早期検知用） */}
+      {/* 今日のAIコスト内訳（暴騰の早期検知用）。プロバイダ別＋処理別の2内訳。 */}
       {aiTagRows.length > 0 && (
         <Section title="今日のAIコスト内訳">
-          <div className="flex flex-col gap-2">
+          {aiProviderRows.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="text-xs font-medium text-slate-500">プロバイダ別</div>
+              {aiProviderRows.map((r) => (
+                <div key={r.label} className="flex items-center justify-between text-sm">
+                  <span className="text-slate-700">{r.label}</span>
+                  <span className="text-muted">
+                    {r.calls}回 / <span className="font-medium text-slate-800">{fmtUsd(r.cost, 3)}（{fmtYen(r.cost)}）</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="mt-3 flex flex-col gap-2">
+            <div className="text-xs font-medium text-slate-500">処理別</div>
             {aiTagRows.map((r) => (
               <div key={r.label} className="flex items-center justify-between text-sm">
                 <span className="text-slate-700">{r.label}</span>
