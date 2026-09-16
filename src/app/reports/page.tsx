@@ -295,9 +295,9 @@ export default async function ReportsPage() {
         where: { orgId },
         select: { email: true },
       }),
-      // 今日のAIコスト（モデル別）。プロバイダ別（OpenAI/Claude）内訳の集計に使う。
+      // 今日のAIコスト（処理×モデル別）。プロバイダ別内訳＋処理別の使用LLM表示に使う。
       prisma.aiUsage.groupBy({
-        by: ["model"],
+        by: ["tag", "model"],
         where: { createdAt: { gte: todayStart } },
         _sum: { cost: true },
         _count: { _all: true },
@@ -307,18 +307,36 @@ export default async function ReportsPage() {
   // -- AI cost aggregates --
   const aiTodayCost = aiToday.reduce((s, g) => s + (g._sum.cost ?? 0), 0);
   const aiMonthCost = aiMonth._sum.cost ?? 0;
+  // モデル名からプロバイダを判定する（gpt*/o*→OpenAI、claude*→Claude）。
+  const providerOf = (model: string): string =>
+    /^gpt|^o[0-9]/i.test(model) ? "OpenAI" : /^claude/i.test(model) ? "Claude" : "その他";
+
+  // 処理(tag)ごとに、使われたモデル（＝LLM）を集める。処理別の行に「どのLLMか」を併記する。
+  const modelsByTag = new Map<string, Set<string>>();
+  for (const g of aiTodayByModel) {
+    const set = modelsByTag.get(g.tag) ?? new Set<string>();
+    if (g.model) set.add(g.model);
+    modelsByTag.set(g.tag, set);
+  }
+  // 処理別の使用LLM表記（例: "OpenAI・gpt-4o-mini" / "Claude・claude-haiku-4-5"）。
+  const llmLabelForTag = (tag: string): string => {
+    const models = [...(modelsByTag.get(tag) ?? [])];
+    if (models.length === 0) return "";
+    return models
+      .map((m) => `${providerOf(m)}・${m}`)
+      .join(" / ");
+  };
+
   const aiTagRows = aiToday
     .map((g) => ({
       label: AI_TAG_LABELS[g.tag] ?? g.tag,
+      llm: llmLabelForTag(g.tag),
       cost: g._sum.cost ?? 0,
       calls: g._count._all,
     }))
     .sort((a, b) => b.cost - a.cost);
 
   // -- 今日のプロバイダ別コスト（OpenAI / Claude）--
-  // モデル名からプロバイダを判定して合算する（gpt*→OpenAI、claude*→Claude）。
-  const providerOf = (model: string): string =>
-    /^gpt|^o[0-9]/i.test(model) ? "OpenAI" : /^claude/i.test(model) ? "Claude" : "その他";
   const aiProviderMap = new Map<string, { cost: number; calls: number }>();
   for (const g of aiTodayByModel) {
     const key = providerOf(g.model);
@@ -712,11 +730,16 @@ export default async function ReportsPage() {
             </div>
           )}
           <div className="mt-3 flex flex-col gap-2">
-            <div className="text-xs font-medium text-slate-500">処理別</div>
+            <div className="text-xs font-medium text-slate-500">処理別（使用LLM）</div>
             {aiTagRows.map((r) => (
-              <div key={r.label} className="flex items-center justify-between text-sm">
-                <span className="text-slate-700">{r.label}</span>
-                <span className="text-muted">
+              <div key={r.label} className="flex items-center justify-between gap-3 text-sm">
+                <span className="min-w-0 text-slate-700">
+                  {r.label}
+                  {r.llm && (
+                    <span className="ml-2 text-xs text-muted">（{r.llm}）</span>
+                  )}
+                </span>
+                <span className="whitespace-nowrap text-muted">
                   {r.calls}回 / <span className="font-medium text-slate-800">{fmtUsd(r.cost, 3)}（{fmtYen(r.cost)}）</span>
                 </span>
               </div>
