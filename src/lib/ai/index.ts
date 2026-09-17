@@ -12,19 +12,22 @@ import type {
 } from "./types";
 import { MockAIService } from "./mock";
 import { AnthropicAIService } from "./anthropic";
-import { OpenAIClassifierService } from "./openai";
+import { OpenAIService, attachmentsNeedNativeDoc } from "./openai";
 
 // Provider selection. Set AI_PROVIDER + the matching API key in .env to use a
 // real LLM; otherwise the built-in mock implementation is used.
 let instance: AIService | null = null;
 
-/** classifyEmail だけを別プロバイダに差し替える合成サービス。
- *  分類(テキストのみ・単純・高頻度)は安価な OpenAI に回し、抽出/マッチ/生成など
- *  精度・添付処理が効く処理は base(Anthropic)のまま使う。 */
+/** 一部処理を OpenAI に差し替える合成サービス。
+ *  - 分類(テキストのみ・単純・高頻度) は常に OpenAI。
+ *  - 抽出(人材/案件) は「添付がテキスト化済み＝document送信不要」なら OpenAI、
+ *    スキャンPDF等でネイティブdocument送信が要るものは精度重視で Anthropic に残す。
+ *  - マッチ/生成など残りは Anthropic(base)のまま。 */
 class HybridAIService implements AIService {
   constructor(
     private base: AIService,
-    private classifier: Pick<AIService, "classifyEmail">,
+    private openai: OpenAIService,
+    private hybridExtract: boolean,
   ) {}
 
   classifyEmail(
@@ -32,13 +35,17 @@ class HybridAIService implements AIService {
     attachments?: EmailAttachment[],
     systemPrompt?: string,
   ): Promise<EmailClassification> {
-    return this.classifier.classifyEmail(rawEmail, attachments, systemPrompt);
+    return this.openai.classifyEmail(rawEmail, attachments, systemPrompt);
   }
   parseTalentEmail(
     rawEmail: string,
     attachments?: EmailAttachment[],
     systemPrompt?: string,
   ): Promise<ParsedTalent> {
+    // 添付にネイティブdocument送信が要る（スキャンPDF等）場合のみ Anthropic。
+    if (this.hybridExtract && !attachmentsNeedNativeDoc(attachments)) {
+      return this.openai.parseTalentEmail(rawEmail, attachments, systemPrompt);
+    }
     return this.base.parseTalentEmail(rawEmail, attachments, systemPrompt);
   }
   parseProjectEmail(
@@ -46,6 +53,9 @@ class HybridAIService implements AIService {
     attachments?: EmailAttachment[],
     systemPrompt?: string,
   ): Promise<ParsedProject> {
+    if (this.hybridExtract && !attachmentsNeedNativeDoc(attachments)) {
+      return this.openai.parseProjectEmail(rawEmail, attachments, systemPrompt);
+    }
     return this.base.parseProjectEmail(rawEmail, attachments, systemPrompt);
   }
   generateProposal(input: ProposalInput, systemPrompt?: string): Promise<string> {
@@ -76,12 +86,14 @@ class HybridAIService implements AIService {
   }
 }
 
-/** 分類だけ OpenAI に回すか。OPENAI_API_KEY があれば既定で有効。
- *  CLASSIFY_PROVIDER=anthropic で明示的に無効化（従来どおり全処理 Anthropic）できる。 */
-function maybeWithOpenAIClassifier(base: AIService): AIService {
+/** OpenAI に一部処理を回す合成を作る。OPENAI_API_KEY があれば既定で有効。
+ *  - CLASSIFY_PROVIDER=anthropic: 分類も Anthropic に戻し、OpenAI差し替え自体を無効化。
+ *  - EXTRACT_PROVIDER=anthropic: 抽出のOpenAI化だけ無効化（分類は引き続きOpenAI）。 */
+function maybeWithOpenAI(base: AIService): AIService {
   if (process.env.CLASSIFY_PROVIDER === "anthropic") return base;
   if (!process.env.OPENAI_API_KEY) return base;
-  return new HybridAIService(base, new OpenAIClassifierService());
+  const hybridExtract = process.env.EXTRACT_PROVIDER !== "anthropic";
+  return new HybridAIService(base, new OpenAIService(), hybridExtract);
 }
 
 export function getAI(): AIService {
@@ -90,8 +102,8 @@ export function getAI(): AIService {
   switch (provider) {
     case "anthropic":
       if (process.env.ANTHROPIC_API_KEY) {
-        // 分類のみ OpenAI に差し替え可（コスト削減）。他処理は Anthropic のまま。
-        instance = maybeWithOpenAIClassifier(new AnthropicAIService());
+        // 分類＋テキスト抽出を OpenAI に差し替え可（コスト削減）。document抽出/マッチは Anthropic。
+        instance = maybeWithOpenAI(new AnthropicAIService());
       } else {
         console.warn(
           "[ai] AI_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set — falling back to mock.",

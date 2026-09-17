@@ -148,7 +148,7 @@ const nullableRemote = {
   anyOf: [{ type: "string", enum: REMOTE_ENUM }, { type: "null" }],
 };
 
-const TALENT_SCHEMA = {
+export const TALENT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
@@ -225,7 +225,7 @@ const TALENT_SCHEMA = {
   ],
 } as const;
 
-const PROJECT_SCHEMA = {
+export const PROJECT_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
