@@ -27,6 +27,7 @@ class HybridAIService implements AIService {
   constructor(
     private base: AIService,
     private openai: OpenAIService,
+    private hybridClassify: boolean,
     private hybridExtract: boolean,
   ) {}
 
@@ -35,7 +36,12 @@ class HybridAIService implements AIService {
     attachments?: EmailAttachment[],
     systemPrompt?: string,
   ): Promise<EmailClassification> {
-    return this.openai.classifyEmail(rawEmail, attachments, systemPrompt);
+    // 分類はファネルの入口で誤判定の波及が大きい。既定はClaude（精度優先）。
+    // gpt-4o-miniは同一プロンプトでも人材↔案件の取り違えがあったため。
+    if (this.hybridClassify) {
+      return this.openai.classifyEmail(rawEmail, attachments, systemPrompt);
+    }
+    return this.base.classifyEmail(rawEmail, attachments, systemPrompt);
   }
   parseTalentEmail(
     rawEmail: string,
@@ -86,14 +92,17 @@ class HybridAIService implements AIService {
   }
 }
 
-/** OpenAI に一部処理を回す合成を作る。OPENAI_API_KEY があれば既定で有効。
- *  - CLASSIFY_PROVIDER=anthropic: 分類も Anthropic に戻し、OpenAI差し替え自体を無効化。
- *  - EXTRACT_PROVIDER=anthropic: 抽出のOpenAI化だけ無効化（分類は引き続きOpenAI）。 */
+/** OpenAI に一部処理を回す合成を作る。OPENAI_API_KEY があるとき有効。
+ *  既定: 分類=Claude（精度優先）／抽出(テキスト添付)=OpenAI（コスト削減の本命）。
+ *  - CLASSIFY_PROVIDER=openai: 分類も OpenAI にする（gpt-4o-miniは取り違えありのため非推奨）。
+ *  - EXTRACT_PROVIDER=anthropic: 抽出のOpenAI化を無効化（抽出も Claude に戻す）。 */
 function maybeWithOpenAI(base: AIService): AIService {
-  if (process.env.CLASSIFY_PROVIDER === "anthropic") return base;
   if (!process.env.OPENAI_API_KEY) return base;
+  const hybridClassify = process.env.CLASSIFY_PROVIDER === "openai";
   const hybridExtract = process.env.EXTRACT_PROVIDER !== "anthropic";
-  return new HybridAIService(base, new OpenAIService(), hybridExtract);
+  // どちらもOpenAIに回さないなら合成不要（そのままAnthropic）。
+  if (!hybridClassify && !hybridExtract) return base;
+  return new HybridAIService(base, new OpenAIService(), hybridClassify, hybridExtract);
 }
 
 export function getAI(): AIService {
@@ -102,7 +111,8 @@ export function getAI(): AIService {
   switch (provider) {
     case "anthropic":
       if (process.env.ANTHROPIC_API_KEY) {
-        // 分類＋テキスト抽出を OpenAI に差し替え可（コスト削減）。document抽出/マッチは Anthropic。
+        // テキスト抽出を OpenAI に差し替え（コスト削減の本命）。分類はClaude据え置き、
+        // document抽出/マッチも Anthropic。
         instance = maybeWithOpenAI(new AnthropicAIService());
       } else {
         console.warn(
