@@ -17,6 +17,22 @@ const REMOTE_RANK: Record<string, number> = {
 };
 
 /**
+ * リモート/出社条件の不一致か（＝除外すべきか）。
+ * 人材が出社できる頻度が案件の要求出社頻度に満たない場合 true（例: 案件=常駐/週5 × 人材=フルリモート）。
+ * どちらかの希望が不明（null）なら false（通す。方針: 不明は落とさない）。
+ * フルリモート案件(要求ランク0)は誰でも満たすので常に false。
+ */
+export function remoteMismatch(
+  project: { remotePreference: string | null },
+  talent: { remotePreference: string | null },
+): boolean {
+  const pr = project.remotePreference ? REMOTE_RANK[project.remotePreference] : undefined;
+  const tr = talent.remotePreference ? REMOTE_RANK[talent.remotePreference] : undefined;
+  if (pr == null || tr == null) return false; // 不明 → 通す
+  return tr < pr; // 人材の出社許容 < 案件の要求出社頻度 → 不一致で除外
+}
+
+/**
  * Pure scoring function for talent×project compatibility.
  * Weighted: skills 60, rate 20, remote 10, availability 10.
  */

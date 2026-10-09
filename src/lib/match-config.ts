@@ -10,6 +10,7 @@ export interface GateToggles {
   language: boolean; // 必須言語
   rate: boolean; // 単価（案件上限＋許容の超過）
   location: boolean; // 勤務地（出社あり×地方不一致）
+  remote: boolean; // リモート/出社条件（人材の出社許容 < 案件の要求出社頻度）
   nationality: boolean; // 国籍（日本人のみ案件×外国籍）
   coverage: boolean; // スキルのカバー率（必須スキルの充足割合）
 }
@@ -45,6 +46,7 @@ export const DEFAULT_MATCH_CONFIG: MatchConfig = {
     language: true,
     rate: true,
     location: true,
+    remote: true,
     nationality: true,
     coverage: true,
   },
@@ -93,6 +95,7 @@ export function parseMatchConfig(raw: unknown): MatchConfig {
       language: bool(g.language, d.gates.language),
       rate: bool(g.rate, d.gates.rate),
       location: bool(g.location, d.gates.location),
+      remote: bool(g.remote, d.gates.remote),
       nationality: bool(g.nationality, d.gates.nationality),
       coverage: bool(g.coverage, d.gates.coverage),
     },

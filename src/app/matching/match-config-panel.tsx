@@ -17,6 +17,7 @@ const GATE_META: { key: keyof GateToggles; label: string; desc: string }[] = [
   { key: "language", label: "必須言語", desc: "案件の必須言語（Java/PHP等）を持たない人材" },
   { key: "rate", label: "単価", desc: "希望単価が案件上限＋許容を超える人材" },
   { key: "location", label: "勤務地", desc: "出社あり案件×地方不一致（両方確実なときのみ）" },
+  { key: "remote", label: "リモート/出社条件", desc: "人材の出社許容が案件の要求出社頻度に満たない（例: 常駐案件×フルリモート人材）" },
   { key: "nationality", label: "国籍", desc: "日本人のみ案件×外国籍" },
   { key: "coverage", label: "スキルのカバー率", desc: "必須スキルの充足割合が閾値未満" },
 ];
@@ -197,7 +198,38 @@ export function MatchConfigPanel({
         {/* C. 比重 */}
         <section className="mt-6">
           <h3 className="text-sm font-semibold text-slate-700">② 点数の比重（AIが優先度を付ける際の重み）</h3>
-          <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+
+          {/* 現在のスコアリングロジックの説明 */}
+          <div className="mt-2 rounded-lg bg-slate-50 border border-border p-3 text-xs text-slate-500 space-y-2">
+            <p className="font-medium text-slate-600">いまのスコアの付き方</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>
+                上の①「除外ルール」を通過した候補だけを、AI（マッチ判定）が
+                <span className="font-medium text-slate-600"> 0〜100点 </span>と
+                <span className="font-medium text-slate-600"> 推奨度（STRONG / POSSIBLE / WEAK / UNFIT）</span>で評価します。
+                点数は「実務での提案優先度」で、単なるスキル一致率ではありません。
+              </li>
+              <li>
+                標準の重要度は高い順に
+                <span className="font-medium text-slate-600">
+                  {" "}①必須スキルの充足 ②単価の整合 ③稼働開始時期 ④リモート/出社条件 ⑤経験年数・担当役割・語学 ⑥年齢・国籍
+                </span>
+                。スキルは大分類（「開発」等）では一致とみなさず、具体的な言語・技術の保有／代替可否で見ます（包含: Spring Boot→Java など）。
+              </li>
+              <li>
+                表示されるのは <span className="font-medium text-slate-600">80点以上</span>、保存は70点以上です。
+                自動送信も80点以上が対象です（除外ルールに1つでも該当すると、点数に関係なくマッチ自体を作りません）。
+              </li>
+            </ul>
+            <p className="font-medium text-slate-600 pt-1">比重を変えると</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>各項目の「重視／標準／軽視」をAIへの指示として渡し、標準の重要度を上下させます（重視＝大きく加点/減点、軽視＝影響を小さく）。</li>
+              <li>すべて「標準」のときは指示を追加しません（従来どおり）。<span className="font-medium text-slate-600">数値計算ではなくAIへの相対的な強さの指示</span>なので、厳密な配点ではありません（モデル: Haiku）。</li>
+              <li>反映には保存後に再マッチ（日次自動マッチ等）が必要です。確実に除外したい条件は①の除外ルールを使ってください。</li>
+            </ul>
+          </div>
+
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {WEIGHT_META.map((w) => (
               <div key={w.key} className="flex items-center justify-between gap-2 rounded-lg border border-border p-2.5">
                 <span className="text-sm text-slate-700">{w.label}</span>
@@ -210,9 +242,6 @@ export function MatchConfigPanel({
               </div>
             ))}
           </div>
-          <p className="mt-1 text-xs text-slate-400">
-            比重はAI（マッチ判定）に指示として渡します。厳密な数値計算ではなく相対的な強さです。
-          </p>
         </section>
 
         {/* D. 独自ルール */}

@@ -8,6 +8,7 @@ import {
   DEFAULT_RATE_TOLERANCE_MAN,
   regionOf,
   projectRequiresOnsite,
+  remoteMismatch,
 } from "@/lib/matching";
 import { getAI } from "@/lib/ai";
 import type { MatchProjectInput, MatchCandidateInput, SkillYear } from "@/lib/ai";
@@ -330,6 +331,15 @@ function restrictCandidatesByLocation(candidates: Talent[], project: Project): T
 }
 
 /**
+ * リモート/出社条件による候補の事前足切り。
+ * 人材の出社許容頻度が案件の要求出社頻度に満たない場合に除外（例: 常駐案件×フルリモート人材）。
+ * どちらかの希望が不明なら通す（方針: 不明は落とさない）。
+ */
+function restrictCandidatesByRemote(candidates: Talent[], project: Project): Talent[] {
+  return candidates.filter((t) => !remoteMismatch(project, t));
+}
+
+/**
  * 設定(gates)に応じて決定的な除外ゲートを適用する。
  * - 同一企業除外・NG企業は安全ゲートとして常時適用（設定で切れない）。
  * - 商流/国籍/勤務地はマッチ設定のトグルに従い適用（OFF＝点数で見るだけ）。
@@ -346,6 +356,7 @@ function buildCandidates(
   if (gates.channel) c = restrictCandidatesByChannel(c, project);
   if (gates.nationality) c = restrictCandidatesByNationality(c, project);
   if (gates.location) c = restrictCandidatesByLocation(c, project);
+  if (gates.remote) c = restrictCandidatesByRemote(c, project);
   return c;
 }
 

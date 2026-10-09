@@ -13,6 +13,7 @@ import {
   projectRequiresOnsite,
   requiredLanguages,
   languageMismatch,
+  remoteMismatch,
 } from "./matching";
 
 function talent(p: Partial<Talent>): Talent {
@@ -54,6 +55,24 @@ describe("requiredLanguages / languageMismatch", () => {
   it("言語が読み取れない案件は言語ゲートをかけない", () => {
     const p = project({ requiredSkills: ["AWS", "Docker"] });
     expect(languageMismatch(p, talent({ skills: ["PHP"] }))).toBe(false);
+  });
+});
+
+describe("remoteMismatch", () => {
+  const p = (r: string | null) => ({ remotePreference: r });
+  const t = (r: string | null) => ({ remotePreference: r });
+  it("人材の出社許容が案件の要求に満たなければ除外", () => {
+    expect(remoteMismatch(p("ONSITE"), t("FULL_REMOTE"))).toBe(true); // 常駐×フルリモート
+    expect(remoteMismatch(p("OFFICE_4"), t("HYBRID"))).toBe(true); // 週4×ハイブリッド
+  });
+  it("人材が案件要求以上に出社できるなら通す", () => {
+    expect(remoteMismatch(p("HYBRID"), t("ONSITE"))).toBe(false);
+    expect(remoteMismatch(p("ONSITE"), t("ONSITE"))).toBe(false);
+  });
+  it("フルリモート案件は誰でも通す／どちらか不明も通す", () => {
+    expect(remoteMismatch(p("FULL_REMOTE"), t("FULL_REMOTE"))).toBe(false);
+    expect(remoteMismatch(p(null), t("FULL_REMOTE"))).toBe(false);
+    expect(remoteMismatch(p("ONSITE"), t(null))).toBe(false);
   });
 });
 

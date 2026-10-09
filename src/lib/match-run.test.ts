@@ -428,6 +428,17 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2);
   });
 
+  it("リモート/出社ゲート: 常駐案件はフルリモート人材を除外・出社可人材は残す", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), remotePreference: "ONSITE" }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), remotePreference: "FULL_REMOTE" }, // 出社不可 → 除外
+      { ...talent("t2"), remotePreference: "ONSITE" }, // 常駐可 → 残す
+      { ...talent("t3"), remotePreference: null }, // 不明 → 残す
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(2); // t2, t3
+  });
+
   it("言語ゲート: Java必須の案件はPHPのみの人材を除外・Java/SpringBootは残す", async () => {
     db.project.findMany.mockResolvedValue([{ ...project("p1"), requiredSkills: ["Java"] }]);
     db.talent.findMany.mockResolvedValue([
