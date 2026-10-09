@@ -805,3 +805,76 @@ export async function runMatchingForNew(
     minScore: MIN_SCORE,
   };
 }
+
+/**
+ * 人材起点の手動マッチ。指定した人材1名（自社保有/他社どちらも）を、取込窓に関係なく
+ * 組織の全案件（名寄せ後）と突き合わせる。runMatchingForNew と違い人材をIDで明示ロードするため、
+ * 古い他社人材でも確実に対象になる。判定済みペアはスキップ（再実行で二重判定しない）。
+ */
+export async function runMatchingForTalent(
+  orgId: string,
+  talentId: string,
+): Promise<MatchRunResult> {
+  const [talent, projectsRaw, prompts, ngDomains] = await Promise.all([
+    prisma.talent.findFirst({
+      where: { id: talentId, orgId },
+      select: TALENT_MATCH_SELECT,
+    }) as unknown as Promise<Talent | null>,
+    prisma.project.findMany({
+      where: { orgId },
+      select: PROJECT_MATCH_SELECT,
+    }) as unknown as Promise<Project[]>,
+    resolveOrgPrompts(orgId),
+    loadNgDomains(orgId),
+  ]);
+  if (!talent) {
+    return { projects: 0, talents: 0, pairs: 0, saved: 0, errors: 0, minScore: MIN_SCORE };
+  }
+  const { matchPrompt: systemPrompt, rateToleranceMan, languageMatchAll, config } = prompts;
+
+  const projects = dedupeProjectsForMatch(projectsRaw);
+  const existingPairs = await loadExistingMatchPairs(projects.map((p) => p.id));
+
+  const settled = await Promise.allSettled(
+    projects.map(async (project) => {
+      // 同一企業・判定済みペアを除いた上で、この人材だけを候補にゲート適用。
+      const pool =
+        isSameCompany(talent, project) || existingPairs.has(`${project.id}#${talent.id}`)
+          ? []
+          : [talent];
+      const candidates = buildCandidates(pool, project, ngDomains, config.gates);
+      const r = await rankAndSave(
+        project,
+        candidates,
+        systemPrompt,
+        rateToleranceMan,
+        languageMatchAll,
+        config,
+      );
+      return { projectId: project.id, ...r };
+    }),
+  );
+
+  let saved = 0;
+  let pairs = 0;
+  let errors = 0;
+  const matchedProjectIds: string[] = [];
+  for (const s of settled) {
+    if (s.status === "fulfilled") {
+      pairs += s.value.pairs;
+      saved += s.value.saved;
+      if (s.value.saved > 0) matchedProjectIds.push(s.value.projectId);
+    } else {
+      errors++;
+      console.error("[match] 人材起点マッチの案件判定に失敗:", s.reason);
+    }
+  }
+
+  await pregenerateProjectBodies({
+    orgId,
+    projectIds: matchedProjectIds,
+    projectEmailPrompt: prompts.projectEmailPrompt,
+  }).catch((e) => console.error("[match] メール本文の事前生成に失敗:", e));
+
+  return { projects: projects.length, talents: 1, pairs, saved, errors, minScore: MIN_SCORE };
+}

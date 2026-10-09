@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // Prisma と AI をモック（DB・LLM不要でページング/クリーン再生成を検証）。
 const db = vi.hoisted(() => ({
   project: { findMany: vi.fn() },
-  talent: { findMany: vi.fn() },
+  talent: { findMany: vi.fn(), findFirst: vi.fn() },
   organization: { findUnique: vi.fn() },
   match: { deleteMany: vi.fn(), upsert: vi.fn(), findMany: vi.fn() },
   ngCompany: { findMany: vi.fn() },
@@ -13,7 +13,7 @@ const { rankMock } = vi.hoisted(() => ({ rankMock: vi.fn() }));
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
 vi.mock("@/lib/ai", () => ({ getAI: () => ({ rankCandidates: rankMock }) }));
 
-import { runMatchingForOrg } from "./match-run";
+import { runMatchingForOrg, runMatchingForTalent } from "./match-run";
 
 // 必須スキルを空にすると prefilter は全候補を通すので、判定はモックに委ねられる。
 function project(id: string) {
@@ -390,6 +390,22 @@ describe("runMatchingForOrg（ページング）", () => {
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(res.saved).toBe(2); // t2, t3
+  });
+
+  it("人材起点マッチ: 指定人材を全案件と突き合わせて保存（取込窓に関係なく対象）", async () => {
+    db.talent.findFirst.mockResolvedValue({ ...talent("tX"), talentType: "PARTNER" });
+    db.project.findMany.mockResolvedValue([project("p1"), project("p2"), project("p3")]);
+    const res = await runMatchingForTalent("org1", "tX");
+    expect(rankMock).toHaveBeenCalledTimes(3); // 3案件ぶん
+    expect(res.saved).toBe(3); // 各案件で1人材が80点保存
+    expect(res.talents).toBe(1);
+  });
+
+  it("人材起点マッチ: 人材が見つからなければ何もしない", async () => {
+    db.talent.findFirst.mockResolvedValue(null);
+    const res = await runMatchingForTalent("org1", "missing");
+    expect(rankMock).not.toHaveBeenCalled();
+    expect(res.saved).toBe(0);
   });
 
   it("言語ゲート: Java必須の案件はPHPのみの人材を除外・Java/SpringBootは残す", async () => {

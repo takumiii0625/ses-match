@@ -87,7 +87,7 @@ const groups: { title: string; items: NavItem[] }[] = [
   {
     title: "ツール",
     items: [
-      { href: "/matching", label: "マッチング", icon: GitCompareArrows },
+      { href: "/matching", label: "マッチング設定", icon: GitCompareArrows },
       { href: "/matches", label: "マッチ一覧", icon: ListChecks },
       { href: "/matches/inhouse", label: "自社保有人材マッチ（手動）", icon: UserCheck },
       { href: "/matches/registered", label: "自社保有案件マッチ（手動）", icon: UserCheck },
