@@ -39,8 +39,7 @@ const TALENT_MATCH_SELECT = {
   japaneseLevel: true,
   talentType: true,
   employmentType: true, // 個人事業主不可の足切りに使う（未設定は所属テキストで判定）。
-  kishaOk: true,
-  isOwnEmployee: true, // 自社社員(プロパー)かの商流判定に使う。
+  isOwnEmployee: true, // 自社社員(プロパー)かの商流判定に使う（貴社止まり含む）。
   affiliation: true,
   mainSkills: true,
   skills: true,
@@ -252,8 +251,8 @@ function restrictCandidatesByChannel(candidates: Talent[], project: Project): Ta
   }
   const ownOnly = isOwnOnlyChannel(project.channelText);
   if (ownOnly) {
-    // 貴社止まり＝我々プロパーのみ。自社社員(プロパー)かつ貴社チェック付きだけ。
-    return list.filter((t) => isOwnProper(t) && t.kishaOk === true);
+    // 貴社止まり＝我々プロパーのみ＝自社社員(isOwnEmployee)だけ。
+    return list.filter((t) => isOwnProper(t));
   }
   // 弊社(送信元)基準の商流: 「弊社のN社先」は自社視点 N-1。弊社止まり(N無し)は自社社員(深さ0)のみ。
   // 「1社先様は支援費」等の支援費は「弊社→自社」の1段を埋める条件で、他社をさらに深く許容しない

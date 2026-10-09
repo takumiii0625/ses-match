@@ -503,22 +503,22 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // t1, t2（t3はNG企業の人材で除外）
   });
 
-  it("貴社まで案件は貴社チェック付きの自社人材のみ候補", async () => {
+  it("貴社まで案件は自社社員(isOwnEmployee)の自社人材のみ候補", async () => {
     db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "貴社まで" }]);
     db.talent.findMany.mockResolvedValue([
-      { ...talent("t1"), talentType: "INHOUSE", kishaOk: true, isOwnEmployee: true }, // 自社社員＋貴社チェック → 候補
-      { ...talent("t2"), talentType: "INHOUSE", kishaOk: false }, // 貴社チェックなし → 除外
+      { ...talent("t1"), talentType: "INHOUSE", isOwnEmployee: true }, // 自社社員 → 候補
+      { ...talent("t2"), talentType: "INHOUSE", isOwnEmployee: false }, // 非社員 → 除外
       talent("t3"), // PARTNER → 除外される
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(rankMock).toHaveBeenCalledTimes(1);
-    expect(res.saved).toBe(1); // kishaOk付きの t1 のみ
+    expect(res.saved).toBe(1); // 自社社員の t1 のみ
   });
 
-  it("貴社まで案件で貴社チェック付き人材がいなければLLM呼び出しなし", async () => {
+  it("貴社まで案件で自社社員がいなければLLM呼び出しなし", async () => {
     db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "貴社まで" }]);
     db.talent.findMany.mockResolvedValue([
-      { ...talent("t1"), talentType: "INHOUSE", kishaOk: false },
+      { ...talent("t1"), talentType: "INHOUSE", isOwnEmployee: false },
       talent("t2"), // PARTNER
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });

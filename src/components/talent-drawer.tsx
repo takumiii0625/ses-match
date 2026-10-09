@@ -44,6 +44,7 @@ export interface TalentDrawerData {
   emailSubject?: string | null;
   distributionSubject?: string | null;
   kishaOk?: boolean | null;
+  isOwnEmployee?: boolean | null;
   emailBody?: string | null;
   emailFrom?: string | null;
   emailTo?: string | null;
@@ -141,23 +142,23 @@ export function TalentDrawer({
     }
   }
 
-  // 貴社チェックのクイック編集（「貴社まで」案件のマッチ対象にするか）。
+  // 自社社員（プロパー）のクイック編集。ON＝商流最浅で「貴社まで」案件の対象にもなる。
   const isInhouse = talent.talentType === "INHOUSE";
-  const [kishaOk, setKishaOk] = useState(talent.kishaOk ?? false);
-  const [kishaSaving, setKishaSaving] = useState(false);
-  async function toggleKisha(next: boolean) {
-    setKishaOk(next);
-    setKishaSaving(true);
+  const [isOwnEmployee, setIsOwnEmployee] = useState(talent.isOwnEmployee ?? false);
+  const [empSaving, setEmpSaving] = useState(false);
+  async function toggleOwnEmployee(next: boolean) {
+    setIsOwnEmployee(next);
+    setEmpSaving(true);
     try {
       await fetchJson(`/api/talents/${talent.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kishaOk: next }),
+        body: JSON.stringify({ isOwnEmployee: next }),
       });
     } catch {
-      setKishaOk(!next); // 失敗したら戻す
+      setIsOwnEmployee(!next); // 失敗したら戻す
     } finally {
-      setKishaSaving(false);
+      setEmpSaving(false);
     }
   }
 
@@ -215,15 +216,15 @@ export function TalentDrawer({
             <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
-                checked={kishaOk}
-                disabled={kishaSaving}
-                onChange={(e) => toggleKisha(e.target.checked)}
+                checked={isOwnEmployee}
+                disabled={empSaving}
+                onChange={(e) => toggleOwnEmployee(e.target.checked)}
                 className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
               />
               <span>
-                貴社チェック
+                自社社員（プロパー）
                 <span className="ml-1 text-xs text-slate-400">
-                  （ONで「貴社まで」案件のマッチ対象に含める）
+                  （ONで商流が最も浅く、「貴社まで」案件の対象にもなります）
                 </span>
               </span>
             </label>

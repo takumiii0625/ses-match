@@ -104,7 +104,6 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
   const [distributionSubject, setDistributionSubject] = useState(
     initial?.distributionSubject ?? "",
   );
-  const [kishaOk, setKishaOk] = useState(initial?.kishaOk ?? false);
   const [isOwnEmployee, setIsOwnEmployee] = useState(initial?.isOwnEmployee ?? false);
   const [note, setNote] = useState(initial?.note ?? "");
   const [summaryText, setSummaryText] = useState(initial?.summaryText ?? "");
@@ -266,7 +265,6 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
       tags: strToArr(tags),
       emailSubject: emailSubject || null,
       distributionSubject: distributionSubject || null,
-      kishaOk,
       isOwnEmployee,
       note: note || null,
       summaryText: summaryText || null,
@@ -542,7 +540,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
           </p>
         </div>
         {talentType === "INHOUSE" && (
-          <div className="col-span-2 space-y-2">
+          <div className="col-span-2">
             <label className="flex items-start gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"
@@ -553,21 +551,8 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
               <span>
                 自社社員（プロパー）
                 <span className="ml-1 text-xs text-slate-400">
-                  （ONで自社視点の商流が最も浅い＝プロパー扱い。OFFにすると自社社員でない保有人材として商流が一段深くなります）
-                </span>
-              </span>
-            </label>
-            <label className="flex items-start gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={kishaOk}
-                onChange={(e) => setKishaOk(e.target.checked)}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-              />
-              <span>
-                貴社チェック
-                <span className="ml-1 text-xs text-slate-400">
-                  （ONにすると「貴社まで」案件のマッチ対象にこの人材を含めます）
+                  （ONで自社視点の商流が最も浅い＝プロパー扱い。「貴社まで」案件の対象にもなります。
+                  OFFは自社保有だが非社員として商流が一段深くなります）
                 </span>
               </span>
             </label>
