@@ -14,6 +14,11 @@ import type { MatchProjectInput, MatchCandidateInput, SkillYear } from "@/lib/ai
 import { DEFAULT_MATCH_PROMPT } from "@/lib/ai/prompts";
 import { pregenerateProjectBodies } from "@/lib/email/project-mail";
 import { loadNgDomains, isNgDomain } from "@/lib/ng-company";
+import {
+  type MatchConfig,
+  parseMatchConfig,
+  matchConfigPromptAddon,
+} from "@/lib/match-config";
 
 // マッチとして保存する最低スコア。rematch・取込後の自動マッチで共通。
 // 70-79 も保存はする（自動送信は80+のみ・一覧表示も80+のみ。70-79は将来の閾値調整の余地として残す）。
@@ -315,6 +320,26 @@ function restrictCandidatesByLocation(candidates: Talent[], project: Project): T
   });
 }
 
+/**
+ * 設定(gates)に応じて決定的な除外ゲートを適用する。
+ * - 同一企業除外・NG企業は安全ゲートとして常時適用（設定で切れない）。
+ * - 商流/国籍/勤務地はマッチ設定のトグルに従い適用（OFF＝点数で見るだけ）。
+ * - 単価/言語/カバー率は prefilterCandidates 側でトグル適用する。
+ * pool は呼び出し側で同一企業・判定済みペアを除いた候補。
+ */
+function buildCandidates(
+  pool: Talent[],
+  project: Project,
+  ngDomains: Set<string>,
+  gates: MatchConfig["gates"],
+): Talent[] {
+  let c = restrictCandidatesByNg(pool, ngDomains); // 安全ゲート（常時）
+  if (gates.channel) c = restrictCandidatesByChannel(c, project);
+  if (gates.nationality) c = restrictCandidatesByNationality(c, project);
+  if (gates.location) c = restrictCandidatesByLocation(c, project);
+  return c;
+}
+
 export interface MatchRunResult {
   projects: number;
   talents: number;
@@ -368,6 +393,8 @@ async function resolveOrgPrompts(
   matchPrompt: string | undefined;
   projectEmailPrompt: string | null;
   rateToleranceMan: number;
+  languageMatchAll: boolean;
+  config: MatchConfig;
 }> {
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
@@ -376,9 +403,13 @@ async function resolveOrgPrompts(
       projectEmailPrompt: true,
       matchLearnings: true,
       rateToleranceMan: true,
+      languageMatchAll: true,
+      matchConfig: true,
     },
   });
   const rateToleranceMan = org?.rateToleranceMan ?? DEFAULT_RATE_TOLERANCE_MAN;
+  const languageMatchAll = org?.languageMatchAll ?? false;
+  const config = parseMatchConfig(org?.matchConfig);
   // 差し戻し学習があれば、マッチ判定プロンプトに「提案不可＝除外」の指示として付加する。
   const base = org?.matchPrompt ?? DEFAULT_MATCH_PROMPT;
   const learnings = org?.matchLearnings?.trim();
@@ -386,11 +417,15 @@ async function resolveOrgPrompts(
     ? `${base}\n\n【営業の差し戻し傾向（過去に営業が「送らない」と判断したパターン。以下に明確に該当するマッチは提案不可とみなし、score を MIN_SCORE 未満まで大きく下げて除外する。曖昧なものは通常どおり判定）】\n${learnings}`
     : base;
   // 単価の許容超過マージンを明示（事前フィルタで既に案件上限+tol万以内に絞り込み済み。rateOk判定を整合させる）。
-  const matchPrompt = `${withLearnings}\n\n【単価の許容超過マージン】${rateToleranceMan}万。人材の希望単価が「案件の想定単価上限＋${rateToleranceMan}万」以内なら rateOk=true（逆ザヤ・薄利でも許容内として通す）。これを超える明確な超過のみ rateOk=false。`;
+  const withRate = `${withLearnings}\n\n【単価の許容超過マージン】${rateToleranceMan}万。人材の希望単価が「案件の想定単価上限＋${rateToleranceMan}万」以内なら rateOk=true（逆ザヤ・薄利でも許容内として通す）。これを超える明確な超過のみ rateOk=false。`;
+  // マッチ設定の比重(C)・独自ルール(D)をプロンプトへ追記（既定のときは何も足さない）。
+  const matchPrompt = `${withRate}${matchConfigPromptAddon(config)}`;
   return {
     matchPrompt,
     projectEmailPrompt: org?.projectEmailPrompt ?? null,
     rateToleranceMan,
+    languageMatchAll,
+    config,
   };
 }
 
@@ -404,8 +439,22 @@ async function rankAndSave(
   candidates: Talent[],
   systemPrompt: string | undefined,
   rateToleranceMan: number,
+  languageMatchAll: boolean,
+  config: MatchConfig,
 ): Promise<{ pairs: number; saved: number }> {
-  const shortlist = prefilterCandidates(project, candidates, SHORTLIST_LIMIT, rateToleranceMan);
+  const shortlist = prefilterCandidates(
+    project,
+    candidates,
+    SHORTLIST_LIMIT,
+    rateToleranceMan,
+    languageMatchAll,
+    {
+      rateGate: config.gates.rate,
+      languageGate: config.gates.language,
+      coverageGate: config.gates.coverage,
+      minCoverage: config.minCoverage,
+    },
+  );
   if (shortlist.length === 0) return { pairs: 0, saved: 0 };
 
   const ranked = await getAI().rankCandidates(
@@ -417,18 +466,20 @@ async function rankAndSave(
   let saved = 0;
   for (const r of ranked) {
     if (r.score < MIN_SCORE) continue;
+    // 各ゲートが ON のときだけ LLM の除外フラグを尊重する（OFF＝点数で見るだけで除外しない）。
     // 勤務地・勤務形態（常駐/リモート/出社頻度）が両立しない場合はマッチを作らない（除外）。
-    if (r.locationOk === false) continue;
-    // 年齢制限オーバー／国籍要件（外国籍不可）／単価が明確不成立の場合もマッチを作らない（除外）。
+    if (config.gates.location && r.locationOk === false) continue;
+    // 年齢制限オーバーは常に除外。国籍/単価はゲートONのときのみ除外。
     if (r.ageOk === false) continue;
-    if (r.nationalityOk === false) continue;
-    if (r.rateOk === false) continue;
+    if (config.gates.nationality && r.nationalityOk === false) continue;
+    if (config.gates.rate && r.rateOk === false) continue;
     const reasons = [
       ...r.strengths,
       ...r.concerns.map((c) => `懸念: ${c}`),
     ];
     if (reasons.length === 0 && r.reason) reasons.push(r.reason);
-    const proposable = r.channelOk !== false; // 既定は提案可
+    // 商流ゲートOFFなら提案不可フラグを立てない（点数のみで見る）。
+    const proposable = !config.gates.channel || r.channelOk !== false;
     const channelNote = r.channelNote || null;
     // ここに到達＝勤務地・勤務形態は不一致でない（true か 不明）。OKラベル用に保存。
     const locationOk = r.locationOk ?? null;
@@ -537,6 +588,8 @@ export async function runMatchingForOrg(
   ]);
   const systemPrompt = prompts.matchPrompt;
   const rateToleranceMan = prompts.rateToleranceMan;
+  const languageMatchAll = prompts.languageMatchAll;
+  const config = prompts.config;
 
   // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
   // 「貴社社員/貴社まで」案件は除外せず残し、候補を自社人材だけに絞る（下で対応）。
@@ -583,24 +636,22 @@ export async function runMatchingForOrg(
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
     slice.map(async ({ project, pool }) => {
-      const candidates = restrictCandidatesByLocation(
-        restrictCandidatesByNationality(
-          restrictCandidatesByNg(
-            restrictCandidatesByChannel(
-              pool.filter(
-                (t) =>
-                  !isSameCompany(t, project) &&
-                  !existingPairs.has(`${project.id}#${t.id}`),
-              ),
-              project,
-            ),
-            ngDomains,
-          ),
-          project,
+      const candidates = buildCandidates(
+        pool.filter(
+          (t) => !isSameCompany(t, project) && !existingPairs.has(`${project.id}#${t.id}`),
         ),
         project,
+        ngDomains,
+        config.gates,
       );
-      const r = await rankAndSave(project, candidates, systemPrompt, rateToleranceMan);
+      const r = await rankAndSave(
+        project,
+        candidates,
+        systemPrompt,
+        rateToleranceMan,
+        languageMatchAll,
+        config,
+      );
       return { projectId: project.id, ...r };
     }),
   );
@@ -678,6 +729,8 @@ export async function runMatchingForNew(
   ]);
   const systemPrompt = prompts.matchPrompt;
   const rateToleranceMan = prompts.rateToleranceMan;
+  const languageMatchAll = prompts.languageMatchAll;
+  const config = prompts.config;
 
   // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
   const projects = dedupeProjectsForMatch(projectsRaw);
@@ -701,24 +754,22 @@ export async function runMatchingForNew(
 
   const settled = await Promise.allSettled(
     targets.map(async ({ project, pool }) => {
-      const candidates = restrictCandidatesByLocation(
-        restrictCandidatesByNationality(
-          restrictCandidatesByNg(
-            restrictCandidatesByChannel(
-              pool.filter(
-                (t) =>
-                  !isSameCompany(t, project) &&
-                  !existingPairs.has(`${project.id}#${t.id}`),
-              ),
-              project,
-            ),
-            ngDomains,
-          ),
-          project,
+      const candidates = buildCandidates(
+        pool.filter(
+          (t) => !isSameCompany(t, project) && !existingPairs.has(`${project.id}#${t.id}`),
         ),
         project,
+        ngDomains,
+        config.gates,
       );
-      const r = await rankAndSave(project, candidates, systemPrompt, rateToleranceMan);
+      const r = await rankAndSave(
+        project,
+        candidates,
+        systemPrompt,
+        rateToleranceMan,
+        languageMatchAll,
+        config,
+      );
       return { projectId: project.id, ...r };
     }),
   );

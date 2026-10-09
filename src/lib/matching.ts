@@ -119,7 +119,66 @@ const SKILL_IMPLICATIONS: Record<string, string[]> = {
   "aks": ["azure"],
   "sap s/4hana": ["sap"],
   "abap": ["sap"],
+  // 言語の表記ゆれを正規化（js→javascript 等）。言語ゲートで拾えるようにする。
+  "js": ["javascript"],
+  "ts": ["typescript", "javascript"],
+  "golang": ["go"],
 };
+
+/**
+ * プログラミング言語の集合（正規化済みトークン）。SESで最も重要な「言語の一致」を
+ * 決定的に判定するために使う。フレームワーク/DB/クラウド/OS等はここに入れない（それらは点数で見る）。
+ * 包含(Spring→java, Laravel→php 等)は SKILL_IMPLICATIONS で言語に展開される。
+ */
+const LANGUAGES = new Set<string>([
+  "java", "php", "python", "ruby", "go", "c#", "c++", "c",
+  "javascript", "typescript", "kotlin", "scala", "swift", "rust",
+  "perl", "vb", "vb.net", "vba", "visual basic", "cobol", "r",
+  "objective-c", "dart", "elixir", "groovy", "abap", "pl/sql",
+]);
+
+/** スキル集合（展開済み）から言語だけを取り出す。 */
+function languagesOf(expanded: Set<string>): Set<string> {
+  const out = new Set<string>();
+  for (const s of expanded) if (LANGUAGES.has(s)) out.add(s);
+  return out;
+}
+
+/**
+ * 案件が要求する「言語」の集合。requiredSkills を包含展開し、その中の言語トークンを拾う。
+ * 例:「Java, Spring Boot, AWS」→ {java}、「Laravel」→ {php}、言語が読み取れなければ空集合。
+ */
+export function requiredLanguages(project: Project): Set<string> {
+  return languagesOf(expandSkills(project.requiredSkills));
+}
+
+/** 人材が保有する「言語」の集合（包含展開後）。 */
+export function talentLanguages(talent: Talent): Set<string> {
+  return languagesOf(expandSkills([...talent.skills, ...talent.mainSkills]));
+}
+
+/**
+ * 言語ゲート: 案件が要求する言語に対し、人材の言語が不一致なら true（＝除外すべき）。
+ * - 案件から言語が読み取れない（requiredLangs が空）→ ゲートをかけない（false）。
+ * - requireAll=false（既定・いずれか1つ）: 要求言語を1つも持たなければ除外。
+ * - requireAll=true（すべて）: 要求言語のうち1つでも欠ければ除外。
+ * 包含関係(Spring→java, Laravel→php)は保有として扱う。
+ */
+export function languageMismatch(
+  project: Project,
+  talent: Talent,
+  requireAll = false,
+): boolean {
+  const req = requiredLanguages(project);
+  if (req.size === 0) return false; // 言語要件が読み取れない → 絞らない
+  const owned = talentLanguages(talent);
+  if (requireAll) {
+    for (const lang of req) if (!owned.has(lang)) return true; // 1つでも欠け → 除外
+    return false;
+  }
+  for (const lang of req) if (owned.has(lang)) return false; // 1つでも合致 → OK
+  return true; // 要求言語を1つも持たない → 除外
+}
 
 function normalize(skill: string): string {
   return skill.trim().toLowerCase().replace(/\s+/g, " ");
@@ -336,9 +395,20 @@ export function prefilterCandidates(
   talents: Talent[],
   limit = 30,
   rateToleranceMan: number = DEFAULT_RATE_TOLERANCE_MAN,
+  languageMatchAll = false,
+  opts?: {
+    rateGate?: boolean;
+    languageGate?: boolean;
+    coverageGate?: boolean;
+    minCoverage?: number;
+  },
 ): PrefilterHit[] {
   const required = project.requiredSkills.map(normalize).filter(Boolean);
   const tol = Math.max(0, rateToleranceMan);
+  const rateGate = opts?.rateGate ?? true;
+  const languageGate = opts?.languageGate ?? true;
+  const coverageGate = opts?.coverageGate ?? true;
+  const minCoverage = opts?.minCoverage ?? MIN_COVERAGE;
 
   const hits: PrefilterHit[] = [];
   for (const talent of talents) {
@@ -346,9 +416,13 @@ export function prefilterCandidates(
     //  人材の希望単価が「案件の想定単価上限 ＋ 許容超過マージン(tol万)」を超えたら除外。
     //  許容内（安い人材・案件上限をtol万まで超える人材）は通す。自社/他社とも同じ。
     //  ※他社人材で案件上限を超える＝逆ザヤ(薄利)になり得るが、許容範囲内なら通し、粗利は提案時に人が確認する。
-    if (project.rateMax != null && talent.desiredRateMin != null) {
+    if (rateGate && project.rateMax != null && talent.desiredRateMin != null) {
       if (talent.desiredRateMin > project.rateMax + tol) continue;
     }
+
+    // 言語ゲート（最優先の必須）: 案件の要求言語を1つも持たない人材は除外（Java案件×PHPのみ 等）。
+    // 言語が読み取れない案件・要求言語のいずれかを保有する人材は通す。包含(Spring→java)は保有扱い。
+    if (languageGate && languageMismatch(project, talent, languageMatchAll)) continue;
 
     const owned = expandSkills([...talent.skills, ...talent.mainSkills]);
 
@@ -359,8 +433,8 @@ export function prefilterCandidates(
     }
     const coreHits = required.filter((r) => owned.has(r)).length;
     const coverage = coreHits / required.length;
-    // 言語/スキルを厳しく: カバー率が閾値未満なら除外。
-    if (coverage >= MIN_COVERAGE) {
+    // 言語/スキルを厳しく: カバー率が閾値未満なら除外（ゲートOFF時は全件通してLLM/他ゲートに委ねる）。
+    if (!coverageGate || coverage >= minCoverage) {
       hits.push({ talent, coreHits, coverage });
     }
   }

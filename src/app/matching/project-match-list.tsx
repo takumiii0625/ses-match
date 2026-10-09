@@ -30,6 +30,9 @@ export interface ProjectMatchVM {
     mainSkills: string[];
     skills: string[];
     receivedDate: string | null;
+    // 言語ゲート用: 案件の要求言語数と、人材が満たす数（サーバー側で包含展開して算出）。
+    langReq: number;
+    langHit: number;
   };
 }
 
@@ -70,28 +73,38 @@ export function ProjectMatchList({
   matches,
   projectRateMax,
   initialTolerance,
+  initialLanguageMatchAll,
   proposalSlot,
 }: {
   matches: ProjectMatchVM[];
   projectRateMax: number | null;
   initialTolerance: number;
+  initialLanguageMatchAll: boolean;
   // ProposalButton はサーバー側で生成して talentId をキーに差し込む。
   proposalSlot: Record<string, React.ReactNode>;
 }) {
   const [tolerance, setTolerance] = useState(String(initialTolerance));
+  const [langAll, setLangAll] = useState(initialLanguageMatchAll);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const tol = Math.max(0, Number(tolerance) || 0);
 
   const visible = useMemo(() => {
-    if (projectRateMax == null) return matches; // 案件上限不明 → 単価で絞れない
     return matches.filter((m) => {
-      const want = m.talent.desiredRateMin;
-      if (want == null) return true; // 希望単価不明 → 通す
-      return want <= projectRateMax + tol;
+      // 単価フィルタ（案件上限＋許容を超える人材を隠す。上限/希望不明は通す）。
+      if (projectRateMax != null) {
+        const want = m.talent.desiredRateMin;
+        if (want != null && want > projectRateMax + tol) return false;
+      }
+      // 言語フィルタ（要求言語が無い案件は対象外＝通す）。
+      const { langReq, langHit } = m.talent;
+      if (langReq > 0) {
+        if (langAll ? langHit < langReq : langHit === 0) return false;
+      }
+      return true;
     });
-  }, [matches, projectRateMax, tol]);
+  }, [matches, projectRateMax, tol, langAll]);
 
   const hidden = matches.length - visible.length;
 
@@ -102,7 +115,7 @@ export function ProjectMatchList({
       const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rateToleranceMan: tol }),
+        body: JSON.stringify({ rateToleranceMan: tol, languageMatchAll: langAll }),
       });
       if (!res.ok) throw new Error(String(res.status));
       setSavedMsg("保存しました（再マッチ・自動送信にも反映されます）");
@@ -143,6 +156,33 @@ export function ProjectMatchList({
             ) : (
               <>この案件は想定単価上限が未設定のため、単価での絞り込みはできません。</>
             )}
+          </p>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-4 border-t border-border pt-4">
+          <div>
+            <Label>必須言語の一致</Label>
+            <div className="mt-1 inline-flex overflow-hidden rounded-lg border border-border text-sm">
+              <button
+                type="button"
+                onClick={() => setLangAll(false)}
+                className={`px-3 py-1.5 ${!langAll ? "bg-primary text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+              >
+                いずれか1つ
+              </button>
+              <button
+                type="button"
+                onClick={() => setLangAll(true)}
+                className={`px-3 py-1.5 ${langAll ? "bg-primary text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+              >
+                すべて必須
+              </button>
+            </div>
+          </div>
+          <p className="flex-1 text-xs text-muted">
+            案件の必須スキルに含まれる<span className="font-medium">言語</span>（Java/PHP/Python 等）で絞り込みます。
+            「いずれか1つ」＝要求言語を1つでも持てば表示。「すべて必須」＝要求言語を全て持つ人材だけ表示。
+            包含（Spring Boot→Java）は保有扱い。言語が読み取れない案件は対象外です。
           </p>
           <div className="flex items-center gap-2">
             <Button variant="secondary" onClick={handleSaveDefault} disabled={saving}>

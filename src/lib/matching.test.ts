@@ -11,6 +11,8 @@ import {
   dedupeProjectsForMatch,
   regionOf,
   projectRequiresOnsite,
+  requiredLanguages,
+  languageMismatch,
 } from "./matching";
 
 function talent(p: Partial<Talent>): Talent {
@@ -19,6 +21,41 @@ function talent(p: Partial<Talent>): Talent {
 function project(p: Partial<Project>): Project {
   return { requiredSkills: [], ...p } as unknown as Project;
 }
+
+describe("requiredLanguages / languageMismatch", () => {
+  it("案件の要求言語を抽出（包含でSpringBoot→java, Laravel→php）", () => {
+    expect([...requiredLanguages(project({ requiredSkills: ["Java", "AWS"] }))]).toEqual(["java"]);
+    expect([...requiredLanguages(project({ requiredSkills: ["Spring Boot", "MySQL"] }))]).toContain("java");
+    expect([...requiredLanguages(project({ requiredSkills: ["Laravel"] }))]).toContain("php");
+    // 言語が無い案件（FW/DB/クラウドのみ）→ 空
+    expect(requiredLanguages(project({ requiredSkills: ["AWS", "Docker"] })).size).toBe(0);
+  });
+
+  it("要求言語を1つも持たない人材は除外（Java案件×PHPのみ）", () => {
+    const p = project({ requiredSkills: ["Java"] });
+    expect(languageMismatch(p, talent({ skills: ["PHP", "Laravel"] }))).toBe(true); // 除外
+    expect(languageMismatch(p, talent({ skills: ["Java"] }))).toBe(false); // 通す
+    expect(languageMismatch(p, talent({ skills: ["Spring Boot"] }))).toBe(false); // 包含で保有
+  });
+
+  it("複数言語案件は『いずれか1つ』持てば通す（既定・ANY）", () => {
+    const p = project({ requiredSkills: ["Java", "Python"] });
+    expect(languageMismatch(p, talent({ skills: ["Java"] }))).toBe(false); // 1つ合致 → 通す
+    expect(languageMismatch(p, talent({ skills: ["PHP"] }))).toBe(true); // 0合致 → 除外
+  });
+
+  it("ALLモードは要求言語を全部持たないと除外", () => {
+    const p = project({ requiredSkills: ["Java", "Python"] });
+    expect(languageMismatch(p, talent({ skills: ["Java"] }), true)).toBe(true); // Python欠 → 除外
+    expect(languageMismatch(p, talent({ skills: ["Java", "Python"] }), true)).toBe(false); // 両方 → 通す
+    expect(languageMismatch(p, talent({ skills: ["Spring Boot", "Django"] }), true)).toBe(false); // 包含で両方
+  });
+
+  it("言語が読み取れない案件は言語ゲートをかけない", () => {
+    const p = project({ requiredSkills: ["AWS", "Docker"] });
+    expect(languageMismatch(p, talent({ skills: ["PHP"] }))).toBe(false);
+  });
+});
 
 describe("regionOf", () => {
   it("都道府県・主要都市名から地方を判定", () => {

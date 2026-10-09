@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { PROMPT_FIELDS } from "@/lib/ai/prompts";
+import { parseMatchConfig } from "@/lib/match-config";
 
 const VALID_AI_PROVIDERS = ["mock", "anthropic", "openai"] as const;
 type AiProvider = (typeof VALID_AI_PROVIDERS)[number];
@@ -85,6 +86,13 @@ export async function PATCH(req: NextRequest) {
           : {}),
         ...(autoEmailDailyCap !== undefined ? { autoEmailDailyCap } : {}),
         ...(rateToleranceMan !== undefined ? { rateToleranceMan } : {}),
+        ...(typeof body.languageMatchAll === "boolean"
+          ? { languageMatchAll: body.languageMatchAll }
+          : {}),
+        // マッチ設定(JSON)。既定値へ正規化してから保存（未知/欠損は既定で補完）。
+        ...(body.matchConfig !== undefined
+          ? { matchConfig: parseMatchConfig(body.matchConfig) as object }
+          : {}),
         // Allow clearing signature with empty string (stored as null)
         ...(body.proposalSignature !== undefined
           ? {

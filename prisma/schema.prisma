@@ -31,6 +31,12 @@ model Organization {
   // 単価の許容超過マージン（万円）。人材の希望単価が「案件の想定単価上限＋この値」を超えたらマッチ除外。
   // マッチング画面から調整可。再マッチ・日次自動マッチ・自動送信すべての足切りに効く。
   rateToleranceMan  Int      @default(5)
+  // 必須言語の一致モード。false=いずれか1言語を保有すれば可（既定）。true=要求言語をすべて保有必須。
+  // マッチング画面から切替＆保存。言語が読み取れない案件は言語ゲートをかけない。
+  languageMatchAll  Boolean  @default(false)
+  // マッチ設定（除外ゲートON/OFF・カバー率閾値・点数要素の比重・独自ルール）。null=既定。
+  // マッチング画面の「マッチ設定」パネルで編集。型/既定は src/lib/match-config.ts。
+  matchConfig       Json?
   // 提携先への一斉送信（ブラスト）の1日上限（安全装置。本日のBlastRecipient.SENT件数で判定）。
   blastDailyCap     Int      @default(1000)
   // 日次マッチを最後に実行した日（JST "YYYY-MM-DD"）。1日1回だけ実行する冪等ガードに使う。

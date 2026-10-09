@@ -2,6 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { formatRate, daysAgo } from "@/lib/utils";
 import { dedupeLatest, talentDedupeKey } from "@/lib/dedupe";
+import { requiredLanguages, talentLanguages } from "@/lib/matching";
+import { parseMatchConfig } from "@/lib/match-config";
+import { MatchConfigPanel } from "./match-config-panel";
 import { REMOTE_LABELS } from "@/lib/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -20,6 +23,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
   const { projectId } = await searchParams;
 
   const org = await getCurrentOrg();
+  const matchConfig = parseMatchConfig(org.matchConfig);
   const projects = await prisma.project.findMany({
     where: { orgId: org.id },
     orderBy: { createdAt: "desc" },
@@ -44,6 +48,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
             <RematchButton />
           </div>
         </Card>
+        <MatchConfigPanel initialConfig={matchConfig} />
         <div className="flex flex-col items-center justify-center py-20 text-muted">
           <p className="text-sm font-medium text-slate-400">案件を選択してください</p>
         </div>
@@ -93,6 +98,8 @@ export default async function MatchingPage({ searchParams }: PageProps) {
         <MatchRunner projects={projects} selectedProjectId={projectId} />
       </Card>
 
+      <MatchConfigPanel initialConfig={matchConfig} />
+
       {/* Project summary */}
       <Card className="p-5">
         <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
@@ -134,28 +141,37 @@ export default async function MatchingPage({ searchParams }: PageProps) {
         </Card>
       ) : (
         (() => {
-          const vms: ProjectMatchVM[] = matches.map(({ item: m, dupes }) => ({
-            id: m.id,
-            score: m.score,
-            reasons: m.reasons,
-            proposable: m.proposable,
-            channelNote: m.channelNote,
-            dupes,
-            talent: {
-              id: m.talent.id,
-              name: m.talent.name,
-              status: m.talent.status,
-              desiredRateMin: m.talent.desiredRateMin,
-              desiredRateMax: m.talent.desiredRateMax,
-              availabilityText: m.talent.availabilityText,
-              remotePreference: m.talent.remotePreference,
-              nearestStation: m.talent.nearestStation,
-              affiliation: m.talent.affiliation,
-              mainSkills: m.talent.mainSkills,
-              skills: m.talent.skills,
-              receivedDate: m.talent.receivedDate ? m.talent.receivedDate.toISOString() : null,
-            },
-          }));
+          // 言語ゲート表示用: 案件の要求言語（包含展開済み）と、各人材が満たす数を算出。
+          const projLangs = requiredLanguages(project);
+          const vms: ProjectMatchVM[] = matches.map(({ item: m, dupes }) => {
+            const tLangs = talentLanguages(m.talent);
+            let langHit = 0;
+            for (const l of projLangs) if (tLangs.has(l)) langHit++;
+            return {
+              id: m.id,
+              score: m.score,
+              reasons: m.reasons,
+              proposable: m.proposable,
+              channelNote: m.channelNote,
+              dupes,
+              talent: {
+                id: m.talent.id,
+                name: m.talent.name,
+                status: m.talent.status,
+                desiredRateMin: m.talent.desiredRateMin,
+                desiredRateMax: m.talent.desiredRateMax,
+                availabilityText: m.talent.availabilityText,
+                remotePreference: m.talent.remotePreference,
+                nearestStation: m.talent.nearestStation,
+                affiliation: m.talent.affiliation,
+                mainSkills: m.talent.mainSkills,
+                skills: m.talent.skills,
+                receivedDate: m.talent.receivedDate ? m.talent.receivedDate.toISOString() : null,
+                langReq: projLangs.size,
+                langHit,
+              },
+            };
+          });
           // ProposalButton はクライアント境界をまたぐので、サーバーで生成して talentId で渡す。
           const proposalSlot = Object.fromEntries(
             vms.map((v) => [
@@ -168,6 +184,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
               matches={vms}
               projectRateMax={project.rateMax}
               initialTolerance={org.rateToleranceMan}
+              initialLanguageMatchAll={org.languageMatchAll}
               proposalSlot={proposalSlot}
             />
           );

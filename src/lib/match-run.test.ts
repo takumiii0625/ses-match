@@ -392,6 +392,17 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // t2, t3
   });
 
+  it("言語ゲート: Java必須の案件はPHPのみの人材を除外・Java/SpringBootは残す", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), requiredSkills: ["Java"] }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), skills: ["PHP", "Laravel"], mainSkills: ["PHP"] }, // 言語不一致 → 除外
+      { ...talent("t2"), skills: ["Java"], mainSkills: ["Java"] }, // 一致 → 残す
+      { ...talent("t3"), skills: ["Spring Boot"], mainSkills: ["Spring Boot"] }, // 包含(→java) → 残す
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(2); // t2, t3
+  });
+
   it("東京常駐の案件は地方在住(大阪)を除外・東京在住/所在不明は残す", async () => {
     db.project.findMany.mockResolvedValue([
       { ...project("p1"), remotePreference: "ONSITE", location: "東京都千代田区" },
