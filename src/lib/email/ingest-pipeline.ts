@@ -100,6 +100,16 @@ function toNationality(v?: string): "JAPAN" | "OTHER" {
   return v === "OTHER" ? "OTHER" : "JAPAN";
 }
 
+// 日本語レベル。NATIVE/BUSINESS/DAILY/NONE 以外・未記載は null（＝日本人は書かないので判定材料なし）。
+const LANGUAGE_LEVELS = new Set(["NATIVE", "BUSINESS", "DAILY", "NONE"]);
+function toLanguageLevel(
+  v?: string | null,
+): "NATIVE" | "BUSINESS" | "DAILY" | "NONE" | null {
+  return v && LANGUAGE_LEVELS.has(v)
+    ? (v as "NATIVE" | "BUSINESS" | "DAILY" | "NONE")
+    : null;
+}
+
 /** Extract the bare email address from a From header ("名前 <a@b.com>" → a@b.com). */
 function parseFromEmail(from?: string | null): string | null {
   if (!from) return null;
@@ -303,6 +313,7 @@ async function ingestEmails(
             age: p.age ?? null,
             gender: toGender(p.gender),
             nationality: toNationality(p.nationality),
+            japaneseLevel: toLanguageLevel(p.japaneseLevel),
             skills: p.skills ?? [],
             mainSkills: p.mainSkills ?? [],
             skillYears: p.skillYears ?? undefined, // 言語別の経験年数（分かるものだけ）

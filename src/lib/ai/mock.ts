@@ -93,10 +93,33 @@ export class MockAIService implements AIService {
     const affM =
       rawEmail.match(/【?\s*(?:所属|商流)\s*】?[:：]?\s*([^\n、。【】]+)/) ??
       rawEmail.match(/(\d+社先[^\s\n、。]*|プロパー|個人事業主|フリーランス|弊社社員)/);
+    // JLPT/帰化/外国籍/日本語レベルの記載があれば外国籍シグナルとみなす（未記載は日本人扱い）。
+    const jlptM = rawEmail.match(/(?:日本語能力試験|JLPT|日本語検定)?\s*N\s*([1-5])/i);
+    const isForeign =
+      /外国籍|帰化|在日|日本語能力試験|JLPT|日本語検定/i.test(rawEmail) || !!jlptM;
+    const jpLevelM = rawEmail.match(
+      /日本語\s*[:：]?\s*(ネイティブ|母[国語]|ビジネス|日常会話)/,
+    );
+    const japaneseLevel =
+      jpLevelM?.[1] === "ネイティブ" || jpLevelM?.[1]?.startsWith("母")
+        ? "NATIVE"
+        : jpLevelM?.[1] === "ビジネス"
+          ? "BUSINESS"
+          : jpLevelM?.[1] === "日常会話"
+            ? "DAILY"
+            : jlptM
+              ? Number(jlptM[1]) <= 2
+                ? "BUSINESS"
+                : Number(jlptM[1]) === 3
+                  ? "DAILY"
+                  : "NONE"
+              : null;
     return {
       name: nameM?.[1],
       age: extractAge(rawEmail),
       gender: extractGender(rawEmail),
+      nationality: isForeign ? "OTHER" : "JAPAN",
+      japaneseLevel,
       skills,
       mainSkills: skills.slice(0, 3),
       desiredRateMin: rate.min,

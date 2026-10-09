@@ -9,6 +9,8 @@ import {
   isStrictDirectChannel,
   channelDepth,
   dedupeProjectsForMatch,
+  regionOf,
+  projectRequiresOnsite,
 } from "./matching";
 
 function talent(p: Partial<Talent>): Talent {
@@ -17,6 +19,36 @@ function talent(p: Partial<Talent>): Talent {
 function project(p: Partial<Project>): Project {
   return { requiredSkills: [], ...p } as unknown as Project;
 }
+
+describe("regionOf", () => {
+  it("都道府県・主要都市名から地方を判定", () => {
+    expect(regionOf("東京都千代田区")).toBe("関東");
+    expect(regionOf("大阪市北区")).toBe("近畿");
+    expect(regionOf("最寄: 梅田")).toBe("近畿");
+    expect(regionOf("名古屋")).toBe("中部");
+    expect(regionOf("福岡県")).toBe("九州沖縄");
+  });
+  it("地名が無い・曖昧（複数地方）は null（＝不明で通す側）", () => {
+    expect(regionOf("最寄: 新宿駅")).toBeNull(); // 駅名のみ
+    expect(regionOf(null)).toBeNull();
+    expect(regionOf("東京/大阪どちらも可")).toBeNull(); // 複数ヒット→曖昧
+  });
+});
+
+describe("projectRequiresOnsite", () => {
+  it("フルリモート・基本リモートは false", () => {
+    expect(projectRequiresOnsite(project({ remotePreference: "FULL_REMOTE" }))).toBe(false);
+    expect(projectRequiresOnsite(project({ remotePreference: "MOSTLY_REMOTE" }))).toBe(false);
+  });
+  it("常駐・出社系は true", () => {
+    expect(projectRequiresOnsite(project({ remotePreference: "ONSITE" }))).toBe(true);
+    expect(projectRequiresOnsite(project({ remotePreference: "HYBRID" }))).toBe(true);
+    expect(projectRequiresOnsite(project({ description: "東京で常駐" }))).toBe(true);
+  });
+  it("リモート指定なし・本文に手掛かり無しは false（地域ゲートをかけない）", () => {
+    expect(projectRequiresOnsite(project({ description: "Java開発" }))).toBe(false);
+  });
+});
 
 describe("scoreMatch", () => {
   it("全条件が合致すると高スコア", () => {
@@ -127,14 +159,26 @@ describe("prefilterCandidates", () => {
     expect(prefilterCandidates(p, many, 3)).toHaveLength(3);
   });
 
-  it("金額足切り(他社人材): 案件>人材ならOK・同額/超過は除外（マージン幅は問わない）", () => {
+  it("金額足切り: 希望が『案件上限＋許容』を超えると除外（安い人材・許容内は通す）", () => {
     const p = project({ requiredSkills: ["Java"], rateMax: 100 });
-    const thin = talent({ id: "thin", skills: ["Java"], desiredRateMin: 99 } as Partial<Talent>); // 差益1万 → 残す
-    const equal = talent({ id: "equal", skills: ["Java"], desiredRateMin: 100 } as Partial<Talent>); // 粗利0 → 除外
-    const over = talent({ id: "over", skills: ["Java"], desiredRateMin: 120 } as Partial<Talent>); // 超過 → 除外
-    const ids = prefilterCandidates(p, [thin, equal, over]).map((h) => h.talent.id);
-    expect(ids).toContain("thin");
-    expect(ids).not.toContain("equal");
+    const cheap = talent({ id: "cheap", skills: ["Java"], desiredRateMin: 80 } as Partial<Talent>); // 安い → 残す
+    const atCap = talent({ id: "atCap", skills: ["Java"], desiredRateMin: 100 } as Partial<Talent>); // 上限ちょうど → 許容内で残す
+    const within = talent({ id: "within", skills: ["Java"], desiredRateMin: 105 } as Partial<Talent>); // +5万=許容内 → 残す
+    const over = talent({ id: "over", skills: ["Java"], desiredRateMin: 106 } as Partial<Talent>); // +6万=許容超過 → 除外
+    // 許容5万で判定。
+    const ids = prefilterCandidates(p, [cheap, atCap, within, over], 30, 5).map((h) => h.talent.id);
+    expect(ids).toContain("cheap");
+    expect(ids).toContain("atCap");
+    expect(ids).toContain("within");
+    expect(ids).not.toContain("over");
+  });
+
+  it("金額足切り: 許容0なら案件上限を1円でも超えたら除外", () => {
+    const p = project({ requiredSkills: ["Java"], rateMax: 100 });
+    const atCap = talent({ id: "atCap", skills: ["Java"], desiredRateMin: 100 } as Partial<Talent>); // 上限ちょうど → 残す
+    const over = talent({ id: "over", skills: ["Java"], desiredRateMin: 101 } as Partial<Talent>); // 超過 → 除外
+    const ids = prefilterCandidates(p, [atCap, over], 30, 0).map((h) => h.talent.id);
+    expect(ids).toContain("atCap");
     expect(ids).not.toContain("over");
   });
 

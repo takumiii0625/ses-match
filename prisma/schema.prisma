@@ -28,6 +28,9 @@ model Organization {
   // 案件案内メールの自動送信。ON時、日次マッチ後に「商流OK・80点以上・その日の新規・未送信」を自動送信。
   autoEmailEnabled  Boolean  @default(false)
   autoEmailDailyCap Int      @default(20) // 1日の自動送信上限（安全装置。手動送信も含めて計上）
+  // 単価の許容超過マージン（万円）。人材の希望単価が「案件の想定単価上限＋この値」を超えたらマッチ除外。
+  // マッチング画面から調整可。再マッチ・日次自動マッチ・自動送信すべての足切りに効く。
+  rateToleranceMan  Int      @default(5)
   // 提携先への一斉送信（ブラスト）の1日上限（安全装置。本日のBlastRecipient.SENT件数で判定）。
   blastDailyCap     Int      @default(1000)
   // 日次マッチを最後に実行した日（JST "YYYY-MM-DD"）。1日1回だけ実行する冪等ガードに使う。

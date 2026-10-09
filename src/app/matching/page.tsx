@@ -1,48 +1,19 @@
-import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { getCurrentOrg } from "@/lib/current-org";
 import { formatRate, daysAgo } from "@/lib/utils";
 import { dedupeLatest, talentDedupeKey } from "@/lib/dedupe";
-import { channelStatus } from "@/lib/channel";
-import { REMOTE_LABELS, TALENT_STATUS_LABELS } from "@/lib/enums";
+import { REMOTE_LABELS } from "@/lib/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { MatchRunner } from "./match-runner";
 import { RematchButton } from "./rematch-button";
 import { ProposalButton } from "./proposal-button";
+import { ProjectMatchList, type ProjectMatchVM } from "./project-match-list";
 
 export const dynamic = "force-dynamic";
 
 interface PageProps {
   searchParams: Promise<{ projectId?: string }>;
-}
-
-function scoreBadgeTone(score: number): "green" | "amber" | "slate" {
-  if (score >= 70) return "green";
-  if (score >= 40) return "amber";
-  return "slate";
-}
-
-function ScoreBar({ score }: { score: number }) {
-  const color =
-    score >= 70 ? "bg-emerald-500" : score >= 40 ? "bg-amber-400" : "bg-slate-300";
-  return (
-    <div className="mt-1 flex items-center gap-2">
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, score)}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function splitReasons(reasons: string[]) {
-  const strengths: string[] = [];
-  const concerns: string[] = [];
-  for (const r of reasons) {
-    if (r.startsWith("懸念:")) concerns.push(r.replace(/^懸念:\s*/, ""));
-    else strengths.push(r);
-  }
-  return { strengths, concerns };
 }
 
 export default async function MatchingPage({ searchParams }: PageProps) {
@@ -156,120 +127,51 @@ export default async function MatchingPage({ searchParams }: PageProps) {
         </div>
       </Card>
 
-      <div className="px-1 text-sm font-medium text-muted">{matches.length} 件</div>
-
       {matches.length === 0 ? (
         <Card className="p-10 text-center text-sm text-muted">
           この案件の保存済みマッチはまだありません。上の「AIで再判定」を押すと、
           全人材との適合度をAIが判定して保存します。
         </Card>
       ) : (
-        <div className="space-y-3">
-          {matches.map(({ item: m, dupes }, idx) => {
-            const talent = m.talent;
-            const { strengths, concerns } = splitReasons(m.reasons);
-            return (
-              <Card key={m.id} className="p-5">
-                <div className="flex items-start gap-4">
-                  <div className="w-8 flex-shrink-0 text-center">
-                    <span className="text-lg font-bold text-slate-300">{idx + 1}</span>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Link
-                        href={`/talent/${talent.id}`}
-                        className="font-semibold text-foreground hover:text-primary hover:underline"
-                      >
-                        {talent.name}
-                      </Link>
-                      <Badge tone={scoreBadgeTone(m.score)} className="tabular-nums">
-                        {Math.round(m.score)}点
-                      </Badge>
-                      {(() => {
-                        const cs = channelStatus(m.proposable, m.channelNote);
-                        return cs ? <Badge tone={cs.tone}>{cs.label}</Badge> : null;
-                      })()}
-                      {dupes > 1 && <Badge tone="slate">同一{dupes}件</Badge>}
-                      {talent.status !== "NONE" && (
-                        <Badge tone="slate">
-                          {TALENT_STATUS_LABELS[talent.status] ?? talent.status}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <ScoreBar score={m.score} />
-
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                      {(talent.desiredRateMin != null || talent.desiredRateMax != null) && (
-                        <span>希望単価: {formatRate(talent.desiredRateMin, talent.desiredRateMax)}</span>
-                      )}
-                      {talent.availabilityText && <span>稼働開始: {talent.availabilityText}</span>}
-                      {talent.remotePreference && (
-                        <span>{REMOTE_LABELS[talent.remotePreference] ?? talent.remotePreference}</span>
-                      )}
-                      {talent.nearestStation && <span>最寄: {talent.nearestStation}</span>}
-                      {talent.affiliation && <span>所属: {talent.affiliation}</span>}
-                      <span>配信: {daysAgo(talent.receivedDate)}</span>
-                    </div>
-
-                    {(talent.mainSkills.length > 0 || talent.skills.length > 0) && (
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        {talent.mainSkills.map((s) => (
-                          <Badge key={s} tone="blue">{s}</Badge>
-                        ))}
-                        {talent.skills
-                          .filter((s) => !talent.mainSkills.includes(s))
-                          .slice(0, 6)
-                          .map((s) => (
-                            <Badge key={s} tone="slate">{s}</Badge>
-                          ))}
-                      </div>
-                    )}
-
-                    {strengths.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-1">
-                        {strengths.map((r, i) => (
-                          <span
-                            key={i}
-                            className="inline-flex items-center rounded-full border border-emerald-100 bg-emerald-50 px-2.5 py-0.5 text-xs text-emerald-700"
-                          >
-                            ✓ {r}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {concerns.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {concerns.map((r, i) => (
-                          <span
-                            key={i}
-                            className="inline-flex items-center rounded-full border border-amber-100 bg-amber-50 px-2.5 py-0.5 text-xs text-amber-700"
-                          >
-                            ⚠ {r}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {m.channelNote &&
-                      (m.proposable ? (
-                        <p className="mt-2 text-xs text-slate-500">商流: {m.channelNote}</p>
-                      ) : (
-                        <div className="mt-2">
-                          <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs text-red-700">
-                            提案不可の理由: {m.channelNote}
-                          </span>
-                        </div>
-                      ))}
-
-                    <div className="mt-3">
-                      <ProposalButton talentId={talent.id} projectId={projectId} />
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+        (() => {
+          const vms: ProjectMatchVM[] = matches.map(({ item: m, dupes }) => ({
+            id: m.id,
+            score: m.score,
+            reasons: m.reasons,
+            proposable: m.proposable,
+            channelNote: m.channelNote,
+            dupes,
+            talent: {
+              id: m.talent.id,
+              name: m.talent.name,
+              status: m.talent.status,
+              desiredRateMin: m.talent.desiredRateMin,
+              desiredRateMax: m.talent.desiredRateMax,
+              availabilityText: m.talent.availabilityText,
+              remotePreference: m.talent.remotePreference,
+              nearestStation: m.talent.nearestStation,
+              affiliation: m.talent.affiliation,
+              mainSkills: m.talent.mainSkills,
+              skills: m.talent.skills,
+              receivedDate: m.talent.receivedDate ? m.talent.receivedDate.toISOString() : null,
+            },
+          }));
+          // ProposalButton はクライアント境界をまたぐので、サーバーで生成して talentId で渡す。
+          const proposalSlot = Object.fromEntries(
+            vms.map((v) => [
+              v.talent.id,
+              <ProposalButton key={v.talent.id} talentId={v.talent.id} projectId={projectId} />,
+            ]),
+          );
+          return (
+            <ProjectMatchList
+              matches={vms}
+              projectRateMax={project.rateMax}
+              initialTolerance={org.rateToleranceMan}
+              proposalSlot={proposalSlot}
+            />
+          );
+        })()
       )}
     </div>
   );

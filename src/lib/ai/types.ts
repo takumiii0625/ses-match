@@ -12,6 +12,7 @@ export interface ParsedTalent {
   age?: number;
   gender?: string; // MALE | FEMALE | OTHER
   nationality?: string; // JAPAN | OTHER（外国籍不可案件の足切りに使用。記載なしは日本人扱い）
+  japaneseLevel?: string | null; // NATIVE | BUSINESS | DAILY | NONE（日本語レベル明記は外国籍シグナル）
   skills: string[];
   mainSkills: string[];
   skillYears?: SkillYear[]; // 言語/技術ごとの経験年数（分かるものだけ）
@@ -96,6 +97,7 @@ export interface MatchCandidateInput {
   name: string;
   age?: number | null;
   nationality?: string | null; // 国籍（外国籍不可の案件の足切りに使用）
+  japaneseLevel?: string | null; // 日本語レベル（"日本語ネイティブ必須"案件の判定材料）
   talentType?: string | null;
   affiliation?: string | null; // 所属（商流上の立場。例: "1社先正社員"）
   skills: string[];

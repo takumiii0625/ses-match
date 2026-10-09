@@ -165,7 +165,19 @@ export const TALENT_SCHEMA = {
       description:
         "国籍。外国籍が読み取れる場合は OTHER。判断材料: 『国籍：中国/韓国/ベトナム…』等の非日本国籍の明記、『外国籍』『◯◯籍』、" +
         "『帰化』『在日』（帰化していても元外国籍なので OTHER）、日本語が母語でない旨の記載。" +
-        "『日本』『日本国籍』と明記、または国籍の記載が一切無い場合は JAPAN（日本人は国籍を書かないことが多いため、未記載は日本人とみなす）。",
+        "★日本語能力試験(JLPT)の級が記載されている（N1/N2/N3/N4/N5、『日本語能力試験』『JLPT』『日本語検定』等）＝その試験は外国人が受けるものなので OTHER とみなす。" +
+        "同様に『日本語: ビジネスレベル/日常会話レベル』のように“日本語の習熟度”をわざわざ明記しているのも外国籍の可能性が高い（日本人は日本語レベルを書かない）。この場合も原則 OTHER。" +
+        "『日本』『日本国籍』と明記、または国籍・日本語レベルの記載が一切無い場合は JAPAN（日本人は国籍や日本語レベルを書かないことが多いため、未記載は日本人とみなす）。",
+    },
+    japaneseLevel: {
+      anyOf: [
+        { type: "string", enum: ["NATIVE", "BUSINESS", "DAILY", "NONE"] },
+        { type: "null" },
+      ],
+      description:
+        "日本語レベル。『日本語: ネイティブ/母語』→NATIVE、『ビジネスレベル/ビジネス』→BUSINESS、『日常会話(レベル)』→DAILY、ほぼ不可→NONE。" +
+        "JLPT の級が書かれている場合は目安として N1→BUSINESS、N2→BUSINESS、N3→DAILY、N4/N5→NONE。" +
+        "日本語レベルの記載が一切無い場合は null（日本人は書かないため、null を『日本語できない』とは解釈しない）。",
     },
     skills: { type: "array", items: { type: "string" } },
     mainSkills: { type: "array", items: { type: "string" } },
@@ -211,6 +223,7 @@ export const TALENT_SCHEMA = {
     "age",
     "gender",
     "nationality",
+    "japaneseLevel",
     "skills",
     "mainSkills",
     "skillYears",
@@ -823,7 +836,7 @@ export class AnthropicAIService implements AIService {
       .map((c) =>
         [
           `- talentId: ${c.talentId}`,
-          `  氏名: ${c.name} / 年齢: ${c.age ?? "?"} / 国籍: ${c.nationality ?? "?"} / 区分: ${c.talentType ?? "?"} / 所属: ${c.affiliation ?? "?"}`,
+          `  氏名: ${c.name} / 年齢: ${c.age ?? "?"} / 国籍: ${c.nationality ?? "?"} / 日本語: ${c.japaneseLevel ?? "記載なし"} / 区分: ${c.talentType ?? "?"} / 所属: ${c.affiliation ?? "?"}`,
           `  スキル: ${formatSkillsWithYears(c.skills, c.skillYears) || "(不明)"}`,
           `  希望単価: ${c.desiredRateMin ?? "?"}〜${c.desiredRateMax ?? "?"}万`,
           `  リモート希望: ${c.remotePreference ?? "?"}`,

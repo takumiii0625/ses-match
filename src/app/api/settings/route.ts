@@ -55,6 +55,16 @@ export async function PATCH(req: NextRequest) {
           })()
         : undefined;
 
+    // 単価の許容超過マージン（万円）。0〜100にクランプ（負値は0）。
+    const rateToleranceMan =
+      body.rateToleranceMan !== undefined
+        ? (() => {
+            const n = Math.floor(Number(body.rateToleranceMan));
+            if (!Number.isFinite(n) || n < 0) return 0;
+            return Math.min(n, 100);
+          })()
+        : undefined;
+
     const updated = await prisma.organization.update({
       where: { id: org.id },
       data: {
@@ -74,6 +84,7 @@ export async function PATCH(req: NextRequest) {
           ? { matchEnabled: body.matchEnabled }
           : {}),
         ...(autoEmailDailyCap !== undefined ? { autoEmailDailyCap } : {}),
+        ...(rateToleranceMan !== undefined ? { rateToleranceMan } : {}),
         // Allow clearing signature with empty string (stored as null)
         ...(body.proposalSignature !== undefined
           ? {

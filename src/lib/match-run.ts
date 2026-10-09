@@ -5,6 +5,9 @@ import {
   isSameCompany,
   isStrictDirectChannel,
   dedupeProjectsForMatch,
+  DEFAULT_RATE_TOLERANCE_MAN,
+  regionOf,
+  projectRequiresOnsite,
 } from "@/lib/matching";
 import { getAI } from "@/lib/ai";
 import type { MatchProjectInput, MatchCandidateInput, SkillYear } from "@/lib/ai";
@@ -27,6 +30,7 @@ const TALENT_MATCH_SELECT = {
   name: true,
   age: true,
   nationality: true,
+  japaneseLevel: true,
   talentType: true,
   employmentType: true, // 個人事業主不可の足切りに使う（未設定は所属テキストで判定）。
   kishaOk: true,
@@ -291,6 +295,26 @@ function restrictCandidatesByNg(candidates: Talent[], ng: Set<string>): Talent[]
   });
 }
 
+/**
+ * 勤務地（地方区分）による候補の事前足切り。
+ * 出社あり案件（常駐・出社・ハイブリッド等）で、案件の地方と人材の居住地方が「どちらも確実に判定でき」
+ * かつ「異なる」場合のみ除外（例：東京常駐 × 大阪在住）。
+ * フルリモート／どちらかが不明（地名の記載なし・曖昧）なら通す（方針：不明は落とさない）。
+ */
+function restrictCandidatesByLocation(candidates: Talent[], project: Project): Talent[] {
+  if (!projectRequiresOnsite(project)) return candidates;
+  const projRegion = regionOf(project.location);
+  if (!projRegion) return candidates; // 案件の地域が不明 → 絞れない
+  return candidates.filter((t) => {
+    // 人材の居住地方は最寄駅＋メモ＋所属テキストから推定（不明なら通す）。
+    const talentRegion = regionOf(
+      `${t.nearestStation ?? ""} ${t.note ?? ""} ${t.affiliation ?? ""}`,
+    );
+    if (!talentRegion) return true; // 人材の地域が不明 → 通す
+    return talentRegion === projRegion; // 一致のみ残す（異なる地方は除外）
+  });
+}
+
 export interface MatchRunResult {
   projects: number;
   talents: number;
@@ -323,6 +347,7 @@ function toCandidateInput(t: Talent): MatchCandidateInput {
     name: t.name,
     age: t.age,
     nationality: t.nationality,
+    japaneseLevel: t.japaneseLevel,
     talentType: t.talentType,
     affiliation: t.affiliation,
     skills: [...new Set([...t.mainSkills, ...t.skills])],
@@ -339,20 +364,33 @@ function toCandidateInput(t: Talent): MatchCandidateInput {
 /** 組織のマッチ判定プロンプト＋案件メール整形＋差し戻し学習（未設定なら null）。 */
 async function resolveOrgPrompts(
   orgId: string,
-): Promise<{ matchPrompt: string | undefined; projectEmailPrompt: string | null }> {
+): Promise<{
+  matchPrompt: string | undefined;
+  projectEmailPrompt: string | null;
+  rateToleranceMan: number;
+}> {
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
-    select: { matchPrompt: true, projectEmailPrompt: true, matchLearnings: true },
+    select: {
+      matchPrompt: true,
+      projectEmailPrompt: true,
+      matchLearnings: true,
+      rateToleranceMan: true,
+    },
   });
+  const rateToleranceMan = org?.rateToleranceMan ?? DEFAULT_RATE_TOLERANCE_MAN;
   // 差し戻し学習があれば、マッチ判定プロンプトに「提案不可＝除外」の指示として付加する。
   const base = org?.matchPrompt ?? DEFAULT_MATCH_PROMPT;
   const learnings = org?.matchLearnings?.trim();
-  const matchPrompt = learnings
+  const withLearnings = learnings
     ? `${base}\n\n【営業の差し戻し傾向（過去に営業が「送らない」と判断したパターン。以下に明確に該当するマッチは提案不可とみなし、score を MIN_SCORE 未満まで大きく下げて除外する。曖昧なものは通常どおり判定）】\n${learnings}`
     : base;
+  // 単価の許容超過マージンを明示（事前フィルタで既に案件上限+tol万以内に絞り込み済み。rateOk判定を整合させる）。
+  const matchPrompt = `${withLearnings}\n\n【単価の許容超過マージン】${rateToleranceMan}万。人材の希望単価が「案件の想定単価上限＋${rateToleranceMan}万」以内なら rateOk=true（逆ザヤ・薄利でも許容内として通す）。これを超える明確な超過のみ rateOk=false。`;
   return {
     matchPrompt,
     projectEmailPrompt: org?.projectEmailPrompt ?? null,
+    rateToleranceMan,
   };
 }
 
@@ -365,8 +403,9 @@ async function rankAndSave(
   project: Project,
   candidates: Talent[],
   systemPrompt: string | undefined,
+  rateToleranceMan: number,
 ): Promise<{ pairs: number; saved: number }> {
-  const shortlist = prefilterCandidates(project, candidates, SHORTLIST_LIMIT);
+  const shortlist = prefilterCandidates(project, candidates, SHORTLIST_LIMIT, rateToleranceMan);
   if (shortlist.length === 0) return { pairs: 0, saved: 0 };
 
   const ranked = await getAI().rankCandidates(
@@ -497,6 +536,7 @@ export async function runMatchingForOrg(
     loadNgDomains(orgId),
   ]);
   const systemPrompt = prompts.matchPrompt;
+  const rateToleranceMan = prompts.rateToleranceMan;
 
   // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
   // 「貴社社員/貴社まで」案件は除外せず残し、候補を自社人材だけに絞る（下で対応）。
@@ -543,21 +583,24 @@ export async function runMatchingForOrg(
   // 案件を並列処理（実APIコールは matchLimiter で同時実行数が抑えられる）。
   const settled = await Promise.allSettled(
     slice.map(async ({ project, pool }) => {
-      const candidates = restrictCandidatesByNationality(
-        restrictCandidatesByNg(
-          restrictCandidatesByChannel(
-            pool.filter(
-              (t) =>
-                !isSameCompany(t, project) &&
-                !existingPairs.has(`${project.id}#${t.id}`),
+      const candidates = restrictCandidatesByLocation(
+        restrictCandidatesByNationality(
+          restrictCandidatesByNg(
+            restrictCandidatesByChannel(
+              pool.filter(
+                (t) =>
+                  !isSameCompany(t, project) &&
+                  !existingPairs.has(`${project.id}#${t.id}`),
+              ),
+              project,
             ),
-            project,
+            ngDomains,
           ),
-          ngDomains,
+          project,
         ),
         project,
       );
-      const r = await rankAndSave(project, candidates, systemPrompt);
+      const r = await rankAndSave(project, candidates, systemPrompt, rateToleranceMan);
       return { projectId: project.id, ...r };
     }),
   );
@@ -634,6 +677,7 @@ export async function runMatchingForNew(
     loadNgDomains(orgId),
   ]);
   const systemPrompt = prompts.matchPrompt;
+  const rateToleranceMan = prompts.rateToleranceMan;
 
   // 同じ会社×件名の重複案件は、単価が高く商流が浅い方だけを代表に名寄せ（マッチ採用）。
   const projects = dedupeProjectsForMatch(projectsRaw);
@@ -657,21 +701,24 @@ export async function runMatchingForNew(
 
   const settled = await Promise.allSettled(
     targets.map(async ({ project, pool }) => {
-      const candidates = restrictCandidatesByNationality(
-        restrictCandidatesByNg(
-          restrictCandidatesByChannel(
-            pool.filter(
-              (t) =>
-                !isSameCompany(t, project) &&
-                !existingPairs.has(`${project.id}#${t.id}`),
+      const candidates = restrictCandidatesByLocation(
+        restrictCandidatesByNationality(
+          restrictCandidatesByNg(
+            restrictCandidatesByChannel(
+              pool.filter(
+                (t) =>
+                  !isSameCompany(t, project) &&
+                  !existingPairs.has(`${project.id}#${t.id}`),
+              ),
+              project,
             ),
-            project,
+            ngDomains,
           ),
-          ngDomains,
+          project,
         ),
         project,
       );
-      const r = await rankAndSave(project, candidates, systemPrompt);
+      const r = await rankAndSave(project, candidates, systemPrompt, rateToleranceMan);
       return { projectId: project.id, ...r };
     }),
   );

@@ -370,12 +370,12 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(2); // t1, t3
   });
 
-  it("他社人材は案件>人材ならOK・同額は除外（自社保有は対象外）", async () => {
+  it("単価は『案件上限＋許容(既定5万)』超のみ除外・許容内/同額は通す（自社・他社共通）", async () => {
     db.project.findMany.mockResolvedValue([{ ...project("p1"), rateMax: 50 }]);
     db.talent.findMany.mockResolvedValue([
-      { ...talent("t1"), desiredRateMin: 50 }, // 他社・同額(粗利0) → 除外
-      { ...talent("t2"), desiredRateMin: 49 }, // 他社・差益1万 → 残す
-      { ...talent("t3"), talentType: "INHOUSE", desiredRateMin: 50 }, // 自社 → 残す
+      { ...talent("t1"), desiredRateMin: 56 }, // +6万=許容超過 → 除外
+      { ...talent("t2"), desiredRateMin: 50 }, // 同額(許容内) → 残す
+      { ...talent("t3"), talentType: "INHOUSE", desiredRateMin: 55 }, // +5万=許容内 → 残す
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(res.saved).toBe(2); // t2, t3
@@ -390,6 +390,28 @@ describe("runMatchingForOrg（ページング）", () => {
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(res.saved).toBe(2); // t2, t3
+  });
+
+  it("東京常駐の案件は地方在住(大阪)を除外・東京在住/所在不明は残す", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), remotePreference: "ONSITE", location: "東京都千代田区" },
+    ]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), note: "大阪市在住" }, // 近畿 → 除外
+      { ...talent("t2"), note: "東京都在住" }, // 関東 → 残す
+      { ...talent("t3"), nearestStation: "新宿駅" }, // 地方不明(駅名のみ) → 残す
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(2); // t2, t3
+  });
+
+  it("フルリモート案件は地方が違っても除外しない", async () => {
+    db.project.findMany.mockResolvedValue([
+      { ...project("p1"), remotePreference: "FULL_REMOTE", location: "東京" },
+    ]);
+    db.talent.findMany.mockResolvedValue([{ ...talent("t1"), note: "大阪市在住" }]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(1); // リモートなので地域不問
   });
 
   it("外国籍『可』の案件は外国籍でも除外しない", async () => {

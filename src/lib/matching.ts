@@ -195,8 +195,9 @@ export interface PrefilterHit {
  * the LLM to re-rank. This is what makes "Java engineer for a PHP-only project"
  * get dropped instead of matching on a shared "開発" tag.
  */
-// 金額足切りの許容マージン（万円）。交渉余地を考慮し、これ以内の超過は通す（自社保有の予算超過判定用）。
-const RATE_MARGIN_MAN = 10;
+// 単価の許容超過マージン（万円）の既定値。組織設定(rateToleranceMan)で上書きされる。
+// 人材の希望単価が「案件上限＋この値」を超えたら除外。自社/他社とも共通ルール。
+export const DEFAULT_RATE_TOLERANCE_MAN = 5;
 // スキル/言語の最低カバー率。必須スキルのこの割合以上を満たす候補だけLLM判定に通す（足切り）。
 // ※0.6に上げたらSES案件は必須+歓迎で多数スキルを列挙するため、ほぼ全候補が落ちてマッチ激減した
 //   （597案件×706人材で saved=0）。実証済みの 0.5 に戻す。強めるとしても 0.55 程度まで。
@@ -223,6 +224,68 @@ export function channelDepth(channelText: string | null): number {
   if (kanji) return kanjiMap[kanji[1]];
   if (/貴社/.test(t)) return 1; // 貴社まで＝受信側まで（概ね浅め）
   return 50; // 文言はあるが深さ不明
+}
+
+// ───────── 勤務地（地方区分）の判定 ─────────
+// マッチ判定プロンプトと同じ7区分。都道府県名＋主要都市名から地方を推定する。
+// 決定的（LLMに頼らない）。確信を持って判定できないテキストは null（＝不明）を返し、
+// 呼び出し側は「不明は通す」方針で扱う（誤って候補を落とさない）。
+export type Region =
+  | "北海道" | "東北" | "関東" | "中部" | "近畿" | "中国四国" | "九州沖縄";
+
+const REGION_KEYWORDS: Record<Region, string[]> = {
+  北海道: ["北海道", "札幌"],
+  東北: ["青森", "岩手", "宮城", "秋田", "山形", "福島", "仙台"],
+  関東: ["東京", "神奈川", "埼玉", "千葉", "茨城", "栃木", "群馬", "横浜", "川崎", "さいたま", "首都圏", "都内", "23区"],
+  中部: ["新潟", "富山", "石川", "福井", "山梨", "長野", "岐阜", "静岡", "愛知", "名古屋", "浜松"],
+  近畿: ["三重", "滋賀", "京都", "大阪", "兵庫", "奈良", "和歌山", "神戸", "梅田", "難波", "心斎橋"],
+  中国四国: ["鳥取", "島根", "岡山", "広島", "山口", "徳島", "香川", "愛媛", "高知", "松山", "高松"],
+  九州沖縄: ["福岡", "佐賀", "長崎", "熊本", "大分", "宮崎", "鹿児島", "沖縄", "博多", "那覇"],
+};
+
+/**
+ * テキストから地方区分を推定する。確信できないときは null。
+ * - 1つの地方のキーワードだけがヒット → その地方。
+ * - 複数の地方がヒット（例「東京／大阪」）や 0件 → null（曖昧・不明なので通す側）。
+ */
+export function regionOf(text: string | null | undefined): Region | null {
+  if (!text) return null;
+  // ヒットしたキーワードは消してから次の地方を調べる。これで「東京都」が関東にヒットした後、
+  // 残り「都千代田区」から誤って「京都」(近畿)を拾う重なりを防ぐ（関東を近畿より先に走査）。
+  let t = text.replace(/\s/g, "");
+  const found = new Set<Region>();
+  for (const [region, kws] of Object.entries(REGION_KEYWORDS) as [Region, string[]][]) {
+    for (const k of kws) {
+      if (t.includes(k)) {
+        found.add(region);
+        t = t.split(k).join(""); // 同一キーワードの重なり誤検知を防ぐため消す
+      }
+    }
+  }
+  return found.size === 1 ? [...found][0] : null;
+}
+
+/**
+ * 案件が「出社あり（＝勤務地が通勤圏である必要がある）」か。
+ * フルリモート／基本リモートは地域不問→false。ハイブリッド・週N出社・常駐、または
+ * 本文に「常駐／出社」の明示があれば true。判断材料が無ければ false（＝地域ゲートをかけない）。
+ */
+export function projectRequiresOnsite(project: Project): boolean {
+  const pref = project.remotePreference;
+  if (pref === "FULL_REMOTE" || pref === "MOSTLY_REMOTE") return false;
+  if (
+    pref === "HYBRID" ||
+    pref === "ONSITE" ||
+    pref === "OFFICE_1" ||
+    pref === "OFFICE_2" ||
+    pref === "OFFICE_3" ||
+    pref === "OFFICE_4"
+  ) {
+    return true;
+  }
+  const t = `${project.location ?? ""}\n${project.description ?? ""}\n${project.channelText ?? ""}`;
+  if (/フルリモート|完全リモート|フルリモ/.test(t)) return false;
+  return /常駐|出社|来社|オンサイト/.test(t);
 }
 
 /** 件名の正規化（Re:/Fwd: 等の接頭辞を除去して比較しやすくする）。 */
@@ -272,21 +335,19 @@ export function prefilterCandidates(
   project: Project,
   talents: Talent[],
   limit = 30,
+  rateToleranceMan: number = DEFAULT_RATE_TOLERANCE_MAN,
 ): PrefilterHit[] {
   const required = project.requiredSkills.map(normalize).filter(Boolean);
+  const tol = Math.max(0, rateToleranceMan);
 
   const hits: PrefilterHit[] = [];
   for (const talent of talents) {
-    // 金額足切り:
-    //  他社人材(PARTNER)は「案件単価 − 人材単価」が利益。案件単価が人材単価より高い（正のマージン）なら
-    //  幅の大小を問わず可。同額・超過（人材の希望下限 ≥ 案件上限）は利益0以下なので除外。
-    //  自社保有(INHOUSE)は自社人材なので予算を明確超過(+許容)するときのみ除外。
+    // 金額足切り（共通ルール・調整可）:
+    //  人材の希望単価が「案件の想定単価上限 ＋ 許容超過マージン(tol万)」を超えたら除外。
+    //  許容内（安い人材・案件上限をtol万まで超える人材）は通す。自社/他社とも同じ。
+    //  ※他社人材で案件上限を超える＝逆ザヤ(薄利)になり得るが、許容範囲内なら通し、粗利は提案時に人が確認する。
     if (project.rateMax != null && talent.desiredRateMin != null) {
-      const overBudget =
-        talent.talentType === "INHOUSE"
-          ? talent.desiredRateMin > project.rateMax + RATE_MARGIN_MAN
-          : talent.desiredRateMin >= project.rateMax;
-      if (overBudget) continue;
+      if (talent.desiredRateMin > project.rateMax + tol) continue;
     }
 
     const owned = expandSkills([...talent.skills, ...talent.mainSkills]);
