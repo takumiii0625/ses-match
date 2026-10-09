@@ -125,6 +125,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
     setIfEmpty(age, t.age, setAge);
     setIfEmpty(affiliation, t.affiliation, setAffiliation);
     setIfEmpty(nationality, t.nationality, setNationality);
+    setIfEmpty(japaneseLevel, t.japaneseLevel, setJapaneseLevel);
     setIfEmpty(availabilityText, t.availabilityText, setAvailabilityText);
     setIfEmpty(desiredRateMin, t.desiredRateMin, setDesiredRateMin);
     setIfEmpty(desiredRateMax, t.desiredRateMax, setDesiredRateMax);
