@@ -41,9 +41,16 @@ const EMPHASIS_OPTIONS: { value: Emphasis; label: string }[] = [
  * 保存すると組織設定(matchConfig)に書き込み、次回以降の再マッチ・日次自動マッチ・自動送信に反映。
  * ※ 単価許容(万)と必須言語ANY/ALLは、案件ごとの結果一覧の上にある「即フィルタ」カードで調整・保存します。
  */
-export function MatchConfigPanel({ initialConfig }: { initialConfig: MatchConfig }) {
+export function MatchConfigPanel({
+  initialConfig,
+  initialRateTolerance,
+}: {
+  initialConfig: MatchConfig;
+  initialRateTolerance: number;
+}) {
   const [gates, setGates] = useState<GateToggles>(initialConfig.gates);
   const [minCoverage, setMinCoverage] = useState(String(Math.round(initialConfig.minCoverage * 100)));
+  const [rateTolerance, setRateTolerance] = useState(String(initialRateTolerance));
   const [weights, setWeights] = useState<Weights>(initialConfig.weights);
   const [rules, setRules] = useState(initialConfig.customRules);
   const [saving, setSaving] = useState(false);
@@ -62,6 +69,7 @@ export function MatchConfigPanel({ initialConfig }: { initialConfig: MatchConfig
     setSaving(true);
     setMsg(null);
     const cov = Math.min(100, Math.max(0, Number(minCoverage) || 0)) / 100;
+    const tol = Math.min(100, Math.max(0, Math.floor(Number(rateTolerance) || 0)));
     const config: MatchConfig = {
       gates,
       minCoverage: cov,
@@ -72,7 +80,7 @@ export function MatchConfigPanel({ initialConfig }: { initialConfig: MatchConfig
       const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchConfig: config }),
+        body: JSON.stringify({ matchConfig: config, rateToleranceMan: tol }),
       });
       if (!res.ok) throw new Error(String(res.status));
       setMsg("保存しました（次回の再マッチ・自動送信から反映されます）");
@@ -114,6 +122,26 @@ export function MatchConfigPanel({ initialConfig }: { initialConfig: MatchConfig
               </label>
             ))}
           </div>
+          {gates.rate && (
+            <div className="mt-3 max-w-xs">
+              <Label htmlFor="rate-tol-panel">単価の許容超過（万円）</Label>
+              <Input
+                id="rate-tol-panel"
+                type="number"
+                min={0}
+                max={100}
+                value={rateTolerance}
+                onChange={(e) => {
+                  setRateTolerance(e.target.value);
+                  setMsg(null);
+                }}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                人材の希望単価が「案件の想定単価上限＋この値」までなら許可（例: 5＝案件上限＋5万まで）。
+                これを超える人材を除外。安い人材は常に許可。
+              </p>
+            </div>
+          )}
           {gates.coverage && (
             <div className="mt-3 max-w-xs">
               <Label htmlFor="min-cov">カバー率の閾値（%）</Label>

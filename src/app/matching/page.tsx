@@ -48,7 +48,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
             <RematchButton />
           </div>
         </Card>
-        <MatchConfigPanel initialConfig={matchConfig} />
+        <MatchConfigPanel initialConfig={matchConfig} initialRateTolerance={org.rateToleranceMan} />
         <div className="flex flex-col items-center justify-center py-20 text-muted">
           <p className="text-sm font-medium text-slate-400">案件を選択してください</p>
         </div>
@@ -98,7 +98,7 @@ export default async function MatchingPage({ searchParams }: PageProps) {
         <MatchRunner projects={projects} selectedProjectId={projectId} />
       </Card>
 
-      <MatchConfigPanel initialConfig={matchConfig} />
+      <MatchConfigPanel initialConfig={matchConfig} initialRateTolerance={org.rateToleranceMan} />
 
       {/* Project summary */}
       <Card className="p-5">
