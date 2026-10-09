@@ -105,7 +105,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
     initial?.distributionSubject ?? "",
   );
   const [kishaOk, setKishaOk] = useState(initial?.kishaOk ?? false);
-  const [isOwnEmployee, setIsOwnEmployee] = useState(initial?.isOwnEmployee ?? true);
+  const [isOwnEmployee, setIsOwnEmployee] = useState(initial?.isOwnEmployee ?? false);
   const [note, setNote] = useState(initial?.note ?? "");
   const [summaryText, setSummaryText] = useState(initial?.summaryText ?? "");
 

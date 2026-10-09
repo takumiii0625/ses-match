@@ -197,9 +197,9 @@ model Talent {
   distributionSubject String? // 一斉案内メールの配信件名（人材ごと。未設定なら既定件名）
   kishaOk      Boolean @default(false) // 貴社チェック。trueの自社人材だけ「貴社まで」案件のマッチ対象にする
   // 自社社員（プロパー）か。自社保有人材(INHOUSE)のうち、true=自社社員で商流は最も浅い(自社視点0=プロパー)。
-  // false=自社保有だが自社社員でない（例: 保有する個人/他社所属）→ 商流は自社社員より一段深い(自社視点1)。
-  // 既定true（従来の自社保有=プロパー扱いを維持）。マッチの商流判定でのみ使用。
-  isOwnEmployee Boolean @default(true)
+  // false(既定)=自社保有だが自社社員でない（例: 保有する個人/他社所属）→ 商流は自社社員より一段深い(自社視点1)。
+  // 既定OFF。社員のときだけONにする。マッチの商流判定でのみ使用。
+  isOwnEmployee Boolean @default(false)
   receivedDate DateTime @default(now()) // 配信日
 
   createdAt DateTime @default(now())

@@ -147,13 +147,12 @@ export async function POST(req: NextRequest) {
 
   try {
     if (result.data.type === "talent") {
-      const { data, own } = result.data;
+      const { data } = result.data;
       const talent = await prisma.talent.create({
         data: {
           orgId: org.id,
           talentType: "INHOUSE",
-          // 自社保有人材として取り込む場合は自社社員（プロパー）扱い。
-          isOwnEmployee: own ? true : undefined,
+          // 自社社員フラグは既定OFF（社員のときだけ後で人材編集でONにする）。
           dataFrom: "EMAIL",
           name: data.name || "（未設定）",
           age: toInt(data.age),

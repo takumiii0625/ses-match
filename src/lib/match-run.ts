@@ -155,14 +155,14 @@ function allowedDepthFromChannel(channelText: string | null): number | null {
  *  isOwnEmployee が明示的に false のときだけ「自社社員でない保有人材」として一段深く扱う。
  *  （既存データ=未設定/true はプロパー扱いで従来どおり） */
 function isOwnProper(t: Talent): boolean {
-  return t.talentType === "INHOUSE" && t.isOwnEmployee !== false;
+  return t.talentType === "INHOUSE" && t.isOwnEmployee === true;
 }
 
 /** 人材の「自社視点の商流の深さ」。送信元プロパー=1社先、送信元「1社先」=2社先…。
  *  他社人材(PARTNER): affiliation の「N社先/N社下」の N（無ければ0）＋自社が仲介する +1。
  *  自社保有(INHOUSE): 自社社員=0（プロパー）。自社社員でない保有人材(isOwnEmployee=false)=1（一段深い）。 */
 function talentDepthFromUs(t: Talent): number {
-  if (t.talentType === "INHOUSE") return t.isOwnEmployee === false ? 1 : 0;
+  if (t.talentType === "INHOUSE") return t.isOwnEmployee === true ? 0 : 1;
   const m = (t.affiliation ?? "").replace(/\s/g, "").match(/([0-9０-９一二三四五六七八九])社(先|下)/);
   const hops = m ? charToNum(m[1]) : 0;
   return (Number.isFinite(hops) ? hops : 0) + 1;

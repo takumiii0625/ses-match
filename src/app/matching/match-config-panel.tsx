@@ -44,13 +44,16 @@ const EMPHASIS_OPTIONS: { value: Emphasis; label: string }[] = [
 export function MatchConfigPanel({
   initialConfig,
   initialRateTolerance,
+  initialLanguageMatchAll,
 }: {
   initialConfig: MatchConfig;
   initialRateTolerance: number;
+  initialLanguageMatchAll: boolean;
 }) {
   const [gates, setGates] = useState<GateToggles>(initialConfig.gates);
   const [minCoverage, setMinCoverage] = useState(String(Math.round(initialConfig.minCoverage * 100)));
   const [rateTolerance, setRateTolerance] = useState(String(initialRateTolerance));
+  const [langAll, setLangAll] = useState(initialLanguageMatchAll);
   const [weights, setWeights] = useState<Weights>(initialConfig.weights);
   const [rules, setRules] = useState(initialConfig.customRules);
   const [saving, setSaving] = useState(false);
@@ -80,7 +83,7 @@ export function MatchConfigPanel({
       const res = await fetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matchConfig: config, rateToleranceMan: tol }),
+        body: JSON.stringify({ matchConfig: config, rateToleranceMan: tol, languageMatchAll: langAll }),
       });
       if (!res.ok) throw new Error(String(res.status));
       setMsg("保存しました（次回の再マッチ・自動送信から反映されます）");
@@ -139,6 +142,36 @@ export function MatchConfigPanel({
               <p className="mt-1 text-xs text-slate-400">
                 人材の希望単価が「案件の想定単価上限＋この値」までなら許可（例: 5＝案件上限＋5万まで）。
                 これを超える人材を除外。安い人材は常に許可。
+              </p>
+            </div>
+          )}
+          {gates.language && (
+            <div className="mt-3">
+              <Label>必須言語の一致</Label>
+              <div className="mt-1 inline-flex overflow-hidden rounded-lg border border-border text-sm">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLangAll(false);
+                    setMsg(null);
+                  }}
+                  className={`px-3 py-1.5 ${!langAll ? "bg-primary text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                >
+                  いずれか1つ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLangAll(true);
+                    setMsg(null);
+                  }}
+                  className={`px-3 py-1.5 ${langAll ? "bg-primary text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+                >
+                  すべて必須
+                </button>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                案件の必須言語（Java/PHP等）を「1つでも持てば可／全て必須」。包含（Spring Boot→Java）は保有扱い。
               </p>
             </div>
           )}

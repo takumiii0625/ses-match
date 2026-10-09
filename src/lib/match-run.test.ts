@@ -192,7 +192,7 @@ describe("runMatchingForOrg（ページング）", () => {
       { ...talent("t1"), talentType: "PARTNER", affiliation: "1社先正社員" }, // 弊社基準2社先→不可
       { ...talent("t2"), talentType: "PARTNER", affiliation: "1社先所属個人事業主" }, // 不可
       { ...talent("t3"), talentType: "PARTNER", affiliation: "プロパー" }, // 自社視点1社先=弊社基準2社先→不可
-      { ...talent("t4"), talentType: "INHOUSE" }, // 自社保有=弊社基準1社先→支援費で可
+      { ...talent("t4"), talentType: "INHOUSE", isOwnEmployee: true }, // 自社社員=弊社基準1社先→支援費で可
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     // 他社は全除外、自社保有のみ候補（t4）。
@@ -287,7 +287,7 @@ describe("runMatchingForOrg（ページング）", () => {
     db.talent.findMany.mockResolvedValue([
       { ...talent("t1"), talentType: "PARTNER", affiliation: "プロパー" }, // 除外
       { ...talent("t2"), talentType: "PARTNER", affiliation: "弊社社員" }, // 除外
-      { ...talent("t3"), talentType: "INHOUSE" }, // 自社直接 → 残る
+      { ...talent("t3"), talentType: "INHOUSE", isOwnEmployee: true }, // 自社社員(直接) → 残る
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     const cand = (rankMock.mock.calls[0]?.[1] ?? []) as { talentId: string }[];
@@ -312,7 +312,7 @@ describe("runMatchingForOrg（ページング）", () => {
     ]);
     db.talent.findMany.mockResolvedValue([
       { ...talent("t1"), talentType: "PARTNER", affiliation: "プロパー" }, // 除外
-      { ...talent("t2"), talentType: "INHOUSE" }, // 残る
+      { ...talent("t2"), talentType: "INHOUSE", isOwnEmployee: true }, // 自社社員 → 残る
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     const cand = (rankMock.mock.calls[0]?.[1] ?? []) as { talentId: string }[];
@@ -418,11 +418,11 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(1); // t1 のみ
   });
 
-  it("自社社員でない保有人材は『2社先まで可』では残る（深さ1≤2）・従来INHOUSE(未設定)はプロパー扱い", async () => {
+  it("自社社員でない保有人材(既定OFF/未設定)は『2社先まで可』では残る（深さ1≤2）", async () => {
     db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "2社先まで可" }]);
     db.talent.findMany.mockResolvedValue([
-      { ...talent("t1"), talentType: "INHOUSE", isOwnEmployee: false }, // 深さ1 ≤ 2 → 残す
-      { ...talent("t2"), talentType: "INHOUSE" }, // 未設定=プロパー扱い(深さ0) → 残す
+      { ...talent("t1"), talentType: "INHOUSE", isOwnEmployee: false }, // 非社員=深さ1 ≤ 2 → 残す
+      { ...talent("t2"), talentType: "INHOUSE" }, // 未設定=既定OFF=非社員(深さ1) → 残す
     ]);
     const res = await runMatchingForOrg("org1", { offset: 0 });
     expect(res.saved).toBe(2);
@@ -495,7 +495,7 @@ describe("runMatchingForOrg（ページング）", () => {
   it("貴社まで案件は貴社チェック付きの自社人材のみ候補", async () => {
     db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "貴社まで" }]);
     db.talent.findMany.mockResolvedValue([
-      { ...talent("t1"), talentType: "INHOUSE", kishaOk: true }, // 貴社チェックあり → 候補
+      { ...talent("t1"), talentType: "INHOUSE", kishaOk: true, isOwnEmployee: true }, // 自社社員＋貴社チェック → 候補
       { ...talent("t2"), talentType: "INHOUSE", kishaOk: false }, // 貴社チェックなし → 除外
       talent("t3"), // PARTNER → 除外される
     ]);
