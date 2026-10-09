@@ -96,9 +96,9 @@ export function MatchConfigPanel({
 
   return (
     <Card className="p-5">
-      <details>
+      <details open>
         <summary className="cursor-pointer text-base font-semibold text-slate-700">
-          マッチ設定（除外ルール・比重・独自ルール）
+          マッチ設定（除外ルール・単価許容・比重・独自ルール）
         </summary>
 
         <p className="mt-2 text-xs text-muted">
