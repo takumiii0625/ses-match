@@ -38,6 +38,18 @@ async function handle(req: Request) {
     // 11時に判定済みの案件×人材を再判定しない（取込のウォーターマークと同じ発想をマッチにも適用）。
     const inc = url.searchParams.get("inc") === "1";
 
+    // 自動マッチがOFFなら、定時の増分マッチ(inc)は即noop（AIコスト0・done:trueでループ終了）。
+    // 手動の全件再マッチ(画面ボタン/workflow_dispatch＝incなし)は明示操作なので常に実行する。
+    if (inc && !org.matchEnabled) {
+      return NextResponse.json({
+        skipped: "match_disabled",
+        processed: 0,
+        totalProjects: 0,
+        saved: 0,
+        done: true,
+      });
+    }
+
     if (inc) {
       const sinceParam = url.searchParams.get("since");
       const markParam = url.searchParams.get("mark");

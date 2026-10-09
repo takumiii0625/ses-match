@@ -14,6 +14,8 @@ export default async function SettingsPage() {
     name: org.name,
     slug: org.slug,
     aiProvider: org.aiProvider,
+    ingestEnabled: org.ingestEnabled,
+    matchEnabled: org.matchEnabled,
     proposalSignature: org.proposalSignature ?? null,
     autoEmailEnabled: org.autoEmailEnabled,
     autoEmailDailyCap: org.autoEmailDailyCap,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runMailIngest, runMailIngestPage } from "@/lib/email/ingest-pipeline";
 import { cronAuthorized } from "@/lib/cron-auth";
+import { getCurrentOrg } from "@/lib/current-org";
 
 export const maxDuration = 300;
 
@@ -9,6 +10,11 @@ async function handle(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
+    // 設定でメール取込がOFFなら即noop（AI/取込コスト0・done:trueでワークフローのループも終了）。
+    const org = await getCurrentOrg();
+    if (!org.ingestEnabled) {
+      return NextResponse.json({ skipped: "ingest_disabled", fetched: 0, done: true });
+    }
     const url = new URL(req.url);
     // ?days=N で取得期間を直近N日に広げ、取りこぼし（cron停止時など）を回収できる。
     const daysRaw = Number(url.searchParams.get("days"));

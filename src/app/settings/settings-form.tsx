@@ -14,6 +14,8 @@ interface Org {
   name: string;
   slug: string;
   aiProvider: string;
+  ingestEnabled: boolean;
+  matchEnabled: boolean;
   proposalSignature: string | null;
   autoEmailEnabled: boolean;
   autoEmailDailyCap: number;
@@ -48,6 +50,8 @@ export function SettingsForm({ org }: { org: Org }) {
 
   const [name, setName] = useState(org.name);
   const [aiProvider, setAiProvider] = useState(org.aiProvider);
+  const [ingestEnabled, setIngestEnabled] = useState(org.ingestEnabled);
+  const [matchEnabled, setMatchEnabled] = useState(org.matchEnabled);
   const [proposalSignature, setProposalSignature] = useState(org.proposalSignature ?? "");
   const [autoEmailEnabled, setAutoEmailEnabled] = useState(org.autoEmailEnabled);
   const [autoEmailDailyCap, setAutoEmailDailyCap] = useState(String(org.autoEmailDailyCap));
@@ -66,6 +70,8 @@ export function SettingsForm({ org }: { org: Org }) {
         body: JSON.stringify({
           name,
           aiProvider,
+          ingestEnabled,
+          matchEnabled,
           proposalSignature,
           autoEmailEnabled,
           // 0以下は無制限。空欄は既定20。
@@ -150,6 +156,57 @@ export function SettingsForm({ org }: { org: Org }) {
             </li>
           </ul>
         </div>
+      </Card>
+
+      {/* メール取込・自動マッチの ON/OFF */}
+      <Card className="p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <h2 className="text-base font-semibold text-slate-700">自動処理（取込・マッチ）</h2>
+          <Badge tone={ingestEnabled ? "green" : "slate"}>取込 {ingestEnabled ? "ON" : "OFF"}</Badge>
+          <Badge tone={matchEnabled ? "green" : "slate"}>マッチ {matchEnabled ? "ON" : "OFF"}</Badge>
+        </div>
+        <p className="text-xs text-slate-400 mb-4">
+          平日 11/15/17時（JST）の定時処理です。OFFにすると、その処理はスケジュール実行されず
+          <span className="font-medium text-slate-500">AIコストも発生しません</span>。
+          画面からの手動取込・手動マッチ（全件マッチ）はOFFでも実行できます。
+        </p>
+
+        <label className="flex items-start gap-3 cursor-pointer mb-3">
+          <input
+            type="checkbox"
+            checked={ingestEnabled}
+            onChange={(e) => setIngestEnabled(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+          />
+          <span className="text-sm text-slate-700">
+            メールの自動取込を有効にする
+            <span className="block text-xs text-slate-400">
+              受信メールを定時に取り込み、人材／案件として分類・登録します。
+            </span>
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={matchEnabled}
+            onChange={(e) => setMatchEnabled(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+          />
+          <span className="text-sm text-slate-700">
+            自動マッチを有効にする
+            <span className="block text-xs text-slate-400">
+              取込完了後に、新規に取り込んだ分の人材×案件を自動でマッチ判定します。
+            </span>
+          </span>
+        </label>
+
+        {!ingestEnabled && matchEnabled && (
+          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+            ⚠️ 取込がOFFのため新しいメールは入りません。自動マッチは取込完了をトリガに動くため、
+            定時の自動マッチも実質停止します（手動取込を行えば、その後に自動マッチが走ります）。
+          </div>
+        )}
       </Card>
 
       {/* AIプロンプト（別画面で編集） */}

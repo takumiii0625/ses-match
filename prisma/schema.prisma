@@ -20,6 +20,10 @@ model Organization {
   name              String
   slug              String   @unique
   aiProvider        String   @default("mock") // mock | anthropic | openai
+  // メール自動取込のON/OFF。OFF時は定時取込cron(fetch-mail)が即noopで返る（AIコスト0）。
+  ingestEnabled     Boolean  @default(true)
+  // 自動マッチのON/OFF。OFF時は定時マッチcron(rematch inc)が即noopで返る（AIコスト0）。
+  matchEnabled      Boolean  @default(true)
   proposalSignature String? // 提案メールの署名
   // 案件案内メールの自動送信。ON時、日次マッチ後に「商流OK・80点以上・その日の新規・未送信」を自動送信。
   autoEmailEnabled  Boolean  @default(false)

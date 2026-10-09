@@ -67,6 +67,12 @@ export async function PATCH(req: NextRequest) {
         ...(typeof body.autoEmailEnabled === "boolean"
           ? { autoEmailEnabled: body.autoEmailEnabled }
           : {}),
+        ...(typeof body.ingestEnabled === "boolean"
+          ? { ingestEnabled: body.ingestEnabled }
+          : {}),
+        ...(typeof body.matchEnabled === "boolean"
+          ? { matchEnabled: body.matchEnabled }
+          : {}),
         ...(autoEmailDailyCap !== undefined ? { autoEmailDailyCap } : {}),
         // Allow clearing signature with empty string (stored as null)
         ...(body.proposalSignature !== undefined
