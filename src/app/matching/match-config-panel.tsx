@@ -97,10 +97,10 @@ export function MatchConfigPanel({
 
   return (
     <Card className="p-5">
-      <details open>
-        <summary className="cursor-pointer text-base font-semibold text-slate-700">
+      <div>
+        <h2 className="text-base font-semibold text-slate-700">
           マッチ設定（除外ルール・単価許容・比重・独自ルール）
-        </summary>
+        </h2>
 
         <p className="mt-2 text-xs text-muted">
           マッチで「何を除外し、何を点数で見るか」を設定します。ここでの変更は保存後の再マッチ・日次自動マッチ・自動送信に反映されます
@@ -303,7 +303,7 @@ export function MatchConfigPanel({
           </Button>
           {msg && <span className="text-sm text-emerald-600">{msg}</span>}
         </div>
-      </details>
+      </div>
     </Card>
   );
 }
