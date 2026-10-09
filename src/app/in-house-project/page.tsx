@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCurrentOrg, getOrgUsers } from "@/lib/current-org";
 import { getCurrentUser } from "@/lib/data/current-user";
 import { prisma } from "@/lib/prisma";
@@ -47,6 +48,12 @@ export default async function InHouseProjectPage(props: {
     <div className="flex flex-col gap-4 p-6 min-h-full">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-800">自社保有案件</h1>
+        <Link
+          href="/in-house-project/paste"
+          className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+        >
+          ＋ テキストから登録
+        </Link>
       </div>
       <p className="text-sm text-muted">
         自分たちで登録した案件（自社保有案件）の一覧です。「＋新規案件登録」から追加できます。

@@ -39,6 +39,7 @@ const TALENT_MATCH_SELECT = {
   talentType: true,
   employmentType: true, // 個人事業主不可の足切りに使う（未設定は所属テキストで判定）。
   kishaOk: true,
+  isOwnEmployee: true, // 自社社員(プロパー)かの商流判定に使う。
   affiliation: true,
   mainSkills: true,
   skills: true,
@@ -150,11 +151,18 @@ function allowedDepthFromChannel(channelText: string | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** 他社人材の「自社視点の商流の深さ」。送信元プロパー=1社先、送信元「1社先」=2社先…。
- *  affiliation の「N社先/N社下」の N（無ければ0＝送信元自身）に、自社が仲介する +1 を足す。
- *  自社保有(INHOUSE)は自社人材=0。 */
+/** 自社保有かつ自社社員（プロパー相当）か。自社視点で最も浅い(深さ0)扱いになる。
+ *  isOwnEmployee が明示的に false のときだけ「自社社員でない保有人材」として一段深く扱う。
+ *  （既存データ=未設定/true はプロパー扱いで従来どおり） */
+function isOwnProper(t: Talent): boolean {
+  return t.talentType === "INHOUSE" && t.isOwnEmployee !== false;
+}
+
+/** 人材の「自社視点の商流の深さ」。送信元プロパー=1社先、送信元「1社先」=2社先…。
+ *  他社人材(PARTNER): affiliation の「N社先/N社下」の N（無ければ0）＋自社が仲介する +1。
+ *  自社保有(INHOUSE): 自社社員=0（プロパー）。自社社員でない保有人材(isOwnEmployee=false)=1（一段深い）。 */
 function talentDepthFromUs(t: Talent): number {
-  if (t.talentType === "INHOUSE") return 0;
+  if (t.talentType === "INHOUSE") return t.isOwnEmployee === false ? 1 : 0;
   const m = (t.affiliation ?? "").replace(/\s/g, "").match(/([0-9０-９一二三四五六七八九])社(先|下)/);
   const hops = m ? charToNum(m[1]) : 0;
   return (Number.isFinite(hops) ? hops : 0) + 1;
@@ -237,33 +245,34 @@ function restrictCandidatesByChannel(candidates: Talent[], project: Project): Ta
     list = list.filter((t) => !isFreelanceTalent(t));
   }
   // 再委託不可 → 他社人材(PARTNER)は出せない（自社直接のみ）。派遣必須 → 派遣できない我々は他社不可。
-  // どちらも「自社保有(INHOUSE)のみ」に絞る（以降の貴社止まり/商流深さ判定はINHOUSEを常に通す）。
+  // どちらも「自社社員(プロパー)のみ」に絞る（自社社員でない保有人材=再委託/派遣不可相当なので除外）。
   if (projectDisallowsSubcontract(project) || projectRequiresHaken(project)) {
-    list = list.filter((t) => t.talentType === "INHOUSE");
+    list = list.filter((t) => isOwnProper(t));
   }
   const ownOnly = isOwnOnlyChannel(project.channelText);
   if (ownOnly) {
-    return list.filter((t) => t.talentType === "INHOUSE" && t.kishaOk === true);
+    // 貴社止まり＝我々プロパーのみ。自社社員(プロパー)かつ貴社チェック付きだけ。
+    return list.filter((t) => isOwnProper(t) && t.kishaOk === true);
   }
-  // 弊社(送信元)基準の商流: 「弊社のN社先」は自社視点 N-1。弊社止まり(N無し)は自社保有のみ。
+  // 弊社(送信元)基準の商流: 「弊社のN社先」は自社視点 N-1。弊社止まり(N無し)は自社社員(深さ0)のみ。
   // 「1社先様は支援費」等の支援費は「弊社→自社」の1段を埋める条件で、他社をさらに深く許容しない
-  // （ここでは support費を加算しない）。例「エンド→弊社（1社先様は支援費）」→ 自社視点0=自社のみ。
+  // （ここでは support費を加算しない）。例「エンド→弊社（1社先様は支援費）」→ 自社視点0=自社社員のみ。
   if (isSenderAnchoredChannel(project.channelText)) {
     const cap = senderAnchoredAllowedDepth(project.channelText);
-    return list.filter(
-      (t) => t.talentType === "INHOUSE" || talentDepthFromUs(t) <= cap,
-    );
+    return list.filter((t) => isOwnProper(t) || talentDepthFromUs(t) <= cap);
   }
   const strictDirect = isStrictDirectChannel(project.channelText) && !project.supportFee;
   if (strictDirect) {
-    return list.filter((t) => t.talentType === "INHOUSE");
+    // エンド直/プロパーのみ＝自社視点0。自社社員(プロパー)のみ（自社社員でない保有人材は一段深いので不可）。
+    return list.filter((t) => isOwnProper(t));
   }
-  // 商流の深さ: 案件の許容（N社先まで）を超える他社人材は除外。未指定は既定=1社先まで。
-  // 支援費ありは1段深くても可（商流を飛ばせる）。自社保有(INHOUSE)は常に対象。
+  // 商流の深さ: 案件の許容（N社先まで）を超える人材は除外。未指定は既定=1社先まで。
+  // 支援費ありは1段深くても可（商流を飛ばせる）。自社社員(深さ0)は常に対象、
+  // 自社社員でない保有人材(深さ1)・他社人材は深さ判定にかける。
   const allowed = allowedDepthFromChannel(project.channelText);
   const cap = (allowed ?? 1) + (project.supportFee ? 1 : 0);
   return list.filter(
-    (t) => t.talentType === "INHOUSE" || talentDepthFromUs(t) <= cap,
+    (t) => isOwnProper(t) || talentDepthFromUs(t) <= cap,
   );
 }
 

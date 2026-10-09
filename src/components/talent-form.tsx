@@ -47,6 +47,7 @@ interface TalentInitial {
   emailSubject?: string | null;
   distributionSubject?: string | null;
   kishaOk?: boolean | null;
+  isOwnEmployee?: boolean | null;
   note?: string | null;
   summaryText?: string | null;
 }
@@ -104,6 +105,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
     initial?.distributionSubject ?? "",
   );
   const [kishaOk, setKishaOk] = useState(initial?.kishaOk ?? false);
+  const [isOwnEmployee, setIsOwnEmployee] = useState(initial?.isOwnEmployee ?? true);
   const [note, setNote] = useState(initial?.note ?? "");
   const [summaryText, setSummaryText] = useState(initial?.summaryText ?? "");
 
@@ -265,6 +267,7 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
       emailSubject: emailSubject || null,
       distributionSubject: distributionSubject || null,
       kishaOk,
+      isOwnEmployee,
       note: note || null,
       summaryText: summaryText || null,
     };
@@ -539,7 +542,21 @@ export function TalentForm({ users, initial, mode }: TalentFormProps) {
           </p>
         </div>
         {talentType === "INHOUSE" && (
-          <div className="col-span-2">
+          <div className="col-span-2 space-y-2">
+            <label className="flex items-start gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={isOwnEmployee}
+                onChange={(e) => setIsOwnEmployee(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+              />
+              <span>
+                自社社員（プロパー）
+                <span className="ml-1 text-xs text-slate-400">
+                  （ONで自社視点の商流が最も浅い＝プロパー扱い。OFFにすると自社社員でない保有人材として商流が一段深くなります）
+                </span>
+              </span>
+            </label>
             <label className="flex items-start gap-2 text-sm text-slate-700">
               <input
                 type="checkbox"

@@ -68,6 +68,7 @@ export default async function TalentDetailPage(props: {
           emailSubject: talent.emailSubject,
           distributionSubject: talent.distributionSubject,
           kishaOk: talent.kishaOk,
+          isOwnEmployee: talent.isOwnEmployee,
           note: talent.note,
           summaryText: talent.summaryText,
         }}

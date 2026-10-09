@@ -50,6 +50,8 @@ const ParseRequestSchema = z.object({
 const CreateTalentSchema = z.object({
   type: z.literal("talent"),
   action: z.literal("create"),
+  // own=true: 自社保有人材として登録（自社社員＝プロパー扱い）。
+  own: z.boolean().optional(),
   data: z.object({
     name: z.string(),
     age: z.string().optional(),
@@ -67,6 +69,8 @@ const CreateTalentSchema = z.object({
 const CreateProjectSchema = z.object({
   type: z.literal("project"),
   action: z.literal("create"),
+  // own=true: 自社保有案件（dataFrom=REGISTER）として登録。
+  own: z.boolean().optional(),
   data: z.object({
     title: z.string(),
     clientName: z.string().optional(),
@@ -143,11 +147,13 @@ export async function POST(req: NextRequest) {
 
   try {
     if (result.data.type === "talent") {
-      const { data } = result.data;
+      const { data, own } = result.data;
       const talent = await prisma.talent.create({
         data: {
           orgId: org.id,
           talentType: "INHOUSE",
+          // 自社保有人材として取り込む場合は自社社員（プロパー）扱い。
+          isOwnEmployee: own ? true : undefined,
           dataFrom: "EMAIL",
           name: data.name || "（未設定）",
           age: toInt(data.age),
@@ -163,11 +169,12 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ id: talent.id });
     } else {
-      const { data } = result.data;
+      const { data, own } = result.data;
       const project = await prisma.project.create({
         data: {
           orgId: org.id,
-          dataFrom: "EMAIL",
+          // 自社保有案件は REGISTER（自社案件マッチの対象）。それ以外は EMAIL（他社案件扱い）。
+          dataFrom: own ? "REGISTER" : "EMAIL",
           title: data.title || "（未設定）",
           clientName: data.clientName || undefined,
           requiredSkills: toArray(data.requiredSkills),

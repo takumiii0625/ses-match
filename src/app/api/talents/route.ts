@@ -80,6 +80,8 @@ export async function POST(req: Request) {
         emailSubject: body.emailSubject ?? null,
         distributionSubject: body.distributionSubject ?? null,
         kishaOk: body.kishaOk === true,
+        // 自社社員フラグ。明示 false のときだけ false、未指定は既定 true（プロパー扱い）。
+        isOwnEmployee: body.isOwnEmployee !== false,
         note: body.note ?? null,
         summaryText: body.summaryText ?? null,
       },

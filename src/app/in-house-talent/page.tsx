@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCurrentOrg, getOrgUsers } from "@/lib/current-org";
 import { getCurrentUser } from "@/lib/data/current-user";
 import { prisma } from "@/lib/prisma";
@@ -41,6 +42,12 @@ export default async function InHouseTalentPage(props: {
     <div className="flex flex-col gap-4 p-6 min-h-full">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-800">自社保有人材</h1>
+        <Link
+          href="/in-house-talent/paste"
+          className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+        >
+          ＋ テキストから登録
+        </Link>
       </div>
       <SearchPanel users={users} />
       <TalentTable talents={talents} total={talents.length} favoriteTalentIds={favoriteTalentIds} />

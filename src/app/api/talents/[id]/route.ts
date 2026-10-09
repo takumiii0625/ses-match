@@ -86,6 +86,7 @@ export async function PUT(
         emailSubject: body.emailSubject ?? null,
         distributionSubject: body.distributionSubject ?? null,
         kishaOk: body.kishaOk === true,
+        isOwnEmployee: body.isOwnEmployee !== false,
         note: body.note ?? null,
         summaryText: body.summaryText ?? null,
       },
@@ -119,6 +120,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     if ("kishaOk" in body) {
       data.kishaOk = body.kishaOk === true;
+    }
+    if ("isOwnEmployee" in body) {
+      data.isOwnEmployee = body.isOwnEmployee !== false;
     }
     if ("affiliation" in body) {
       const v = body.affiliation;

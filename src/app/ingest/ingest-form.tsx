@@ -138,8 +138,16 @@ function parsedToProjectFields(parsed: Record<string, unknown>): ParsedProjectFi
 
 // ---- Component -------------------------------------------------------------
 
-export function IngestForm() {
-  const [type, setType] = useState<IngestType>("talent");
+export function IngestForm({
+  lockedType,
+  own = false,
+}: {
+  // 種別を固定（自社保有人材/案件ページから使うときに "talent"/"project" を渡す）。
+  lockedType?: IngestType;
+  // true=自社保有として登録（人材→自社社員INHOUSE、案件→REGISTER）。
+  own?: boolean;
+} = {}) {
+  const [type, setType] = useState<IngestType>(lockedType ?? "talent");
   const [rawEmail, setRawEmail] = useState("");
   const [parsing, setParsing] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -204,7 +212,7 @@ export function IngestForm() {
       const res = await fetch("/api/ingest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, action: "create", data: fields }),
+        body: JSON.stringify({ type, action: "create", data: fields, own }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "登録に失敗しました");
@@ -220,23 +228,25 @@ export function IngestForm() {
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
-      {/* Type toggle */}
-      <Card className="p-1 flex gap-1 w-fit">
-        {(["talent", "project"] as IngestType[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => handleTypeChange(t)}
-            className={cn(
-              "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-              type === t
-                ? "bg-primary text-white shadow-sm"
-                : "text-slate-500 hover:bg-slate-100"
-            )}
-          >
-            {t === "talent" ? "人材として取り込み" : "案件として取り込み"}
-          </button>
-        ))}
-      </Card>
+      {/* Type toggle（種別固定時は非表示） */}
+      {!lockedType && (
+        <Card className="p-1 flex gap-1 w-fit">
+          {(["talent", "project"] as IngestType[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => handleTypeChange(t)}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                type === t
+                  ? "bg-primary text-white shadow-sm"
+                  : "text-slate-500 hover:bg-slate-100"
+              )}
+            >
+              {t === "talent" ? "人材として取り込み" : "案件として取り込み"}
+            </button>
+          ))}
+        </Card>
+      )}
 
       {/* Email input card */}
       <Card className="p-6 flex flex-col gap-4">
@@ -311,12 +321,33 @@ export function IngestForm() {
         <Card className="p-6 flex flex-col items-center gap-4 text-center">
           <div className="text-3xl">✓</div>
           <p className="text-sm font-semibold text-slate-800">
-            {type === "talent" ? "人材情報" : "案件情報"}を登録しました
+            {own
+              ? type === "talent"
+                ? "自社保有人材"
+                : "自社保有案件"
+              : type === "talent"
+                ? "人材情報"
+                : "案件情報"}
+            を登録しました
           </p>
           <div className="flex gap-3">
-            <Link href={type === "talent" ? "/in-house-talent" : "/projects"}>
+            <Link
+              href={
+                type === "talent"
+                  ? "/in-house-talent"
+                  : own
+                    ? "/in-house-project"
+                    : "/projects"
+              }
+            >
               <Button variant="primary">
-                {type === "talent" ? "人材一覧へ" : "案件一覧へ"}
+                {type === "talent"
+                  ? own
+                    ? "自社保有人材一覧へ"
+                    : "人材一覧へ"
+                  : own
+                    ? "自社保有案件一覧へ"
+                    : "案件一覧へ"}
               </Button>
             </Link>
             <Button

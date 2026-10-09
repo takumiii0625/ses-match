@@ -9,8 +9,6 @@ import { REMOTE_LABELS } from "@/lib/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { MatchRunner } from "./match-runner";
-import { TalentMatchRunner } from "./talent-match-runner";
-import { RematchButton } from "./rematch-button";
 import { ProposalButton } from "./proposal-button";
 import { ProjectMatchList, type ProjectMatchVM } from "./project-match-list";
 
@@ -31,53 +29,23 @@ export default async function MatchingPage({ searchParams }: PageProps) {
     select: { id: true, title: true },
   });
 
-  // 人材起点の手動マッチ用: 自社保有人材（全件）＋他社人材（直近取込を上限付きで）。
-  const [inhouseTalents, partnerTalents] = await Promise.all([
-    prisma.talent.findMany({
-      where: { orgId: org.id, talentType: "INHOUSE" },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
-    prisma.talent.findMany({
-      where: { orgId: org.id, talentType: "PARTNER" },
-      orderBy: { createdAt: "desc" },
-      take: 300,
-      select: { id: true, name: true },
-    }),
-  ]);
-  const talentOptions = [
-    ...inhouseTalents.map((t) => ({ id: t.id, name: t.name, type: "INHOUSE" as const })),
-    ...partnerTalents.map((t) => ({ id: t.id, name: t.name, type: "PARTNER" as const })),
-  ];
-
   if (!projectId) {
     return (
       <div className="space-y-6 p-8">
         <div>
           <h1 className="text-xl font-semibold text-foreground">マッチング設定</h1>
           <p className="mt-1 text-sm text-muted">
-            案件を選ぶと、保存済みのマッチ結果を表示します。「AIで再判定」で最新化できます。
+            マッチの除外ルール・単価許容・比重などを設定します。マッチの実行は日次自動マッチと各マッチ画面で行います。
+            案件を選ぶと、その案件の保存済みマッチ結果を確認できます。
           </p>
         </div>
-        <Card className="space-y-4 p-5">
-          <div>
-            <p className="mb-2 text-xs font-medium text-slate-500">案件起点でマッチ（自社保有案件も選べます）</p>
-            <MatchRunner projects={projects} />
-          </div>
-          <div className="border-t border-border pt-4">
-            <p className="mb-2 text-xs font-medium text-slate-500">人材起点でマッチ（自社保有人材・他社人材）</p>
-            <TalentMatchRunner talents={talentOptions} />
-          </div>
-          <div className="border-t border-border pt-4">
-            <p className="mb-2 text-xs text-muted">
-              個別に選ばず、全人材 × 全案件をまとめて再マッチします。
-            </p>
-            <RematchButton />
-          </div>
-        </Card>
         <MatchConfigPanel initialConfig={matchConfig} initialRateTolerance={org.rateToleranceMan} />
-        <div className="flex flex-col items-center justify-center py-20 text-muted">
-          <p className="text-sm font-medium text-slate-400">案件を選択してください</p>
+        <Card className="p-5">
+          <p className="mb-2 text-xs font-medium text-slate-500">案件の保存済みマッチを確認</p>
+          <MatchRunner projects={projects} />
+        </Card>
+        <div className="flex flex-col items-center justify-center py-16 text-muted">
+          <p className="text-sm font-medium text-slate-400">案件を選択すると結果を表示します</p>
         </div>
       </div>
     );
@@ -121,18 +89,12 @@ export default async function MatchingPage({ searchParams }: PageProps) {
         </p>
       </div>
 
-      <Card className="space-y-4 p-5">
-        <div>
-          <p className="mb-2 text-xs font-medium text-slate-500">案件起点でマッチ（自社保有案件も選べます）</p>
-          <MatchRunner projects={projects} selectedProjectId={projectId} />
-        </div>
-        <div className="border-t border-border pt-4">
-          <p className="mb-2 text-xs font-medium text-slate-500">人材起点でマッチ（自社保有人材・他社人材）</p>
-          <TalentMatchRunner talents={talentOptions} />
-        </div>
-      </Card>
-
       <MatchConfigPanel initialConfig={matchConfig} initialRateTolerance={org.rateToleranceMan} />
+
+      <Card className="p-5">
+        <p className="mb-2 text-xs font-medium text-slate-500">案件の保存済みマッチを確認</p>
+        <MatchRunner projects={projects} selectedProjectId={projectId} />
+      </Card>
 
       {/* Project summary */}
       <Card className="p-5">

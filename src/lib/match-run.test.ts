@@ -408,6 +408,26 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(0);
   });
 
+  it("自社社員でない保有人材(isOwnEmployee=false)は『エンド直/プロパーのみ』案件で除外・自社社員は残す", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "エンド直のみ" }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "INHOUSE", isOwnEmployee: true }, // 自社社員=プロパー → 残す
+      { ...talent("t2"), talentType: "INHOUSE", isOwnEmployee: false }, // 非自社社員=一段深い → 除外
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(1); // t1 のみ
+  });
+
+  it("自社社員でない保有人材は『2社先まで可』では残る（深さ1≤2）・従来INHOUSE(未設定)はプロパー扱い", async () => {
+    db.project.findMany.mockResolvedValue([{ ...project("p1"), channelText: "2社先まで可" }]);
+    db.talent.findMany.mockResolvedValue([
+      { ...talent("t1"), talentType: "INHOUSE", isOwnEmployee: false }, // 深さ1 ≤ 2 → 残す
+      { ...talent("t2"), talentType: "INHOUSE" }, // 未設定=プロパー扱い(深さ0) → 残す
+    ]);
+    const res = await runMatchingForOrg("org1", { offset: 0 });
+    expect(res.saved).toBe(2);
+  });
+
   it("言語ゲート: Java必須の案件はPHPのみの人材を除外・Java/SpringBootは残す", async () => {
     db.project.findMany.mockResolvedValue([{ ...project("p1"), requiredSkills: ["Java"] }]);
     db.talent.findMany.mockResolvedValue([
