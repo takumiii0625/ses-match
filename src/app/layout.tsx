@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
+import { MatchJobProvider } from "@/components/match-job";
 import { prisma } from "@/lib/prisma";
 
 const authEnabled = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
@@ -45,10 +46,12 @@ export default async function RootLayout({
   const tree = (
     <html lang="ja" className={`${geistSans.variable} h-full antialiased`}>
       <body className="min-h-full">
-        <div className="flex h-screen overflow-hidden">
-          <Sidebar userName={userName} orgName={orgName} authEnabled={authEnabled} />
-          <main className="flex-1 overflow-y-auto">{children}</main>
-        </div>
+        <MatchJobProvider>
+          <div className="flex h-screen overflow-hidden">
+            <Sidebar userName={userName} orgName={orgName} authEnabled={authEnabled} />
+            <main className="flex-1 overflow-y-auto">{children}</main>
+          </div>
+        </MatchJobProvider>
       </body>
     </html>
   );

@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
-import { fetchJson } from "@/lib/http";
+import { useMatchJob } from "@/components/match-job";
 
 const PERIOD_OPTIONS = [
   { value: "1", label: "今日のみ" },
@@ -13,25 +12,10 @@ const PERIOD_OPTIONS = [
   { value: "7", label: "過去7日" },
 ];
 
-interface RematchPageResult {
-  totalProjects: number;
-  processed: number;
-  done: boolean;
-  talents: number;
-  saved: number;
-  errors: number;
-  minScore: number;
-}
-
-// 1リクエストで処理する案件数。未判定ペアはLLMを呼ばず即スキップできるため、既定はやや大きめにして
-// 往復回数を減らす（重いのは新規ペアのLLM判定のみ）。1リクエストが300秒を超えない範囲で調整。
-const CHUNK = 12;
-
 /**
- * 全人材 × 全案件を一括マッチ（/api/cron/rematch）。
- * 案件を少しずつ分割して呼び出し、完了まで繰り返す。
- * 各リクエストが短いのでタイムアウトせず、進捗をパーセンテージで表示できる。
- * scope="inhouse" で候補を自社保有人材だけに限定（他社のマッチは保持）。
+ * 手動マッチの起動ボタン。実際のループ・進捗はレイアウト直下の MatchJob(context) が保持するため、
+ * 実行中に画面を切り替えても処理と進捗（右下トースト）は消えない。
+ * scope="inhouse"/"registered" で候補を自社保有に限定（他社のマッチは保持）。
  */
 export function RematchButton({
   scope = "all",
@@ -45,61 +29,15 @@ export function RematchButton({
   // 期間(days文字列) → その期間に取り込まれた対象案件数。選択中の件数を表示する。
   projectCounts?: Record<string, number>;
 } = {}) {
-  const router = useRouter();
+  const { job, start } = useMatchJob();
   const runLabel =
     label ?? (scope === "inhouse" ? "自社人材でマッチを実行" : "全件マッチを今すぐ実行");
-  const [running, setRunning] = useState(false);
-  const [percent, setPercent] = useState<number | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [isError, setIsError] = useState(false);
-  const [days, setDays] = useState(defaultDays); // 既定日数（手動マッチ画面では 3 を渡す）
-  // 全件再判定: ON=既判定ペアも含め再評価（プロンプト/設定変更の反映。重い）。
-  // OFF(既定)=未判定ペアだけLLM判定＝速い。
+  const [days, setDays] = useState(defaultDays);
+  // 全件再判定: ON=既判定ペアも含め再評価（プロンプト/設定変更の反映。重い）。OFF(既定)=未判定のみ＝速い。
   const [full, setFull] = useState(false);
 
-  async function handleRun() {
-    if (running) return;
-    setRunning(true);
-    setMsg(null);
-    setIsError(false);
-    setPercent(0);
-    try {
-      let offset = 0;
-      let saved = 0;
-      let errors = 0;
-      let total = 0;
-      let talents = 0;
-      for (;;) {
-        const data = await fetchJson<RematchPageResult>(
-          `/api/cron/rematch?offset=${offset}&limit=${CHUNK}&scope=${scope}&days=${days}${full ? "&full=1" : ""}`,
-          { method: "POST" },
-        );
-        total = data.totalProjects;
-        talents = data.talents;
-        saved += data.saved;
-        errors += data.errors;
-
-        const pct = total > 0 ? Math.round((data.processed / total) * 100) : 100;
-        setPercent(pct);
-
-        if (data.done) {
-          setMsg(
-            `完了：${saved}件を保存（${total}案件 × ${talents}人材／${data.minScore}点以上）` +
-              (errors > 0 ? `／${errors}案件は判定失敗` : ""),
-          );
-          router.refresh();
-          break;
-        }
-        setMsg(`実行中… ${data.processed}/${total}案件 ・ 保存${saved}件`);
-        offset = data.processed;
-      }
-    } catch (e) {
-      setIsError(true);
-      setMsg(e instanceof Error ? e.message : "全件マッチに失敗しました");
-    } finally {
-      setRunning(false);
-    }
-  }
+  const anyRunning = !!job?.running;
+  const thisRunning = anyRunning && job?.scope === scope;
 
   return (
     <div className="space-y-2">
@@ -109,31 +47,31 @@ export function RematchButton({
             options={PERIOD_OPTIONS}
             value={days}
             onChange={(e) => setDays(e.target.value)}
-            disabled={running}
+            disabled={anyRunning}
             aria-label="対象期間"
           />
         </div>
-        <Button variant="secondary" size="md" onClick={handleRun} disabled={running}>
-          {running ? (
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => start({ scope, days, full, label: runLabel })}
+          disabled={anyRunning}
+        >
+          {thisRunning ? (
             <span className="inline-flex items-center gap-2">
               <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
-              実行中… {percent ?? 0}%
+              実行中… {job?.percent ?? 0}%
             </span>
+          ) : anyRunning ? (
+            "別のマッチを実行中…"
           ) : (
             runLabel
           )}
         </Button>
         {/* 選択中の期間に取り込まれた対象案件数 */}
-        {!running && projectCounts && (
+        {!anyRunning && projectCounts && (
           <span className="text-sm text-muted">
             対象案件: <span className="font-semibold text-slate-700">{projectCounts[days] ?? 0}</span> 件
-          </span>
-        )}
-        {msg && (
-          <span
-            className={`text-sm font-medium ${isError ? "text-red-600" : "text-emerald-600"}`}
-          >
-            {msg}
           </span>
         )}
       </div>
@@ -144,26 +82,15 @@ export function RematchButton({
           type="checkbox"
           checked={full}
           onChange={(e) => setFull(e.target.checked)}
-          disabled={running}
+          disabled={anyRunning}
           className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
         />
         全件を再判定する（プロンプト/マッチ設定を変えた時だけ。既定は未判定分のみで高速）
       </label>
 
-      {/* 進捗バー（パーセンテージ） */}
-      {running && percent !== null && (
-        <div className="flex items-center gap-2">
-          <div className="h-2 max-w-md flex-1 overflow-hidden rounded-full bg-slate-100">
-            <div
-              className="h-full rounded-full bg-primary transition-[width] duration-300"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <span className="w-10 shrink-0 text-right text-xs font-medium tabular-nums text-slate-500">
-            {percent}%
-          </span>
-        </div>
-      )}
+      <p className="text-xs text-slate-400">
+        実行中に別の画面へ移動しても処理は止まりません（右下に進捗が表示されます）。
+      </p>
     </div>
   );
 }
