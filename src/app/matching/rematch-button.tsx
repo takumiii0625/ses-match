@@ -25,7 +25,7 @@ interface RematchPageResult {
 
 // 1リクエストで処理する案件数。未判定ペアはLLMを呼ばず即スキップできるため、既定はやや大きめにして
 // 往復回数を減らす（重いのは新規ペアのLLM判定のみ）。1リクエストが300秒を超えない範囲で調整。
-const CHUNK = 8;
+const CHUNK = 12;
 
 /**
  * 全人材 × 全案件を一括マッチ（/api/cron/rematch）。
