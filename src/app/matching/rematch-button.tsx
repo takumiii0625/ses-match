@@ -23,8 +23,9 @@ interface RematchPageResult {
   minScore: number;
 }
 
-// 1リクエストで処理する案件数。小さいほど各リクエストが短く＝タイムアウトしない。
-const CHUNK = 3;
+// 1リクエストで処理する案件数。未判定ペアはLLMを呼ばず即スキップできるため、既定はやや大きめにして
+// 往復回数を減らす（重いのは新規ペアのLLM判定のみ）。1リクエストが300秒を超えない範囲で調整。
+const CHUNK = 8;
 
 /**
  * 全人材 × 全案件を一括マッチ（/api/cron/rematch）。
@@ -52,6 +53,9 @@ export function RematchButton({
   const [msg, setMsg] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [days, setDays] = useState(defaultDays); // 既定日数（手動マッチ画面では 3 を渡す）
+  // 全件再判定: ON=既判定ペアも含め再評価（プロンプト/設定変更の反映。重い）。
+  // OFF(既定)=未判定ペアだけLLM判定＝速い。
+  const [full, setFull] = useState(false);
 
   async function handleRun() {
     if (running) return;
@@ -67,7 +71,7 @@ export function RematchButton({
       let talents = 0;
       for (;;) {
         const data = await fetchJson<RematchPageResult>(
-          `/api/cron/rematch?offset=${offset}&limit=${CHUNK}&scope=${scope}&days=${days}`,
+          `/api/cron/rematch?offset=${offset}&limit=${CHUNK}&scope=${scope}&days=${days}${full ? "&full=1" : ""}`,
           { method: "POST" },
         );
         total = data.totalProjects;
@@ -133,6 +137,18 @@ export function RematchButton({
           </span>
         )}
       </div>
+
+      {/* 全件再判定（重い）。既定OFF＝未判定ペアだけ判定で速い。 */}
+      <label className="flex items-center gap-2 text-xs text-slate-500">
+        <input
+          type="checkbox"
+          checked={full}
+          onChange={(e) => setFull(e.target.checked)}
+          disabled={running}
+          className="h-3.5 w-3.5 rounded border-slate-300 text-primary focus:ring-primary"
+        />
+        全件を再判定する（プロンプト/マッチ設定を変えた時だけ。既定は未判定分のみで高速）
+      </label>
 
       {/* 進捗バー（パーセンテージ） */}
       {running && percent !== null && (

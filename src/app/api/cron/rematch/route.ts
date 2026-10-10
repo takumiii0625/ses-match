@@ -93,12 +93,21 @@ async function handle(req: Request) {
       return NextResponse.json({ ...result, sinceEpoch, markEpoch });
     }
 
-    // 手動フル再マッチ（?days=N・画面の全件マッチ）: プロンプト変更の反映やり直し等のため全件再評価。
+    // 手動マッチ（?days=N・画面のボタン）。
+    // 既定は「未判定ペアだけLLM判定」(skipExisting)で軽く・速く。
+    // ?full=1 のときだけ、既判定ペアも含め全件を再評価する（プロンプト/マッチ設定を変えた時の反映用）。
     const daysRaw = url.searchParams.get("days");
     const sinceDays = daysRaw ? Number(daysRaw) : undefined;
-    const result = await runMatchingForOrg(org.id, { offset, limit, scope, sinceDays });
+    const full = url.searchParams.get("full") === "1";
+    const result = await runMatchingForOrg(org.id, {
+      offset,
+      limit,
+      scope,
+      sinceDays,
+      skipExisting: !full,
+    });
     console.log(
-      `[rematch] full days=${sinceDays ?? 1} offset=${offset} processed=${result.processed}/${result.totalProjects} saved=${result.saved} errors=${result.errors} done=${result.done}`,
+      `[rematch] manual full=${full} days=${sinceDays ?? 1} offset=${offset} processed=${result.processed}/${result.totalProjects} saved=${result.saved} errors=${result.errors} done=${result.done}`,
     );
     return NextResponse.json(result);
   } catch (e) {
