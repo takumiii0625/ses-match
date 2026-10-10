@@ -8,6 +8,7 @@ import { fetchJson } from "@/lib/http";
 
 const PERIOD_OPTIONS = [
   { value: "1", label: "今日のみ" },
+  { value: "2", label: "過去2日" },
   { value: "3", label: "過去3日" },
   { value: "7", label: "過去7日" },
 ];
@@ -35,10 +36,13 @@ export function RematchButton({
   scope = "all",
   label,
   defaultDays = "1",
+  projectCounts,
 }: {
   scope?: "all" | "inhouse" | "registered";
   label?: string;
   defaultDays?: string;
+  // 期間(days文字列) → その期間に取り込まれた対象案件数。選択中の件数を表示する。
+  projectCounts?: Record<string, number>;
 } = {}) {
   const router = useRouter();
   const runLabel =
@@ -106,8 +110,21 @@ export function RematchButton({
           />
         </div>
         <Button variant="secondary" size="md" onClick={handleRun} disabled={running}>
-          {running ? `実行中… ${percent ?? 0}%` : runLabel}
+          {running ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+              実行中… {percent ?? 0}%
+            </span>
+          ) : (
+            runLabel
+          )}
         </Button>
+        {/* 選択中の期間に取り込まれた対象案件数 */}
+        {!running && projectCounts && (
+          <span className="text-sm text-muted">
+            対象案件: <span className="font-semibold text-slate-700">{projectCounts[days] ?? 0}</span> 件
+          </span>
+        )}
         {msg && (
           <span
             className={`text-sm font-medium ${isError ? "text-red-600" : "text-emerald-600"}`}

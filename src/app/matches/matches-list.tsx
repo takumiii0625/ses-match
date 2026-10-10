@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/select";
 import { formatRate, daysAgo, fmtDateTime } from "@/lib/utils";
 import { talentDedupeKey, projectDedupeKey } from "@/lib/dedupe";
 import { channelStatus } from "@/lib/channel";
-import { REMOTE_LABELS } from "@/lib/enums";
+import { REMOTE_LABELS, NATIONALITY_LABELS, LANGUAGE_LABELS } from "@/lib/enums";
 import { useSendController, SendPanel, pairKey } from "@/components/send-mail";
 import { MatchSourceInfo, ProjectSourceDisclosure } from "./match-source-info";
 import { ProposalButton } from "../matching/proposal-button";
@@ -32,6 +32,11 @@ export interface MatchVM {
     name: string;
     talentType: string | null;
     affiliation: string | null;
+    age: number | null;
+    nationality: string | null;
+    japaneseLevel: string | null;
+    isOwnEmployee: boolean | null;
+    availabilityText: string | null;
     mainSkills: string[];
     skills: string[];
     skillYears: { skill: string; years: number }[] | null; // 言語別の経験年数
@@ -569,12 +574,23 @@ export function MatchesList({
                         <>
                           <span className="font-semibold text-foreground">{talent.name}</span>
                           <Badge tone="slate">{g.rows.length}件</Badge>
+                          {talent.isOwnEmployee && <Badge tone="green">自社社員</Badge>}
+                          {talent.age != null && <span className="text-xs text-muted">{talent.age}歳</span>}
+                          {talent.nationality === "OTHER" && (
+                            <Badge tone="amber">{NATIONALITY_LABELS[talent.nationality] ?? "外国籍"}</Badge>
+                          )}
+                          {talent.japaneseLevel && (
+                            <span className="text-xs text-muted">日本語: {LANGUAGE_LABELS[talent.japaneseLevel] ?? talent.japaneseLevel}</span>
+                          )}
                           <AffiliationEdit talentId={talent.id} initial={talent.affiliation} />
                           {(talent.desiredRateMin != null || talent.desiredRateMax != null) && (
                             <span className="text-xs text-muted">希望: {formatRate(talent.desiredRateMin, talent.desiredRateMax)}</span>
                           )}
                           {talent.remotePreference && (
                             <span className="text-xs text-muted">{REMOTE_LABELS[talent.remotePreference] ?? talent.remotePreference}</span>
+                          )}
+                          {talent.availabilityText && (
+                            <span className="text-xs text-muted">稼働: {talent.availabilityText}</span>
                           )}
                           <span className="ml-auto text-xs text-muted">配信: {daysAgo(talent.receivedDate)}</span>
                           {/* 人材の言語別経験年数付きスキル */}
