@@ -25,6 +25,9 @@ const DEDUP_DAYS = Number(process.env.MAIL_DEDUP_DAYS ?? "7") || 7;
 const AFTER_OVERLAP_MIN = Number(process.env.MAIL_AFTER_OVERLAP_MIN ?? "180") || 180;
 // ウォーターマークが古すぎても、これより遡らない（暴走スキャン防止）。長期停止の回収は days=N で。
 const AFTER_MAX_LOOKBACK_DAYS = Number(process.env.MAIL_AFTER_MAX_LOOKBACK_DAYS ?? "2") || 2;
+// 1ページ(1回の関数呼び出し)の処理時間の上限。Vercelの maxDuration(300秒) 手前で打ち切り、
+// 強制終了(空応答→同一ページ再試行でスタック)を防ぐ。env で調整可。
+const PAGE_DEADLINE_MS = Number(process.env.MAIL_PAGE_DEADLINE_MS ?? "240000") || 240_000;
 
 /**
  * 最終取込（最新の受信時刻）を基に Gmail の after:<epoch秒> を算出する純関数。
@@ -141,7 +144,13 @@ async function ingestEmails(
   emails: FetchedEmail[],
   org: IngestOrg,
   ai: IngestAI,
-): Promise<{ result: IngestRunResult; newTalentIds: string[]; newProjectIds: string[] }> {
+  deadlineAt?: number,
+): Promise<{
+  result: IngestRunResult;
+  newTalentIds: string[];
+  newProjectIds: string[];
+  incomplete: boolean;
+}> {
   const result: IngestRunResult = {
     fetched: emails.length,
     created: { talent: 0, project: 0 },
@@ -155,8 +164,16 @@ async function ingestEmails(
   // この取込で新規作成された人材・案件のID。取込後にこれらだけを自動マッチする。
   const newTalentIds: string[] = [];
   const newProjectIds: string[] = [];
+  // 期限超過で未処理のまま打ち切ったか（呼び出し側で「同じページを再開」に使う）。
+  let incomplete = false;
 
   for (const mail of emails) {
+    // 期限（関数のmaxDuration手前）を超えたら、重い新規メールの処理を始めずに打ち切る。
+    // 未処理分は取込済み記録が付かないので、次回（同一ページ再開/オーバーラップ）で拾われる。
+    if (deadlineAt && Date.now() > deadlineAt) {
+      incomplete = true;
+      break;
+    }
     // dedup（同一メッセージ）
     const existing = await prisma.ingestedEmail.findUnique({
       where: { messageId: mail.messageId },
@@ -435,7 +452,7 @@ async function ingestEmails(
     }
   }
 
-  return { result, newTalentIds, newProjectIds };
+  return { result, newTalentIds, newProjectIds, incomplete };
 }
 
 // 取込とマッチは分離した（高流量で自動マッチが爆発し課金が大きいため）。
@@ -474,6 +491,7 @@ export async function runMailIngestPage(
   windowDays?: number,
   afterParam?: number,
 ): Promise<IngestPageResult> {
+  const startedAt = Date.now();
   const org = await getCurrentOrg();
   const ai = getAI();
 
@@ -514,12 +532,18 @@ export async function runMailIngestPage(
     if (m) emails.push(m);
   }
 
-  const { result } = await ingestEmails(emails, org, ai);
+  // 1回の関数呼び出しが maxDuration(300秒) を超えないよう、残り時間でソフトに打ち切る。
+  // 超過時は未処理分を残して incomplete=true で返り、同じページを再開する（取込済みはgmailIdで除外済み）。
+  const deadlineAt = startedAt + PAGE_DEADLINE_MS;
+  const { result, incomplete } = await ingestEmails(emails, org, ai, deadlineAt);
 
   // 表示用集計を1ページ全体に補正（gmailId事前除外分も重複に含める）。
   const gmailDup = ids.length - newIds.length;
   result.fetched = ids.length;
   result.skipped += gmailDup;
 
-  return { ...result, nextPageToken, done: !nextPageToken, usedAfter };
+  // 期限超過で打ち切った場合は同じページを再開（pageToken があればそれ、無ければ次ページへ）。
+  // 未処理メールは取込済み記録が付かず、次呼び出しの gmailId 事前除外で残りだけ処理される。
+  const resumeToken = incomplete ? (pageToken ?? nextPageToken) : nextPageToken;
+  return { ...result, nextPageToken: resumeToken, done: !resumeToken, usedAfter };
 }

@@ -286,6 +286,10 @@ function attachmentRefsFromParts(atts: gmail_v1.Schema$MessagePart[]): Attachmen
 }
 
 /** 添付参照を実際にダウンロードしてテキスト化（PDF=抽出 or document、Office=サーバ抽出）。 */
+// 添付1件の上限バイト数。これを超える添付は抽出もAI送付もスキップする（巨大PDF/Excelで
+// 1メールの処理が関数のmaxDuration(300秒)を超えるのを防ぐ安全装置）。env で調整可。
+const ATTACH_MAX_BYTES = Number(process.env.MAIL_ATTACH_MAX_BYTES ?? "8000000") || 8_000_000;
+
 async function extractAttachmentsFromRefs(
   gmail: gmail_v1.Gmail,
   messageId: string,
@@ -301,6 +305,13 @@ async function extractAttachmentsFromRefs(
         id: r.attachmentId,
       });
       const bytes = Buffer.from(att.data.data ?? "", "base64url");
+      // 巨大添付はスキップ（抽出・AI送付が重く1通で300秒超過の原因になるため）。
+      if (bytes.length > ATTACH_MAX_BYTES) {
+        console.warn(
+          `[ingest] 添付が大きすぎるためスキップ: ${r.filename} (${Math.round(bytes.length / 1e6)}MB)`,
+        );
+        continue;
+      }
       if (isPdf) {
         attachments.push({
           filename: r.filename,
