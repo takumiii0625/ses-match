@@ -121,9 +121,10 @@ const MATCH_BATCH_SIZE = Number(process.env.MATCH_BATCH_SIZE ?? "8") || 8;
 
 // マッチ判定のAnthropic同時リクエスト上限。案件を並列処理しても、全バッチ呼び出しは
 // このリミッタを通すので同時実行数はここで頭打ちになる（レート制限・タイムアウト対策）。
-// DB接続圧を抑えるため控えめ（過去の大量処理でNeon接続が枯渇した教訓）。並列を上げると速くなるが
-// レート制限(429=SDKがリトライ)とNeon接続に注意。env MATCH_CONCURRENCY で調整可（重ければ3に戻す）。
-const MATCH_CONCURRENCY = Number(process.env.MATCH_CONCURRENCY ?? "5");
+// DB接続圧・レート制限を抑えるため控えめ。並列を上げると速くなるが、Anthropicの429(SDKがリトライ
+// →待ち時間増→チャンクが長引き接続断)やDB接続枯渇に注意。env MATCH_CONCURRENCY で調整可。
+// 5だと「通信に失敗(接続断/長すぎ)」が出たため 3 に戻した（429のリトライ待ちを減らし安定化）。
+const MATCH_CONCURRENCY = Number(process.env.MATCH_CONCURRENCY ?? "3");
 const matchLimiter = createLimiter(MATCH_CONCURRENCY);
 
 function chunk<T>(arr: T[], size: number): T[][] {
