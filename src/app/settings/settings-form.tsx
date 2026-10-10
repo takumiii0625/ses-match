@@ -196,7 +196,10 @@ export function SettingsForm({ org }: { org: Org }) {
           <span className="text-sm text-slate-700">
             自動マッチを有効にする
             <span className="block text-xs text-slate-400">
-              取込完了後に、新規に取り込んだ分の人材×案件を自動でマッチ判定します。
+              取込完了後に、新規に取り込んだ分の人材×案件を自動でマッチ判定します（定時マッチ）。
+              <span className="block">
+                ※OFFでも、各マッチ画面の「マッチを実行」ボタン（自社保有人材マッチ・自社保有案件マッチ等）は手動で実行できます。
+              </span>
             </span>
           </span>
         </label>
