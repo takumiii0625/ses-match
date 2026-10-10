@@ -10,8 +10,10 @@ import {
 import { useRouter } from "next/navigation";
 import { fetchJson } from "@/lib/http";
 
-// 1リクエストで処理する案件数（未判定ペアはLLM不要で即スキップ）。
-const CHUNK = 12;
+// 1リクエストで処理する案件数。小さいほど1リクエストが短く＝300秒の関数上限や接続断に強い。
+const CHUNK = 6;
+// 同一地点で連続失敗したら、それ以上は進めずに打ち切る回数。
+const MAX_CONSEC_FAILS = 3;
 
 interface RematchPageResult {
   totalProjects: number;
@@ -66,19 +68,64 @@ export function MatchJobProvider({ children }: { children: ReactNode }) {
     if (runningRef.current) return; // 同時に1ジョブだけ
     runningRef.current = true;
     setJob({ running: true, percent: 0, label: p.label, scope: p.scope, msg: null, isError: false });
+    let offset = 0;
+    let saved = 0;
+    let errors = 0;
+    let total = 0;
+    let talents = 0;
+    let minScore = 0;
+    let consecFails = 0;
     try {
-      let offset = 0;
-      let saved = 0;
-      let errors = 0;
-      let total = 0;
-      let talents = 0;
-      for (;;) {
-        const data = await fetchJson<RematchPageResult>(
-          `/api/cron/rematch?offset=${offset}&limit=${CHUNK}&scope=${p.scope}&days=${p.days}${p.full ? "&full=1" : ""}`,
-          { method: "POST" },
-        );
+      // 1チャンクずつ完了まで。1チャンクが失敗(300秒超過/接続断)しても全体は止めず、
+      // 数回までスキップして継続する（残りは次回・再実行で続きから拾える）。
+      for (let i = 0; i < 100000; i++) {
+        let data: RematchPageResult | null = null;
+        try {
+          data = await fetchJson<RematchPageResult>(
+            `/api/cron/rematch?offset=${offset}&limit=${CHUNK}&scope=${p.scope}&days=${p.days}${p.full ? "&full=1" : ""}`,
+            { method: "POST" },
+          );
+          consecFails = 0;
+        } catch {
+          consecFails++;
+          errors++;
+          // まだ総数すら取れていない（最初から失敗）→ これ以上進めないので打ち切り。
+          if (total === 0 && consecFails >= MAX_CONSEC_FAILS) {
+            setJob((j) =>
+              j
+                ? { ...j, running: false, isError: true, msg: "マッチの実行に失敗しました（件数を絞って再実行してください）" }
+                : j,
+            );
+            break;
+          }
+          if (consecFails >= MAX_CONSEC_FAILS) {
+            // 連続失敗は打ち切り（ここまでの分は保存済み）。
+            setJob((j) =>
+              j
+                ? { ...j, running: false, msg: `途中まで保存（${saved}件）。重い箇所でエラーが続いたため打ち切りました。再実行すると続きから処理します。` }
+                : j,
+            );
+            router.refresh();
+            break;
+          }
+          // この地点をスキップして次のチャンクへ（遅い案件が1つでも全体を止めない）。
+          offset += CHUNK;
+          if (total > 0 && offset >= total) {
+            setJob((j) =>
+              j
+                ? { ...j, running: false, msg: `完了：${saved}件を保存（一部${errors}件はスキップ）。` }
+                : j,
+            );
+            router.refresh();
+            break;
+          }
+          setJob((j) => (j ? { ...j, msg: `一部でエラー。スキップして継続中…（保存${saved}件）` } : j));
+          continue;
+        }
+
         total = data.totalProjects;
         talents = data.talents;
+        minScore = data.minScore;
         saved += data.saved;
         errors += data.errors;
         const pct = total > 0 ? Math.round((data.processed / total) * 100) : 100;
@@ -90,8 +137,8 @@ export function MatchJobProvider({ children }: { children: ReactNode }) {
                   percent: pct,
                   running: false,
                   msg:
-                    `完了：${saved}件を保存（${total}案件 × ${talents}人材／${data.minScore}点以上）` +
-                    (errors > 0 ? `／${errors}案件は判定失敗` : ""),
+                    `完了：${saved}件を保存（${total}案件 × ${talents}人材／${minScore}点以上）` +
+                    (errors > 0 ? `／${errors}件は失敗/スキップ` : ""),
                 }
               : j,
           );
@@ -99,7 +146,8 @@ export function MatchJobProvider({ children }: { children: ReactNode }) {
           break;
         }
         setJob((j) => (j ? { ...j, percent: pct, msg: `実行中… ${data.processed}/${total}案件 ・ 保存${saved}件` } : j));
-        offset = data.processed;
+        // processed が進まない（同じ値）場合も前進させてループ停滞を防ぐ。
+        offset = data.processed > offset ? data.processed : offset + CHUNK;
       }
     } catch (e) {
       setJob((j) =>
