@@ -253,11 +253,12 @@ export function MatchesList({
   defaultGroupMode = "project",
 }: {
   matches: MatchVM[];
-  scope?: "all" | "inhouse";
+  scope?: "all" | "inhouse" | "registered";
   days?: string;
   defaultGroupMode?: "project" | "talent";
 }) {
   const inhouseOnly = scope === "inhouse";
+  const registeredOnly = scope === "registered";
   const router = useRouter();
   const pathname = usePathname();
   const [, startTransition] = useTransition();
@@ -410,18 +411,8 @@ export function MatchesList({
 
   return (
     <div className="flex flex-col gap-4">
-      {/* スコープ切替タブ */}
+      {/* スコープ切替タブ（自社保有の人材／案件のみ） */}
       <div className="flex gap-1 border-b border-border">
-        <Link
-          href="/matches"
-          className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
-            scope === "all"
-              ? "border-b-2 border-primary text-primary"
-              : "text-slate-500 hover:text-slate-700"
-          }`}
-        >
-          すべてのマッチ
-        </Link>
         <Link
           href="/matches/inhouse"
           className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
@@ -431,6 +422,16 @@ export function MatchesList({
           }`}
         >
           自社保有人材のマッチ
+        </Link>
+        <Link
+          href="/matches/registered"
+          className={`rounded-t-lg px-4 py-2 text-sm font-medium ${
+            registeredOnly
+              ? "border-b-2 border-primary text-primary"
+              : "text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          自社保有案件のマッチ
         </Link>
       </div>
 

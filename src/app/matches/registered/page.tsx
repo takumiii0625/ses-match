@@ -57,7 +57,7 @@ export default async function RegisteredMatchesPage(props: {
         <RematchButton scope="registered" defaultDays="3" label="自社案件マッチを実行" />
       </Card>
 
-      <MatchesList matches={vm} days={daysParam} />
+      <MatchesList matches={vm} scope="registered" defaultGroupMode="project" days={daysParam} />
     </div>
   );
 }
