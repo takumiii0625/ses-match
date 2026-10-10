@@ -454,6 +454,7 @@ async function resolveOrgPrompts(
  * 事前フィルタ（必須スキルのカバー）で UNFIT を構造的に落としてからLLMへ渡す。
  */
 async function rankAndSave(
+  orgId: string,
   project: Project,
   candidates: Talent[],
   systemPrompt: string | undefined,
@@ -481,6 +482,9 @@ async function rankAndSave(
     shortlist.map((h) => toCandidateInput(h.talent)),
     systemPrompt,
   );
+
+  // 判定したペア（成立/不成立問わず）を台帳に記録→次回の再判定をスキップする。
+  await recordJudgedPairs(orgId, project.id, shortlist.map((h) => h.talent.id));
 
   let saved = 0;
   for (const r of ranked) {
@@ -536,11 +540,28 @@ export interface RematchPageResult {
 /** 指定案件群について既にMatchがあるペア(projectId#talentId)の集合。判定済みスキップ用。 */
 async function loadExistingMatchPairs(projectIds: string[]): Promise<Set<string>> {
   if (projectIds.length === 0) return new Set();
-  const rows = await prisma.match.findMany({
+  // 判定済みペア台帳（成立/不成立問わず記録）を参照。Match(成立70点以上のみ)ではなくこちらを見ることで、
+  // 過去に不成立だったペアも再判定をスキップできる。
+  const rows = await prisma.matchJudgment.findMany({
     where: { projectId: { in: projectIds } },
     select: { projectId: true, talentId: true },
   });
   return new Set(rows.map((r) => `${r.projectId}#${r.talentId}`));
+}
+
+/** 判定した(人材×案件)ペアを台帳に記録（成立/不成立問わず）。再判定スキップの元になる。 */
+async function recordJudgedPairs(
+  orgId: string,
+  projectId: string,
+  talentIds: string[],
+): Promise<void> {
+  if (talentIds.length === 0) return;
+  await prisma.matchJudgment
+    .createMany({
+      data: talentIds.map((talentId) => ({ orgId, talentId, projectId })),
+      skipDuplicates: true,
+    })
+    .catch((e) => console.error("[match] 判定台帳の記録に失敗:", e));
 }
 
 /**
@@ -664,6 +685,7 @@ export async function runMatchingForOrg(
         config.gates,
       );
       const r = await rankAndSave(
+        orgId,
         project,
         candidates,
         systemPrompt,
@@ -782,6 +804,7 @@ export async function runMatchingForNew(
         config.gates,
       );
       const r = await rankAndSave(
+        orgId,
         project,
         candidates,
         systemPrompt,
@@ -863,6 +886,7 @@ export async function runMatchingForTalent(
           : [talent];
       const candidates = buildCandidates(pool, project, ngDomains, config.gates);
       const r = await rankAndSave(
+        orgId,
         project,
         candidates,
         systemPrompt,

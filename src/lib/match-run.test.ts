@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   talent: { findMany: vi.fn(), findFirst: vi.fn() },
   organization: { findUnique: vi.fn() },
   match: { deleteMany: vi.fn(), upsert: vi.fn(), findMany: vi.fn() },
+  matchJudgment: { findMany: vi.fn(), createMany: vi.fn() },
   ngCompany: { findMany: vi.fn() },
 }));
 const { rankMock } = vi.hoisted(() => ({ rankMock: vi.fn() }));
@@ -66,6 +67,8 @@ beforeEach(() => {
   db.match.deleteMany.mockResolvedValue({ count: 0 });
   db.match.upsert.mockResolvedValue({});
   db.match.findMany.mockResolvedValue([]); // 既定は判定済みペアなし
+  db.matchJudgment.findMany.mockResolvedValue([]); // 既定は判定台帳なし（＝全ペア未判定）
+  db.matchJudgment.createMany.mockResolvedValue({ count: 0 });
   db.ngCompany.findMany.mockResolvedValue([]); // 既定はNG企業なし
   // 全候補を80点（>=MIN_SCORE）で提案可に。
   rankMock.mockImplementation(async (_proj: unknown, candidates: { talentId: string }[]) =>
@@ -240,17 +243,36 @@ describe("runMatchingForOrg（ページング）", () => {
     expect(res.saved).toBe(1); // t4 のみ（フリーランス2名と2社先1名は除外）
   });
 
-  it("skipExisting=true は判定済みペア（既にMatchあり）をLLMに再判定させない", async () => {
+  it("skipExisting=true は判定済みペア（判定台帳あり）をLLMに再判定させない", async () => {
     db.project.findMany.mockResolvedValue([project("p1")]);
     db.talent.findMany.mockResolvedValue([talent("t1"), talent("t2")]);
-    // p1×t1 は既にMatch済み → 再判定しない。t2 だけ判定される。
-    db.match.findMany.mockResolvedValue([{ projectId: "p1", talentId: "t1" }]);
+    // p1×t1 は判定台帳に記録済み → 再判定しない。t2 だけ判定される。
+    db.matchJudgment.findMany.mockResolvedValue([{ projectId: "p1", talentId: "t1" }]);
     const res = await runMatchingForOrg("org1", { offset: 0, skipExisting: true });
     expect(rankMock).toHaveBeenCalledTimes(1);
     // LLMに渡した候補は t2 のみ（t1 はスキップ）。
     const candidatesArg = rankMock.mock.calls[0][1] as { talentId: string }[];
     expect(candidatesArg.map((c) => c.talentId)).toEqual(["t2"]);
     expect(res.saved).toBe(1);
+  });
+
+  it("判定したペアは成立/不成立問わず判定台帳(matchJudgment)に記録する", async () => {
+    db.project.findMany.mockResolvedValue([project("p1")]);
+    db.talent.findMany.mockResolvedValue([talent("t1"), talent("t2")]);
+    // t1=80点(成立)・t2=10点(不成立)。両方とも台帳に記録されること。
+    rankMock.mockResolvedValueOnce([
+      { talentId: "t1", score: 80, recommendation: "STRONG", strengths: [], concerns: [], reason: "", channelOk: true, channelNote: "" },
+      { talentId: "t2", score: 10, recommendation: "UNFIT", strengths: [], concerns: [], reason: "", channelOk: true, channelNote: "" },
+    ]);
+    await runMatchingForOrg("org1", { offset: 0 });
+    expect(db.matchJudgment.createMany).toHaveBeenCalled();
+    const arg = db.matchJudgment.createMany.mock.calls[0][0] as {
+      data: { talentId: string; projectId: string }[];
+      skipDuplicates: boolean;
+    };
+    expect(arg.skipDuplicates).toBe(true);
+    expect(arg.data.map((d) => d.talentId).sort()).toEqual(["t1", "t2"]);
+    expect(arg.data.every((d) => d.projectId === "p1")).toBe(true);
   });
 
   it("skipExisting=false（手動フル再マッチ）は判定済みペアも再評価する", async () => {

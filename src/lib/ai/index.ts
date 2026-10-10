@@ -93,13 +93,14 @@ class HybridAIService implements AIService {
 }
 
 /** OpenAI に一部処理を回す合成を作る。OPENAI_API_KEY があるとき有効。
- *  既定: 分類=Claude（精度優先）／抽出(テキスト添付)=OpenAI（コスト削減の本命）。
- *  - CLASSIFY_PROVIDER=openai: 分類も OpenAI にする（gpt-4o-miniは取り違えありのため非推奨）。
- *  - EXTRACT_PROVIDER=anthropic: 抽出のOpenAI化を無効化（抽出も Claude に戻す）。 */
+ *  既定: 分類・抽出とも Claude（精度優先）。OpenAIに回すのは明示的にenvで指定した時だけ。
+ *  - CLASSIFY_PROVIDER=openai: 分類を OpenAI にする（gpt-4o-miniは取り違えありのため非推奨）。
+ *  - EXTRACT_PROVIDER=openai: 抽出(テキスト添付)を OpenAI にする（コスト削減したい時のみ）。
+ *  ※以前は抽出が既定OpenAIだったが、精度優先で Claude 既定に戻した。 */
 function maybeWithOpenAI(base: AIService): AIService {
   if (!process.env.OPENAI_API_KEY) return base;
   const hybridClassify = process.env.CLASSIFY_PROVIDER === "openai";
-  const hybridExtract = process.env.EXTRACT_PROVIDER !== "anthropic";
+  const hybridExtract = process.env.EXTRACT_PROVIDER === "openai";
   // どちらもOpenAIに回さないなら合成不要（そのままAnthropic）。
   if (!hybridClassify && !hybridExtract) return base;
   return new HybridAIService(base, new OpenAIService(), hybridClassify, hybridExtract);

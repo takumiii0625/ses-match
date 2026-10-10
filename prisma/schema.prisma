@@ -308,6 +308,20 @@ model Match {
   @@index([rejectedAt])
 }
 
+// 判定済みペアの台帳。LLMで一度でも判定した(人材×案件)を成立/不成立を問わず記録し、
+// 再マッチ時に同じペアをLLM再判定しないためのスキップ元（Matchは成立70点以上しか残らないため、
+// 不成立ペアの再判定を防ぐにはこの台帳が必要）。「全件を再判定(full)」時は無視して作り直す。
+model MatchJudgment {
+  talentId  String
+  projectId String
+  orgId     String
+  judgedAt  DateTime @default(now())
+
+  @@id([talentId, projectId]) // ペア一意（createMany skipDuplicates の冪等キー）
+  @@index([projectId])
+  @@index([orgId])
+}
+
 // 差し戻しの履歴（理由を記録に残す。後でマッチ判定プロンプトへの反映にも使える）。
 // マッチを戻して再度送っても履歴は消えない（監査・学習用）。
 model MatchRejection {
