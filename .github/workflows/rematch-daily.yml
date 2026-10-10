@@ -61,12 +61,15 @@ jobs:
               continue
             fi
             echo "$resp"
-            # 増分モード: 初回応答で確定した境界(sinceEpoch/markEpoch)を以降のページで固定する。
-            if [ "$mode" = "inc" ] && [ -z "$since" ]; then
-              since=$(echo "$resp" | grep -o '"sinceEpoch":[0-9]*' | grep -o '[0-9]*')
-              mark=$(echo "$resp" | grep -o '"markEpoch":[0-9]*' | grep -o '[0-9]*')
-            fi
+            # done:true なら即終了。自動マッチOFF等のスキップ応答(match_disabled)もdone:trueなのでここで抜ける
+            # （スキップ応答には sinceEpoch 等が無いため、下の抽出より前に判定する）。
             echo "$resp" | grep -q '"done":true' && { echo "完了"; break; }
-            next=$(echo "$resp" | grep -o '"processed":[0-9]*' | grep -o '[0-9]*')
+            # 増分モード: 初回応答で確定した境界(sinceEpoch/markEpoch)を以降のページで固定する。
+            # grepが空ヒットでも set -e でジョブを落とさないよう || true を付ける。
+            if [ "$mode" = "inc" ] && [ -z "$since" ]; then
+              since=$(echo "$resp" | grep -o '"sinceEpoch":[0-9]*' | grep -o '[0-9]*' || true)
+              mark=$(echo "$resp" | grep -o '"markEpoch":[0-9]*' | grep -o '[0-9]*' || true)
+            fi
+            next=$(echo "$resp" | grep -o '"processed":[0-9]*' | grep -o '[0-9]*' || true)
             if [ -z "$next" ] || [ "$next" = "$offset" ]; then offset=$((offset + 3)); else offset=$next; fi
           done
